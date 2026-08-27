@@ -59,10 +59,11 @@ jobs:
           KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
           KALSHI_LIVE: ${{ secrets.KALSHI_LIVE }}
           TRACKER_PATH: /home/runner/.kalshi/crypto-campaign.json
+          PYTHONPATH: ${{ github.workspace }}
         run: python scripts/ci_fire.py
 
       - name: Save campaign tracker
-        if: always()
+        if: success()
         run: |
           set -e
           test -f "$HOME/.kalshi/crypto-campaign.json"
