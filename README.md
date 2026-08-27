@@ -1,0 +1,2 @@
+# KalshiBot
+Experiments w/Kalshi
