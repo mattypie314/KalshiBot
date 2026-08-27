@@ -25,15 +25,13 @@ def shard_for_series(series_ticker: str, title: str = "") -> int:
 
 def is_hourly_series(series: dict) -> bool:
     freq = str(series.get("frequency") or "").lower()
-    ticker = str(series.get("ticker") or "").upper()
     title = str(series.get("title") or "").lower()
+    ticker = str(series.get("ticker") or "").upper()
+    if "15" in freq or ticker.endswith("15M"):
+        return False
     if freq in HOURLY_FREQUENCIES:
         return True
-    if "hour" in title and "15" not in title:
-        return True
-    if ticker.endswith("H") and ticker.startswith("KX") and "15M" not in ticker:
-        return True
-    return False
+    return "hour" in title and "15" not in title and "daily" not in title
 
 
 def is_campaign_hourly_universe(series: dict) -> bool:

@@ -50,4 +50,14 @@ python -m kalshibot scan --section crypto
 pytest
 ```
 
-Not financial advice. Wins stay in their own pot.
+## From an iPhone (no computer)
+
+GitHub can run the campaign every 5 minutes after this pull request is merged.
+
+1. Open [pull request #1](https://github.com/mkubit85/KalshiBot/pull/1) in Safari or the GitHub app and merge it.
+2. Open the repo **Actions** tab. If GitHub asks to enable workflows, tap Enable.
+3. Open **Kalshi campaign** → **Run workflow** → **auto** whenever you want a manual fire.
+
+It stays in practice mode (DRY) until you add Kalshi secrets under **Settings → Secrets and variables → Actions**: `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY` (the full .pem text), and `KALSHI_LIVE` set to `1`.
+
+The $5 / $10 pots are saved on a `campaign-state` branch so they survive between runs.
