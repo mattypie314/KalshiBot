@@ -37,15 +37,25 @@ class Tracker:
         self.state = _default_state(fifteen_bankroll, hourly_bankroll)
 
     def load(self) -> dict[str, Any]:
-        if self.path.exists():
-            self.state = json.loads(self.path.read_text())
-            self.state.setdefault("pots", _default_state(self.fifteen_bankroll, self.hourly_bankroll)["pots"])
-            self.state.setdefault("tickets", [])
-            self.state.setdefault("rests", [])
-            self.state.setdefault("log", [])
-        else:
-            self.state = _default_state(self.fifteen_bankroll, self.hourly_bankroll)
+        default = _default_state(self.fifteen_bankroll, self.hourly_bankroll)
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            self.state = default
             self.save()
+            return self.state
+        try:
+            loaded = json.loads(self.path.read_text() or "{}")
+        except json.JSONDecodeError:
+            self.state = default
+            self.save()
+            return self.state
+        if not isinstance(loaded, dict):
+            loaded = {}
+        self.state = default
+        self.state.update(loaded)
+        self.state.setdefault("pots", default["pots"])
+        self.state.setdefault("tickets", [])
+        self.state.setdefault("rests", [])
+        self.state.setdefault("log", [])
         return self.state
 
     def save(self) -> None:

@@ -94,6 +94,17 @@ def test_maker_window_minutes():
     assert not in_maker_window(datetime(2026, 8, 27, 10, 10, tzinfo=et))
 
 
+def test_empty_tracker_file_starts_fresh(tmp_path):
+    from kalshibot.campaign.tracker import Tracker
+
+    path = tmp_path / "crypto-campaign.json"
+    path.write_text("")
+    tracker = Tracker(path)
+    state = tracker.load()
+    assert state["pots"]["fifteen"]["bankroll"] == 5.0
+    assert path.read_text().startswith("{")
+
+
 def test_empty_kalshi_live_is_false(monkeypatch):
     monkeypatch.setenv("KALSHI_LIVE", "")
     from kalshibot.config import Settings

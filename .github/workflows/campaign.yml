@@ -38,9 +38,12 @@ jobs:
         run: |
           mkdir -p "$HOME/.kalshi"
           git fetch origin campaign-state:campaign-state || true
-          if git show campaign-state:crypto-campaign.json > "$HOME/.kalshi/crypto-campaign.json" 2>/dev/null; then
+          tmp="$(mktemp)"
+          if git show campaign-state:crypto-campaign.json > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+            mv "$tmp" "$HOME/.kalshi/crypto-campaign.json"
             echo "Restored tracker"
           else
+            rm -f "$tmp" "$HOME/.kalshi/crypto-campaign.json"
             echo "Starting a new tracker"
           fi
 
@@ -64,6 +67,7 @@ jobs:
 
       - name: Save campaign tracker
         if: success()
+        continue-on-error: true
         run: |
           set -e
           test -f "$HOME/.kalshi/crypto-campaign.json"

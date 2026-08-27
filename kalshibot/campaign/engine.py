@@ -84,36 +84,41 @@ class CampaignEngine:
     async def fire(self, loop: str) -> dict[str, Any]:
         self.tracker.load()
         actions: list[str] = []
-        if loop == "maker" and not in_maker_window():
-            msg = "Maker window closed; stay quiet."
-            actions.append(msg)
-            return self._finish(loop, actions, quiet=True)
+        try:
+            if loop == "maker" and not in_maker_window():
+                msg = "Maker window closed; stay quiet."
+                actions.append(msg)
+                return self._finish(loop, actions, quiet=True)
 
-        pots_to_manage = [POT_FIFTEEN, POT_HOURLY] if loop == "maker" else [loop if loop != "fifteen" else POT_FIFTEEN]
-        if loop == "fifteen":
-            pots_to_manage = [POT_FIFTEEN]
-        elif loop == "hourly":
-            pots_to_manage = [POT_HOURLY]
+            pots_to_manage = [POT_FIFTEEN, POT_HOURLY] if loop == "maker" else [loop if loop != "fifteen" else POT_FIFTEEN]
+            if loop == "fifteen":
+                pots_to_manage = [POT_FIFTEEN]
+            elif loop == "hourly":
+                pots_to_manage = [POT_HOURLY]
 
-        quotes = await self._quotes_for_open_tickets()
-        for pot in pots_to_manage:
-            actions.extend(await self._manage_open(pot, quotes, loop))
+            quotes = await self._quotes_for_open_tickets()
+            for pot in pots_to_manage:
+                actions.extend(await self._manage_open(pot, quotes, loop))
 
-        for pot in pots_to_manage:
-            actions.extend(self._maybe_stop_pot(pot, loop))
+            for pot in pots_to_manage:
+                actions.extend(self._maybe_stop_pot(pot, loop))
 
-        if loop == "fifteen":
-            actions.extend(await self._enter_taker(POT_FIFTEEN, FIFTEEN_SERIES, loop, skip_last=self.cfg.skip_last_seconds))
-        elif loop == "hourly":
-            series = await self._hourly_series()
-            actions.extend(await self._enter_taker(POT_HOURLY, series, loop, skip_last=self.cfg.skip_last_seconds))
-        elif loop == "maker":
-            actions.extend(await self._enter_maker())
+            if loop == "fifteen":
+                actions.extend(await self._enter_taker(POT_FIFTEEN, FIFTEEN_SERIES, loop, skip_last=self.cfg.skip_last_seconds))
+            elif loop == "hourly":
+                series = await self._hourly_series()
+                actions.extend(await self._enter_taker(POT_HOURLY, series, loop, skip_last=self.cfg.skip_last_seconds))
+            elif loop == "maker":
+                actions.extend(await self._enter_maker())
 
-        if not actions:
-            actions.append("Nothing new.")
-            return self._finish(loop, actions, quiet=True)
-        return self._finish(loop, actions, quiet=False)
+            if not actions:
+                actions.append("Nothing new.")
+                return self._finish(loop, actions, quiet=True)
+            return self._finish(loop, actions, quiet=False)
+        except Exception as exc:  # noqa: BLE001 — campaign loop must not crash the GitHub job
+            logger.exception("Campaign %s failed", loop)
+            actions.append(f"Loop error (still practice mode): {exc}")
+            return self._finish(loop, actions, quiet=False)
 
     def _finish(self, loop: str, actions: list[str], quiet: bool) -> dict[str, Any]:
         for action in actions:
