@@ -16,6 +16,17 @@ def clamp_prob(value: float) -> float:
     return min(0.99, max(0.01, value))
 
 
+def quote_is_usable(bid: float | None, ask: float | None, volume_24h: float) -> bool:
+    if bid is None or ask is None:
+        return False
+    if ask <= 0 or ask < bid:
+        return False
+    spread = ask - bid
+    if volume_24h > 0 and 0 < ask < 1:
+        return True
+    return 0 < bid < 1 and 0 < ask < 1 and spread <= 0.10
+
+
 def mid_price(bid: float | None, ask: float | None) -> float | None:
     if bid is None and ask is None:
         return None

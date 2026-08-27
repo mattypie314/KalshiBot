@@ -24,7 +24,7 @@ from kalshibot.models import (
     parse_strike,
     price_threshold_prob,
 )
-from kalshibot.money import mid_price, parse_close_time, parse_dollars, years_until
+from kalshibot.money import mid_price, parse_close_time, parse_dollars, quote_is_usable, years_until
 from kalshibot.spots import SpotService
 
 logger = logging.getLogger(__name__)
@@ -99,8 +99,14 @@ def _active_markets(event: dict[str, Any]) -> list[dict[str, Any]]:
     markets = []
     for market in event.get("markets") or []:
         status = str(market.get("status") or "").lower()
-        if status in {"active", "open"}:
-            markets.append(market)
+        if status not in {"active", "open"}:
+            continue
+        bid = parse_dollars(market.get("yes_bid_dollars"))
+        ask = parse_dollars(market.get("yes_ask_dollars"))
+        volume_24h = parse_dollars(market.get("volume_24h_fp")) or 0.0
+        if not quote_is_usable(bid, ask, volume_24h):
+            continue
+        markets.append(market)
     return markets
 
 
@@ -128,7 +134,12 @@ class Scanner:
             timeout=self.cfg.request_timeout_seconds,
             headers={"User-Agent": "KalshiBot/0.1"},
         )
-        self._kalshi = KalshiClient(self.cfg.kalshi_base_url, self.cfg.request_timeout_seconds, client=self._http)
+        self._kalshi = KalshiClient(
+            self.cfg.kalshi_base_url,
+            self.cfg.request_timeout_seconds,
+            client=self._http,
+            min_interval=self.cfg.kalshi_min_interval,
+        )
         self._spots = SpotService(self._http)
         self._lock = asyncio.Lock()
         self._cache: dict[str, Any] = {"at": 0.0, "payload": None}
@@ -231,8 +242,8 @@ class Scanner:
         markets = _active_markets(event)
         if not markets:
             return []
-        if section == "sports" and event.get("mutually_exclusive") and len(markets) >= 2:
-            preds = self._sports_mutex(section, series, event, markets)
+        if event.get("mutually_exclusive") and len(markets) >= 2:
+            preds = self._mutex_devig(section, series, event, markets)
         else:
             preds = [
                 pred
@@ -268,7 +279,7 @@ class Scanner:
         method = "market_mid"
         rationale = "No independent model; showing Kalshi midpoint."
 
-        if asset and spot is not None and years is not None and spec.kind != "unknown":
+        if asset and spot is not None and spot > 0 and years is not None and spec.kind != "unknown":
             modeled = price_threshold_prob(spec, spot, max(years, 1e-8), asset.annual_vol)
             if modeled is not None:
                 model_prob = modeled
@@ -330,7 +341,7 @@ class Scanner:
         pred.score = _score(pred)
         return pred
 
-    def _sports_mutex(
+    def _mutex_devig(
         self,
         section: str,
         series: dict[str, Any],
@@ -379,7 +390,7 @@ class Scanner:
                 volume=parse_dollars(market.get("volume_fp")) or 0.0,
                 liquidity=parse_dollars(market.get("liquidity_dollars")) or 0.0,
                 method="devig",
-                rationale="Sports moneyline de-vigged so mutually exclusive prices sum to 100%.",
+                rationale="Fair probability after removing vig so mutually exclusive outcomes sum to 100%.",
             )
             pred.score = _score(pred)
             preds.append(pred)

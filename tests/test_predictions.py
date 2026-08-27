@@ -5,7 +5,7 @@ from kalshibot.models import (
     price_threshold_prob,
     devig_probs,
 )
-from kalshibot.money import mid_price, parse_dollars
+from kalshibot.money import mid_price, parse_dollars, quote_is_usable
 from kalshibot.scanner import Scanner, _executable_edge
 
 
@@ -72,7 +72,18 @@ def test_executable_edge_prefers_cheap_side():
     assert abs(edge_no - ((1 - 0.2) - (1 - 0.40))) < 1e-9
 
 
-def test_mid_and_dollars():
+def test_parse_price_range_subtitle():
+    spec = parse_strike({"yes_sub_title": "$2,505 to 2,509.99", "title": "ETH price range"})
+    assert spec.kind == "range"
+    assert spec.floor == 2505
+    assert spec.cap == 2509.99
+
+
+def test_quote_is_usable_rejects_empty_books():
+    assert not quote_is_usable(0.0, 0.0, 0.0)
+    assert not quote_is_usable(0.0, 1.0, 0.0)
+    assert quote_is_usable(0.47, 0.48, 100.0)
+    assert quote_is_usable(0.40, 0.48, 0.0)
     assert parse_dollars("0.4700") == 0.47
     assert mid_price(0.47, 0.48) == 0.475
 
@@ -114,7 +125,7 @@ def test_sports_mutex_predictions():
             "close_time": "2026-10-20T00:00:00Z",
         },
     ]
-    preds = scanner._sports_mutex("sports", series, event, markets)
+    preds = scanner._mutex_devig("sports", series, event, markets)
     assert len(preds) == 2
     assert abs(sum(p.model_prob or 0 for p in preds) - 1.0) < 1e-9
     assert all(p.method == "devig" for p in preds)

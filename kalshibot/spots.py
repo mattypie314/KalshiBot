@@ -20,7 +20,7 @@ class SpotService:
         out: dict[str, float] = {}
         for asset in unique.values():
             price = await self._price(asset)
-            if price is not None:
+            if price is not None and price > 0:
                 out[asset.key] = price
         return out
 

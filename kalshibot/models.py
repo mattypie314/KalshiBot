@@ -50,6 +50,10 @@ _TARGET_RE = re.compile(
     re.IGNORECASE,
 )
 _TICKER_STRIKE_RE = re.compile(r"-T([0-9]+(?:\.[0-9]+)?)$")
+_RANGE_RE = re.compile(
+    r"\$?\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*(?:to|–|-)\s*\$?\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
+    re.IGNORECASE,
+)
 
 
 def _num(value: object) -> float | None:
@@ -70,6 +74,14 @@ def parse_strike(market: dict) -> StrikeSpec:
     title = str(market.get("title") or "")
     blob = f"{subtitle} {title}"
     ticker = str(market.get("ticker") or "")
+
+    range_match = _RANGE_RE.search(subtitle) or _RANGE_RE.search(blob)
+    if range_match and (floor is None or cap is None):
+        low, high = _num(range_match.group(1)), _num(range_match.group(2))
+        if low is not None and high is not None and high > low:
+            floor = floor or low
+            cap = cap or high
+            strike_type = "range"
 
     if floor is None:
         for pattern in (_OR_ABOVE_RE, _ABOVE_RE, _TARGET_RE):
