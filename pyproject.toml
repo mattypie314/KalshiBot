@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_backend"
+
+[project]
+name = "kalshibot"
+version = "0.1.0"
+description = "Automated Kalshi prediction bot for crypto, commodities, and sports."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "httpx>=0.27.0",
+    "pydantic-settings>=2.4.0",
+    "uvicorn[standard]>=0.32.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+kalshibot = "kalshibot.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["kalshibot*"]
+
+[tool.setuptools.package-data]
+kalshibot = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KalshiBot · Crypto, Commodities, Sports</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="frame">
+      <header class="top">
+        <div>
+          <p class="kicker">Kalshi prediction desk</p>
+          <h1>KalshiBot</h1>
+        </div>
+        <div class="top-meta">
+          <div id="updated">Loading live markets…</div>
+          <button id="refresh" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <p class="disclaimer" id="disclaimer">
+        Research forecasts only. The bot does not place orders.
+      </p>
+
+      <nav class="sections" aria-label="Market sections">
+        <button class="sec active" data-section="crypto" type="button">
+          <span class="sec-name">Crypto</span>
+          <span class="sec-stat" id="stat-crypto">—</span>
+        </button>
+        <button class="sec" data-section="commodities" type="button">
+          <span class="sec-name">Commodities</span>
+          <span class="sec-stat" id="stat-commodities">—</span>
+        </button>
+        <button class="sec" data-section="sports" type="button">
+          <span class="sec-name">Sports Bets</span>
+          <span class="sec-stat" id="stat-sports">—</span>
+        </button>
+      </nav>
+
+      <div class="toolbar">
+        <label class="search">
+          <span>Filter</span>
+          <input id="filter" type="search" placeholder="Team, ticker, BTC, gold…" />
+        </label>
+        <label class="toggle">
+          <input id="edges-only" type="checkbox" />
+          Edges ≥ 2¢
+        </label>
+      </div>
+
+      <section id="board" class="board" aria-live="polite"></section>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
