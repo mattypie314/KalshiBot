@@ -53,9 +53,15 @@ def parse_close_time(value: str | None) -> datetime | None:
         return None
 
 
-def years_until(close: datetime | None, now: datetime | None = None) -> float | None:
+def seconds_until(close: datetime | None, now: datetime | None = None) -> float | None:
     if close is None:
         return None
     now = now or datetime.now(timezone.utc)
-    seconds = (close - now).total_seconds()
-    return seconds / (365.25 * 24 * 3600)
+    return (close - now).total_seconds()
+
+
+def years_until(close: datetime | None, now: datetime | None = None) -> float | None:
+    secs = seconds_until(close, now)
+    if secs is None:
+        return None
+    return secs / (365.25 * 24 * 3600)

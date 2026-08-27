@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from kalshibot.assets import SECTIONS
+from kalshibot.campaign.engine import CampaignEngine
 from kalshibot.scanner import Scanner
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -16,11 +17,14 @@ STATIC_DIR = Path(__file__).parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scanner = Scanner()
+    campaign = CampaignEngine()
     app.state.scanner = scanner
+    app.state.campaign = campaign
     try:
         yield
     finally:
         await scanner.aclose()
+        await campaign.aclose()
 
 
 app = FastAPI(title="KalshiBot", lifespan=lifespan)
@@ -41,6 +45,20 @@ async def health() -> dict[str, str]:
 async def predictions(force: bool = False) -> dict:
     scanner: Scanner = app.state.scanner
     return await scanner.snapshot(force=force)
+
+
+@app.get("/api/campaign")
+async def campaign_status() -> dict:
+    engine: CampaignEngine = app.state.campaign
+    return engine.status()
+
+
+@app.post("/api/campaign/fire/{loop}")
+async def campaign_fire(loop: str) -> dict:
+    if loop not in {"fifteen", "hourly", "maker"}:
+        raise HTTPException(status_code=404, detail="Unknown loop")
+    engine: CampaignEngine = app.state.campaign
+    return await engine.fire(loop)
 
 
 @app.get("/api/sections/{section_id}")

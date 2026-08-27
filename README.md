@@ -1,48 +1,53 @@
 # KalshiBot
 
-Automated Kalshi predictions for **Crypto**, **Commodities**, and **Sports Bets**.
+Matt's Kalshi campaign loops (from GrokBot) plus a research desk for **Crypto**, **Commodities**, and **Sports Bets**.
 
-The bot scans liquid Kalshi series in those three categories, estimates a fair probability, and ranks contracts by executable edge versus the live bid/ask. It is a research desk: **it does not place orders**.
+## Campaign loops
 
-## What it does
+Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 
-| Section | Model |
-| --- | --- |
-| Crypto | Spot price (Coinbase, Yahoo fallback) vs contract strike, lognormal digital probability |
-| Commodities | Futures spot (Yahoo: gold, silver, copper, WTI, Brent, nat gas) vs strike |
-| Sports Bets | De-vig mutually exclusive moneylines so outcomes sum to 100% |
+| Loop | Schedule | Universe | Pot |
+| --- | --- | --- | --- |
+| 15m | every 3 minutes | BTC/ETH/SOL (shard 2) + gold/silver 15m (shard 0) | $5, stop -$0.50, skip new if room < $0.50 |
+| Hourly | every 5 minutes | live hourly crypto/commodities | $10, stop -$0.50, skip new if room < $1 |
+| Maker | minutes 12–14, 27–29, 42–44, 57–59 | 15m books; hourlies at :57–:59 | same two pots, never share room |
 
-Each row shows Kalshi implied probability, the bot’s probability, which side is cheap (YES/NO), confidence, and a one-line rationale.
+Shared ticket rules (all three loops):
 
-## Run the dashboard
+- Flatten IOC if down ~$0.50 or ~10% from fill (18% if filled before 3:00 AM ET 2026-08-27)
+- Take profit if held-side bid ≥ fill + 2¢, or sell immediately at 99¢
+- Never rest a sell under the bid
+- 15m/hourly: IOC pay-through on a real favorite, then rest 99¢ post-only
+- Maker: post-only join 74–93¢, never IOC-pay-through
+
+**Live trading is off by default.** Dry-run logs intended orders. To enable live:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+export KALSHI_API_KEY_ID=...
+export KALSHI_PRIVATE_KEY_PATH=~/.kalshi/kalshi_private_key.pem
+export KALSHI_LIVE=1
+```
+
+```bash
+python -m kalshibot campaign status
+python -m kalshibot campaign fire fifteen
+python -m kalshibot campaign fire hourly
+python -m kalshibot campaign fire maker
+python -m kalshibot campaign run
+```
+
+## Research desk
+
+```bash
 pip install -r requirements.txt
 python -m kalshibot serve
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Use the three section tabs, filter box, and “Edges ≥ 2¢”.
-
-## One-shot scan
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Campaign pots sit above the Crypto / Commodities / Sports Bets tabs.
 
 ```bash
-python -m kalshibot scan
 python -m kalshibot scan --section crypto
-python -m kalshibot scan --json --section sports
-```
-
-No Kalshi API key is required for market data.
-
-## Tests
-
-```bash
 pytest
 ```
 
-## Notes
-
-- Forecasts are mechanical, not financial advice.
-- Live order placement is intentionally out of scope for this version.
-- Tune `SERIES_PER_SECTION` and `CACHE_TTL_SECONDS` via environment variables if you want a wider or fresher scan.
+Not financial advice. Wins stay in their own pot.

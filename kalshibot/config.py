@@ -13,6 +13,15 @@ class Settings(BaseSettings):
     max_concurrency: int = 3
     min_edge: float = 0.02
     kalshi_min_interval: float = 0.3
+    kalshi_api_key_id: str = ""
+    kalshi_private_key_path: str = ""
+    kalshi_live: bool = False
+    tracker_path: str = "~/.kalshi/crypto-campaign.json"
+    fifteen_bankroll: float = 5.0
+    hourly_bankroll: float = 10.0
+    pot_stop: float = -0.50
+    skip_last_seconds: float = 60.0
+    maker_skip_last_seconds: float = 15.0
 
 
 settings = Settings()

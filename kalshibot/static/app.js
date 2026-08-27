@@ -125,7 +125,44 @@ document.querySelectorAll(".sec").forEach((btn) => {
 
 filterInput.addEventListener("input", render);
 edgesOnly.addEventListener("change", render);
-refreshBtn.addEventListener("click", () => load(true));
+refreshBtn.addEventListener("click", () => {
+  load(true);
+  loadCampaign();
+});
 
 load(false);
+loadCampaign();
 setInterval(() => load(false), 60000);
+setInterval(loadCampaign, 30000);
+
+async function loadCampaign() {
+  const response = await fetch("/api/campaign");
+  if (!response.ok) return;
+  const data = await response.json();
+  const fifteen = data.pots.fifteen;
+  const hourly = data.pots.hourly;
+  document.getElementById("fifteen-room").textContent = `room $${Number(fifteen.room).toFixed(2)}`;
+  document.getElementById("hourly-room").textContent = `room $${Number(hourly.room).toFixed(2)}`;
+  document.getElementById("fifteen-meta").textContent =
+    `${fifteen.stopped ? "STOPPED · " : ""}realized $${Number(fifteen.realized).toFixed(2)} · open $${Number(fifteen.open_cost).toFixed(2)}`;
+  document.getElementById("hourly-meta").textContent =
+    `${hourly.stopped ? "STOPPED · " : ""}realized $${Number(hourly.realized).toFixed(2)} · open $${Number(hourly.open_cost).toFixed(2)}`;
+  document.getElementById("maker-mode").textContent = data.live ? "LIVE" : "DRY";
+  const lines = (data.log || []).map((row) => `${row.ts.slice(11, 19)}  ${row.loop}  ${row.message}`);
+  document.getElementById("campaign-log").textContent = lines.join("\n") || "No campaign fires yet.";
+}
+
+document.querySelectorAll("[data-fire]").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    document.getElementById("campaign-log").textContent = `Firing ${btn.dataset.fire}…`;
+    try {
+      const response = await fetch(`/api/campaign/fire/${btn.dataset.fire}`, { method: "POST" });
+      const data = await response.json();
+      document.getElementById("campaign-log").textContent = (data.actions || []).join("\n");
+      await loadCampaign();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+});

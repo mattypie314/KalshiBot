@@ -170,7 +170,37 @@ button, input {
   padding: 28px 8px;
 }
 
+.campaign {
+  margin: 18px 0 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.pots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.pot .num { font-size: 22px; }
+.loop-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.loop-actions button {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.campaign-log {
+  margin: 12px 0 0;
+  max-height: 160px;
+  overflow: auto;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
 @media (max-width: 800px) {
+  .pots { grid-template-columns: 1fr; }
   .sections, .card { grid-template-columns: 1fr; }
   .top { flex-direction: column; align-items: start; }
   .top-meta { text-align: left; }
