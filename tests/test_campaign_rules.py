@@ -94,6 +94,13 @@ def test_maker_window_minutes():
     assert not in_maker_window(datetime(2026, 8, 27, 10, 10, tzinfo=et))
 
 
+def test_empty_kalshi_live_is_false(monkeypatch):
+    monkeypatch.setenv("KALSHI_LIVE", "")
+    from kalshibot.config import Settings
+
+    assert Settings().kalshi_live is False
+
+
 def test_hourly_universe_and_shards():
     assert is_campaign_hourly_universe({"category": "Crypto", "frequency": "hourly", "ticker": "KXBTC", "title": "BTC hour"})
     assert not is_campaign_hourly_universe({"category": "Crypto", "frequency": "daily", "ticker": "KXETHD", "title": "ETH daily"})

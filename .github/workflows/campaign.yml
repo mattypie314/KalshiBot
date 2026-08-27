@@ -57,7 +57,7 @@ jobs:
         env:
           LOOP: ${{ github.event.inputs.loop || 'auto' }}
           KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
-          KALSHI_LIVE: ${{ secrets.KALSHI_LIVE }}
+          KALSHI_LIVE: ${{ secrets.KALSHI_LIVE || 'false' }}
           TRACKER_PATH: /home/runner/.kalshi/crypto-campaign.json
           PYTHONPATH: ${{ github.workspace }}
         run: python scripts/ci_fire.py
