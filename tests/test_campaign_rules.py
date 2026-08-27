@@ -96,5 +96,6 @@ def test_maker_window_minutes():
 
 def test_hourly_universe_and_shards():
     assert is_campaign_hourly_universe({"category": "Crypto", "frequency": "hourly", "ticker": "KXBTC", "title": "BTC hour"})
+    assert not is_campaign_hourly_universe({"category": "Crypto", "frequency": "daily", "ticker": "KXETHD", "title": "ETH daily"})
     assert shard_for_series("KXGOLD15M", "Gold 15-minute") == 0
     assert shard_for_series("KXBTC15M", "BTC 15 min") == 2

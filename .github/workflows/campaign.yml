@@ -1,0 +1,85 @@
+name: Kalshi campaign
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      loop:
+        description: Which loop to fire
+        type: choice
+        options:
+          - auto
+          - fifteen
+          - hourly
+          - maker
+        default: auto
+
+permissions:
+  contents: write
+
+jobs:
+  fire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout bot
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Restore campaign tracker
+        continue-on-error: true
+        run: |
+          mkdir -p "$HOME/.kalshi"
+          git fetch origin campaign-state:campaign-state || true
+          if git show campaign-state:crypto-campaign.json > "$HOME/.kalshi/crypto-campaign.json" 2>/dev/null; then
+            echo "Restored tracker"
+          else
+            echo "Starting a new tracker"
+          fi
+
+      - name: Optional Kalshi key
+        env:
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: |
+          if [ -n "$KALSHI_PRIVATE_KEY" ]; then
+            printf '%s\n' "$KALSHI_PRIVATE_KEY" > "$HOME/.kalshi/kalshi_private_key.pem"
+            echo "KALSHI_PRIVATE_KEY_PATH=$HOME/.kalshi/kalshi_private_key.pem" >> "$GITHUB_ENV"
+          fi
+
+      - name: Fire loops
+        env:
+          LOOP: ${{ github.event.inputs.loop || 'auto' }}
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
+          KALSHI_LIVE: ${{ secrets.KALSHI_LIVE }}
+          TRACKER_PATH: /home/runner/.kalshi/crypto-campaign.json
+        run: python scripts/ci_fire.py
+
+      - name: Save campaign tracker
+        if: always()
+        run: |
+          set -e
+          test -f "$HOME/.kalshi/crypto-campaign.json"
+          git config user.name "kalshibot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin campaign-state:campaign-state || true
+          if git rev-parse --verify campaign-state >/dev/null 2>&1; then
+            git checkout campaign-state
+          else
+            git checkout --orphan campaign-state
+            git rm -rf --ignore-unmatch . >/dev/null 2>&1 || true
+          fi
+          cp "$HOME/.kalshi/crypto-campaign.json" crypto-campaign.json
+          git add crypto-campaign.json
+          if git diff --cached --quiet; then
+            echo "Tracker unchanged"
+          else
+            git commit -m "Update campaign tracker"
+            git push origin campaign-state
+          fi
