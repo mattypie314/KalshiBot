@@ -2,13 +2,13 @@
   "pots": {
     "fifteen": {
       "bankroll": 5.0,
-      "realized": 0.0,
-      "stopped": false,
-      "stop_reason": null
+      "realized": -1.7228,
+      "stopped": true,
+      "stop_reason": "realized -1.72 hit stop -0.50"
     },
     "hourly": {
       "bankroll": 10.0,
-      "realized": 0.0,
+      "realized": -0.1,
       "stopped": false,
       "stop_reason": null
     }
@@ -23,11 +23,14 @@
       "count": 2.36,
       "cost": 1.7464,
       "filled_at": "2026-08-28T05:19:43.639690+00:00",
-      "status": "open",
+      "status": "flat",
       "exchange_index": 0,
       "order_id": null,
       "conviction": "real",
-      "paper": true
+      "paper": true,
+      "exit_reason": "down_50c",
+      "exit_price": 0.01,
+      "realized": -1.7228
     },
     {
       "id": "04d5fc61-5671-4bf1-a5f6-8bc4562ab1de",
@@ -38,11 +41,14 @@
       "count": 5.0,
       "cost": 5.0,
       "filled_at": "2026-08-28T05:19:51.775881+00:00",
-      "status": "open",
+      "status": "flat",
       "exchange_index": 2,
       "order_id": null,
       "conviction": "fat",
-      "paper": true
+      "paper": true,
+      "exit_reason": "bid_99",
+      "exit_price": 0.99,
+      "realized": -0.05
     },
     {
       "id": "87aee410-6018-4cc6-b643-2e890c90ad9b",
@@ -53,6 +59,39 @@
       "count": 5.0,
       "cost": 5.0,
       "filled_at": "2026-08-28T05:19:51.775929+00:00",
+      "status": "flat",
+      "exchange_index": 2,
+      "order_id": null,
+      "conviction": "fat",
+      "paper": true,
+      "exit_reason": "bid_99",
+      "exit_price": 0.99,
+      "realized": -0.05
+    },
+    {
+      "id": "4d800edc-efba-449c-8d02-59b6ba113453",
+      "pot": "hourly",
+      "ticker": "KXXRPD-26AUG2802-T0.6599",
+      "side": "yes",
+      "fill": 1.0,
+      "count": 5.0,
+      "cost": 5.0,
+      "filled_at": "2026-08-28T05:53:50.379871+00:00",
+      "status": "open",
+      "exchange_index": 2,
+      "order_id": null,
+      "conviction": "fat",
+      "paper": true
+    },
+    {
+      "id": "ff6c91da-0b0f-4d15-87a2-8e10a9bf8637",
+      "pot": "hourly",
+      "ticker": "KXXRPD-26AUG2802-T0.6799",
+      "side": "yes",
+      "fill": 1.0,
+      "count": 4.9,
+      "cost": 4.9,
+      "filled_at": "2026-08-28T05:53:50.379922+00:00",
       "status": "open",
       "exchange_index": 2,
       "order_id": null,
@@ -81,6 +120,22 @@
       "id": "425e3149-5258-41d5-b18a-29a64314ac6d",
       "ticket_id": "87aee410-6018-4cc6-b643-2e890c90ad9b",
       "ticker": "KXETHD-26AUG2802-T1754.99",
+      "price": 0.99,
+      "status": "open",
+      "order_id": null
+    },
+    {
+      "id": "b52dfeec-3bfb-437d-bf8a-d3b293eb07bd",
+      "ticket_id": "4d800edc-efba-449c-8d02-59b6ba113453",
+      "ticker": "KXXRPD-26AUG2802-T0.6599",
+      "price": 0.99,
+      "status": "open",
+      "order_id": null
+    },
+    {
+      "id": "805f5a64-3e3a-46e0-96b3-8e32097ace8d",
+      "ticket_id": "ff6c91da-0b0f-4d15-87a2-8e10a9bf8637",
+      "ticker": "KXXRPD-26AUG2802-T0.6799",
       "price": 0.99,
       "status": "open",
       "order_id": null
@@ -122,7 +177,55 @@
       "loop": "hourly",
       "message": "DRY rest 99\u00a2 post-only on KXETHD-26AUG2802-T1754.99 (never rest under the bid)",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T05:53:41.402656+00:00",
+      "loop": "fifteen",
+      "message": "DRY flatten KXSILVER15M-26AUG280130-30 yes down_50c pnl -1.72",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T05:53:41.402669+00:00",
+      "loop": "fifteen",
+      "message": "Tell Matt: fifteen pot stopped (realized -1.72 hit stop -0.50).",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T05:53:50.382813+00:00",
+      "loop": "hourly",
+      "message": "DRY flatten KXETHD-26AUG2802-T1749.99 yes bid_99 pnl -0.05",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T05:53:50.382819+00:00",
+      "loop": "hourly",
+      "message": "DRY flatten KXETHD-26AUG2802-T1754.99 yes bid_99 pnl -0.05",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T05:53:50.382822+00:00",
+      "loop": "hourly",
+      "message": "DRY IOC fat yes KXXRPD-26AUG2802-T0.6599 5.00@ 1.00 \u00b7 spot 1.4233 vs target 0.6599; book yes 0.99/1.00",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T05:53:50.382824+00:00",
+      "loop": "hourly",
+      "message": "DRY rest 99\u00a2 post-only on KXXRPD-26AUG2802-T0.6599 (never rest under the bid)",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T05:53:50.382826+00:00",
+      "loop": "hourly",
+      "message": "DRY IOC fat yes KXXRPD-26AUG2802-T0.6799 4.90@ 1.00 \u00b7 spot 1.4233 vs target 0.6799; book yes 0.99/1.00",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T05:53:50.382829+00:00",
+      "loop": "hourly",
+      "message": "DRY rest 99\u00a2 post-only on KXXRPD-26AUG2802-T0.6799 (never rest under the bid)",
+      "tell_matt": true
     }
   ],
-  "updated_at": "2026-08-28T05:19:51.779255+00:00"
+  "updated_at": "2026-08-28T05:53:50.382878+00:00"
 }
