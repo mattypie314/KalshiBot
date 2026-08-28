@@ -17,6 +17,7 @@ from kalshibot.campaign.rules import (
     flatten_reason,
     hourly_scan_window,
     in_maker_window,
+    in_pay_band,
     maker_join_ok,
     maker_size,
     open_cost,
@@ -24,7 +25,7 @@ from kalshibot.campaign.rules import (
     size_for_conviction,
 )
 from kalshibot.campaign.tracker import Tracker
-from kalshibot.campaign.universe import FIFTEEN_SERIES, is_campaign_hourly_universe, shard_for_series
+from kalshibot.campaign.universe import FIFTEEN_SERIES, is_campaign_hourly_universe, is_daily_ticker, shard_for_series
 from kalshibot.config import Settings, settings
 from kalshibot.kalshi import KalshiClient
 from kalshibot.models import parse_strike, price_threshold_prob
@@ -111,7 +112,15 @@ class CampaignEngine:
                 actions.extend(await self._enter_taker(POT_FIFTEEN, FIFTEEN_SERIES, loop, skip_last=self.cfg.skip_last_seconds))
             elif loop == "hourly":
                 series = await self._hourly_series()
-                actions.extend(await self._enter_taker(POT_HOURLY, series, loop, skip_last=self.cfg.skip_last_seconds))
+                actions.extend(
+                    await self._enter_taker(
+                        POT_HOURLY,
+                        series,
+                        loop,
+                        skip_last=self.cfg.skip_last_seconds,
+                        max_secs=self.cfg.hourly_max_seconds,
+                    )
+                )
             elif loop == "maker":
                 actions.extend(await self._enter_maker())
 
@@ -182,6 +191,8 @@ class CampaignEngine:
             if not q:
                 continue
             reason = flatten_reason(ticket, q["yes_bid"], q["yes_ask"])
+            if is_daily_ticker(ticket["ticker"]):
+                reason = "wrong_universe_daily"
             if not reason:
                 continue
             sell_px = max(q["yes_bid"] if ticket["side"] == "yes" else q["yes_ask"], 0.01)
@@ -214,7 +225,10 @@ class CampaignEngine:
                 ticket["exit_price"] = price
                 ticket["realized"] = 0.0
                 return f"Dropped practice ticket {ticket['ticker']} (never a real Kalshi fill)."
-            resp = await self.kalshi.create_order_v2(payload)
+            try:
+                resp = await self.kalshi.create_order_v2(payload)
+            except httpx.HTTPStatusError as exc:
+                return f"LIVE flatten failed {ticket['ticker']}: {exc}"
             fill_count = float(resp.get("fill_count") or 0)
             avg = float(resp.get("average_fill_price") or price)
         fill = float(ticket["fill"])
@@ -245,10 +259,14 @@ class CampaignEngine:
     async def _load_candidates(self, series_tickers: list[str]) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         for ticker in series_tickers:
+            if is_daily_ticker(ticker):
+                continue
             events = await self.kalshi.open_events(ticker, limit=2)
             for event in events:
                 for market in event.get("markets") or []:
                     if str(market.get("status") or "").lower() not in {"active", "open"}:
+                        continue
+                    if is_daily_ticker(str(market.get("ticker") or ticker)):
                         continue
                     out.append({"series": ticker, "event": event, "market": market})
         return out
@@ -299,7 +317,14 @@ class CampaignEngine:
             "exchange_index": shard_for_series(series, event.get("title") or ""),
         }
 
-    async def _enter_taker(self, pot: str, series_tickers: list[str], loop: str, skip_last: float) -> list[str]:
+    async def _enter_taker(
+        self,
+        pot: str,
+        series_tickers: list[str],
+        loop: str,
+        skip_last: float,
+        max_secs: float | None = None,
+    ) -> list[str]:
         actions: list[str] = []
         pot_state = self.tracker.state["pots"][pot]
         if pot_state.get("stopped"):
@@ -317,7 +342,11 @@ class CampaignEngine:
                 continue
             if item["secs"] < skip_last:
                 continue
+            if max_secs is not None and item["secs"] > max_secs:
+                continue
             if not item["favorite"].is_real_or_better:
+                continue
+            if not in_pay_band(item["favorite"]):
                 continue
             scored.append(item)
         scored.sort(key=lambda r: r["favorite"].model_side, reverse=True)
@@ -338,7 +367,7 @@ class CampaignEngine:
             budget = min(size_for_conviction(pot, fav.conviction), available)
             if budget < 0.50:
                 continue
-            if already_there(fav):
+            if already_there(fav) or not in_pay_band(fav):
                 continue
             count = contracts_for_budget(budget, fav.take_price)
             ticker = pick["market"]["ticker"]
@@ -383,7 +412,7 @@ class CampaignEngine:
                 "paper": not self.live,
             }
             self.tracker.state["tickets"].append(ticket)
-            rest_msg = await self._rest_99(ticket)
+            rest_msg = await self._rest_99(ticket, yes_bid=pick["yes_bid"])
             actions.append(
                 f"{mode} IOC {fav.conviction} {fav.side} {ticker} {fill_count:.2f}@ {avg:.2f} · {fav.rationale}"
             )
@@ -392,7 +421,9 @@ class CampaignEngine:
             placed += 1
         return actions
 
-    async def _rest_99(self, ticket: dict[str, Any]) -> str | None:
+    async def _rest_99(self, ticket: dict[str, Any], yes_bid: float | None = None) -> str | None:
+        if yes_bid is not None and yes_bid >= 0.99:
+            return None
         side = "ask" if ticket["side"] == "yes" else "bid"
         payload = {
             "ticker": ticket["ticker"],
@@ -402,7 +433,6 @@ class CampaignEngine:
             "time_in_force": "good_till_canceled",
             "self_trade_prevention_type": "maker",
             "post_only": True,
-            "reduce_only": True,
             "client_order_id": str(uuid.uuid4()),
             "exchange_index": -1,
         }
@@ -410,7 +440,11 @@ class CampaignEngine:
         if self.live:
             if ticket.get("paper") or not ticket.get("order_id"):
                 return None
-            resp = await self.kalshi.create_order_v2(payload)
+            try:
+                resp = await self.kalshi.create_order_v2(payload)
+            except httpx.HTTPStatusError as exc:
+                logger.warning("rest 99 failed on %s: %s", ticket["ticker"], exc)
+                return f"LIVE rest 99¢ skipped on {ticket['ticker']}: {exc}"
             order_id = resp.get("order_id")
         rest = {
             "id": str(uuid.uuid4()),
@@ -433,6 +467,8 @@ class CampaignEngine:
         for row in await self._load_candidates(series):
             item = await self._score_market(row)
             if not item or item["secs"] < self.cfg.maker_skip_last_seconds:
+                continue
+            if item["series"] not in FIFTEEN_SERIES and item["secs"] > self.cfg.hourly_max_seconds:
                 continue
             if not maker_join_ok(item["favorite"]):
                 continue

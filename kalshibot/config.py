@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     hourly_bankroll: float = 10.0
     pot_stop: float = -0.50
     skip_last_seconds: float = 60.0
+    hourly_max_seconds: float = 75 * 60
     maker_skip_last_seconds: float = 15.0
 
 

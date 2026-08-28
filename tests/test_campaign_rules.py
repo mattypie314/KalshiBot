@@ -6,12 +6,13 @@ from kalshibot.campaign.rules import (
     classify_favorite,
     flatten_reason,
     in_maker_window,
+    in_pay_band,
     maker_join_ok,
     open_cost,
     room,
     size_for_conviction,
 )
-from kalshibot.campaign.universe import is_campaign_hourly_universe, shard_for_series
+from kalshibot.campaign.universe import HOURLY_MAX_SECONDS, is_campaign_hourly_universe, is_daily_ticker, shard_for_series
 
 
 def test_room_and_open_cost():
@@ -117,13 +118,51 @@ def test_already_there_skips_99_book():
     fav = classify_favorite(spot=800, strike=100, yes_bid=0.99, yes_ask=1.00, model_yes=0.99)
     assert fav is not None
     assert already_there(fav)
+    assert not in_pay_band(fav)
     real = classify_favorite(spot=100, strike=99, yes_bid=0.80, yes_ask=0.82, model_yes=0.85)
     assert real is not None
     assert not already_there(real)
+    assert in_pay_band(real)
 
 
-def test_hourly_universe_and_shards():
+def test_pay_band_is_74_to_96():
+    cheap = classify_favorite(spot=100, strike=99, yes_bid=0.70, yes_ask=0.72, model_yes=0.80)
+    assert cheap is not None
+    assert not in_pay_band(cheap)
+    lock = classify_favorite(spot=800, strike=100, yes_bid=0.97, yes_ask=0.98, model_yes=0.99)
+    assert lock is not None
+    assert not in_pay_band(lock)
+
+
+def test_hourly_universe_ignores_daily_d_tickers():
     assert is_campaign_hourly_universe({"category": "Crypto", "frequency": "hourly", "ticker": "KXBTC", "title": "BTC hour"})
+    assert is_campaign_hourly_universe({"category": "Crypto", "frequency": "hourly", "ticker": "KXZECH", "title": "ZEC hourly"})
+    assert not is_campaign_hourly_universe({"category": "Crypto", "frequency": "hourly", "ticker": "KXBTCD", "title": "BTC hour"})
     assert not is_campaign_hourly_universe({"category": "Crypto", "frequency": "daily", "ticker": "KXETHD", "title": "ETH daily"})
+    assert not is_campaign_hourly_universe({"category": "Crypto", "frequency": "", "ticker": "KXDOGED", "title": "DOGE"})
+    assert not is_campaign_hourly_universe({"category": "Crypto", "frequency": "", "ticker": "KXBNBD", "title": "BNB"})
+    assert is_daily_ticker("KXBTCD-26AUG2817-T75999.99")
+    assert is_daily_ticker("KXETHD")
+    assert not is_daily_ticker("KXBTC15M")
+    assert not is_daily_ticker("KXBTC")
+    assert HOURLY_MAX_SECONDS == 75 * 60
     assert shard_for_series("KXGOLD15M", "Gold 15-minute") == 0
     assert shard_for_series("KXBTC15M", "BTC 15 min") == 2
+
+
+def test_reset_fifteen_pot(tmp_path):
+    from kalshibot.campaign.tracker import Tracker
+
+    path = tmp_path / "crypto-campaign.json"
+    tracker = Tracker(path)
+    tracker.load()
+    tracker.state["pots"]["fifteen"] = {
+        "bankroll": 5.0,
+        "realized": -1.7228,
+        "stopped": True,
+        "stop_reason": "realized -1.72 hit stop -0.50",
+    }
+    tracker.save()
+    pot = tracker.reset_pot("fifteen")
+    assert pot == {"bankroll": 5.0, "realized": 0.0, "stopped": False, "stop_reason": None}
+    assert tracker.load()["pots"]["fifteen"]["stopped"] is False

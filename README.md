@@ -9,7 +9,7 @@ Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 | Loop | Schedule | Universe | Pot |
 | --- | --- | --- | --- |
 | 15m | every 3 minutes | BTC/ETH/SOL (shard 2) + gold/silver 15m (shard 0) | $5, stop -$0.50, skip new if room < $0.50 |
-| Hourly | every 5 minutes | live hourly crypto/commodities | $10, stop -$0.50, skip new if room < $1 |
+| Hourly | every 5 minutes | hourly crypto/commodities ending in the next 75 minutes (no daily `…D` books) | $10, stop -$0.50, skip new if room < $1 |
 | Maker | minutes 12–14, 27–29, 42–44, 57–59 | 15m books; hourlies at :57–:59 | same two pots, never share room |
 
 Shared ticket rules (all three loops):
@@ -17,8 +17,9 @@ Shared ticket rules (all three loops):
 - Flatten IOC if down ~$0.50 or ~10% from fill (18% if filled before 3:00 AM ET 2026-08-27)
 - Take profit if held-side bid ≥ fill + 2¢, or sell immediately at 99¢
 - Never rest a sell under the bid
-- 15m/hourly: IOC pay-through on a real favorite, then rest 99¢ post-only
+- 15m/hourly: IOC pay-through on a real favorite at **74–96¢** only, then rest 99¢ post-only
 - Maker: post-only join 74–93¢, never IOC-pay-through
+- Ignore daily books (`KXETHD`, `KXBTCD`, `KXDOGED`, other tickers ending in `D`)
 
 **Live trading is off by default.** Dry-run logs intended orders. To enable live:
 
@@ -62,4 +63,4 @@ It stays in practice mode (DRY) until you add Kalshi secrets under **Settings �
 
 After secrets are on, tap **Run workflow** on the latest `main` — do not re-run an old red job. Practice tickets from DRY runs are not real Kalshi fills; the bot now drops those before placing live orders.
 
-The $5 / $10 pots are saved on a `campaign-state` branch so they survive between runs.
+The $5 / $10 pots are saved on a `campaign-state` branch so they survive between runs. If the $5 pot is stopped, tap **Run workflow**, turn on **reset_fifteen**, and run.

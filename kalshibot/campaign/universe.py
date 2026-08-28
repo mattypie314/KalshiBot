@@ -14,6 +14,17 @@ CRYPTO_SHARD = 2
 METALS_SHARD = 0
 
 HOURLY_FREQUENCIES = {"hourly", "hour", "1h", "hours"}
+HOURLY_MAX_SECONDS = 75 * 60
+
+
+def series_code(ticker: str) -> str:
+    return str(ticker or "").upper().split("-", 1)[0]
+
+
+def is_daily_ticker(ticker: str) -> bool:
+    """KXETHD / KXBTCD / KXDOGED and their market tickers. Not 15-minute series."""
+    code = series_code(ticker)
+    return bool(code) and code.endswith("D") and not code.endswith("15M")
 
 
 def shard_for_series(series_ticker: str, title: str = "") -> int:
@@ -27,11 +38,13 @@ def is_hourly_series(series: dict) -> bool:
     freq = str(series.get("frequency") or "").lower()
     title = str(series.get("title") or "").lower()
     ticker = str(series.get("ticker") or "").upper()
+    if is_daily_ticker(ticker) or "daily" in freq or "daily" in title:
+        return False
     if "15" in freq or ticker.endswith("15M"):
         return False
-    if freq in HOURLY_FREQUENCIES:
+    if ticker.endswith("H") or freq in HOURLY_FREQUENCIES:
         return True
-    return "hour" in title and "15" not in title and "daily" not in title
+    return "hour" in title and "15" not in title
 
 
 def is_campaign_hourly_universe(series: dict) -> bool:

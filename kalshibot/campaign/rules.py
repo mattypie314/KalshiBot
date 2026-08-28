@@ -156,8 +156,13 @@ def classify_favorite(
 
 
 def already_there(favorite: Favorite) -> bool:
-    """Skip IOC when the book is already 99¢ — buying then instantly flattening is noise."""
+    """Skip IOC locks at 99¢–$1.00."""
     return favorite.take_price >= 0.99 or favorite.held_bid >= 0.99
+
+
+def in_pay_band(favorite: Favorite) -> bool:
+    """Taker loop only pays 74–96¢."""
+    return 0.74 <= favorite.take_price <= 0.96
 
 
 def maker_join_ok(favorite: Favorite) -> bool:
