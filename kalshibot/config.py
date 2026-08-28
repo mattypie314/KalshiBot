@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
 
-    kalshi_base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
+    kalshi_base_url: str = "https://external-api.kalshi.com/trade-api/v2"
     series_per_section: int = 12
     max_events_per_series: int = 3
     max_markets_per_event: int = 4

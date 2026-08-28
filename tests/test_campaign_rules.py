@@ -2,6 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from kalshibot.campaign.rules import (
+    already_there,
     classify_favorite,
     flatten_reason,
     in_maker_window,
@@ -110,6 +111,15 @@ def test_empty_kalshi_live_is_false(monkeypatch):
     from kalshibot.config import Settings
 
     assert Settings().kalshi_live is False
+
+
+def test_already_there_skips_99_book():
+    fav = classify_favorite(spot=800, strike=100, yes_bid=0.99, yes_ask=1.00, model_yes=0.99)
+    assert fav is not None
+    assert already_there(fav)
+    real = classify_favorite(spot=100, strike=99, yes_bid=0.80, yes_ask=0.82, model_yes=0.85)
+    assert real is not None
+    assert not already_there(real)
 
 
 def test_hourly_universe_and_shards():

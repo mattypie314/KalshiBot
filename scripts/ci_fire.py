@@ -13,6 +13,8 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     requested = os.environ.get("LOOP", "auto").strip().lower() or "auto"
     engine = CampaignEngine()
+    mode = "LIVE MONEY" if engine.live else "PRACTICE (no real Kalshi orders)"
+    print(f"KalshiBot campaign: {mode} · loop={requested} · can_trade={engine.kalshi.can_trade}")
     try:
         if requested in {"fifteen", "hourly", "maker"}:
             result = await engine.fire(requested)

@@ -72,11 +72,16 @@ class KalshiClient:
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
-                last_error = exc
+                body = (response.text or "").strip().replace("\n", " ")[:400]
+                last_error = httpx.HTTPStatusError(
+                    f"{exc} Kalshi said: {body or '(empty body)'}",
+                    request=response.request,
+                    response=response,
+                )
                 if 500 <= response.status_code < 600:
                     await asyncio.sleep(0.4 * (2**attempt))
                     continue
-                raise
+                raise last_error from exc
             return response
         assert last_error is not None
         raise last_error
@@ -119,7 +124,21 @@ class KalshiClient:
         return events[:limit]
 
     async def create_order_v2(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return await self.post_json("/portfolio/events/orders", payload)
+        """Place a V2 order. Always auto-route by ticker.
+
+        Sending a guessed `exchange_index` (for example crypto shard 2) makes
+        Kalshi 404 when the market lives on another shard — that is what the
+        GitHub campaign was hitting on leftover BNB daily practice tickets.
+        """
+        body = dict(payload)
+        body["exchange_index"] = -1
+        try:
+            return await self.post_json("/portfolio/events/orders", body)
+        except httpx.HTTPStatusError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                body.pop("exchange_index", None)
+                return await self.post_json("/portfolio/events/orders", body)
+            raise
 
     async def cancel_order(self, order_id: str) -> None:
         await self.delete(f"/portfolio/events/orders/{order_id}")
