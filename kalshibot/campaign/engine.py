@@ -136,15 +136,16 @@ class CampaignEngine:
         return float(self.tracker.state["bankroll"]) + float(self.tracker.state["realized"])
 
     def _total_value(self) -> float:
-        """Kalshi portfolio_value (total_value). 15m sizes 3–5% of this, not just cash."""
+        """Kalshi total bankroll. Never size off a portfolio_value smaller than live cash."""
+        equity = self._equity()
         tv = self.tracker.state.get("kalshi_total_value")
         if self._follow_kalshi() and tv is not None:
-            value = float(tv)
+            value = max(float(tv), equity)
             cap = self._bankroll_cap()
             if cap is not None:
                 value = min(value, cap)
             return max(value, 0.0)
-        return self._equity()
+        return equity
 
     def _revenge_active(self) -> bool:
         raw = self.tracker.state.get("last_loss_at")
@@ -295,6 +296,8 @@ class CampaignEngine:
         if "revenge" in low or "not live" in low or "news candle" in low:
             return True
         if "below 3%" in low or "15m skipped" in low or "already stopped" in low:
+            return True
+        if "working this window" in low:
             return True
         if "post-only" in low:
             return True
@@ -469,13 +472,29 @@ class CampaignEngine:
             if is_daily_ticker(ticker):
                 actions.append(await self._cancel_rest(rest, "wrong_universe_daily"))
                 continue
+            close = parse_close_time(rest.get("close_at"))
+            if close and (seconds_until(close) or 0) <= 0:
+                actions.append(await self._cancel_rest(rest, "expired"))
+                continue
             try:
                 data = await self.kalshi.get_json(f"/markets/{ticker}")
+            except httpx.HTTPStatusError as exc:
+                if exc.response is not None and exc.response.status_code == 404:
+                    actions.append(await self._cancel_rest(rest, "expired"))
+                continue
             except Exception:
                 continue
             market = data.get("market") or data
             yes_bid = parse_dollars(market.get("yes_bid_dollars")) or 0.0
             yes_ask = parse_dollars(market.get("yes_ask_dollars")) or 0.0
+            status = str(market.get("status") or "").lower()
+            close = parse_close_time(market.get("close_time")) or close
+            secs_left = seconds_until(close)
+            if status in {"determined", "closed", "settled", "finalized"} or (
+                close and secs_left is not None and secs_left <= 0
+            ):
+                actions.append(await self._cancel_rest(rest, "expired"))
+                continue
             if rest.get("kind") == "maker_spread":
                 close = parse_close_time(market.get("close_time")) or parse_close_time(rest.get("close_at"))
                 secs = seconds_until(close) or 0
@@ -501,9 +520,11 @@ class CampaignEngine:
     async def _cancel_rest(self, rest: dict[str, Any], reason: str) -> str:
         if self.live and rest.get("order_id") and not rest.get("paper"):
             try:
-                await self.kalshi.cancel_order(str(rest["order_id"]))
+                await self.kalshi.cancel_order(str(rest["order_id"]), ticker=str(rest.get("ticker") or "") or None)
             except httpx.HTTPStatusError as exc:
-                return f"LIVE cancel failed {rest.get('ticker')}: {exc}"
+                gone = exc.response is not None and exc.response.status_code == 404
+                if not gone:
+                    return f"LIVE cancel failed {rest.get('ticker')}: {exc}"
         rest["status"] = "canceled"
         rest["exit_reason"] = reason
         mode = "LIVE" if self.live else "DRY"
@@ -663,6 +684,8 @@ class CampaignEngine:
         if not expect_ticket:
             return []
         if fifteen_working(state):
+            if expect_ticket:
+                return ["Already have a 15m working this window."]
             return []
         total = self._total_value()
         room = self._room()

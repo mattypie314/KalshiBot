@@ -96,8 +96,8 @@ class KalshiClient:
             return {}
         return response.json()
 
-    async def delete(self, path: str) -> None:
-        await self._request("DELETE", path)
+    async def delete(self, path: str, params: dict[str, Any] | None = None) -> None:
+        await self._request("DELETE", path, params=params)
 
     async def series_for_category(self, category: str) -> list[dict[str, Any]]:
         data = await self.get_json("/series", params={"category": category, "include_volume": "true"})
@@ -140,8 +140,12 @@ class KalshiClient:
                 return await self.post_json("/portfolio/events/orders", body)
             raise
 
-    async def cancel_order(self, order_id: str) -> None:
-        await self.delete(f"/portfolio/events/orders/{order_id}")
+    async def cancel_order(self, order_id: str, ticker: str | None = None) -> None:
+        """Cancel a V2 order. Auto-route by ticker so crypto (shard 2) is not sent to shard 0."""
+        params: dict[str, Any] = {"exchange_index": -1}
+        if ticker:
+            params["market_ticker"] = ticker
+        await self.delete(f"/portfolio/events/orders/{order_id}", params=params)
 
     async def get_balance(self) -> dict[str, Any]:
         return await self.get_json("/portfolio/balance")

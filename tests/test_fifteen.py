@@ -128,6 +128,8 @@ def test_one_idea_per_window():
     assert not fifteen_working(state, now)
     state["rests"] = [{"status": "open", "loop": "fifteen", "window_id": wid}]
     assert fifteen_working(state, now)
+    state["rests"] = [{"status": "open", "loop": "fifteen"}]  # leftover, no window id
+    assert not fifteen_working(state, now)
 
 
 def test_revenge_skips_the_next_window_only():

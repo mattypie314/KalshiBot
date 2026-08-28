@@ -634,3 +634,58 @@ def test_sync_kalshi_cash_stores_total_value(tmp_path):
     assert engine._total_value() == 61.25
     assert "48.25" in (msg or "")
 
+
+def test_total_value_floors_at_cash_when_portfolio_is_smaller(tmp_path):
+    engine = _engine(tmp_path, 15)
+    engine.tracker.state["kalshi_cash"] = 38.27
+    engine.tracker.state["kalshi_total_value"] = 5.46
+    engine.tracker.state["sizing"] = {"follow_kalshi_cash": True, "bankroll_cap": None}
+    assert engine._total_value() == 38.27
+    asyncio.run(engine.aclose())
+
+
+def test_cancel_404_clears_expired_rest(tmp_path):
+    engine = _engine(tmp_path, 50)
+    engine.live = True
+    engine.tracker.state["rests"].append(
+        {
+            "id": "ghost",
+            "loop": "fifteen",
+            "ticker": "KXGOLD15M-26AUG280700-00",
+            "status": "open",
+            "order_id": "ord-dead",
+            "kind": "limit_join",
+            "close_at": "2026-08-28T11:00:00+00:00",
+            "paper": False,
+        }
+    )
+    engine.kalshi.cancel_order = AsyncMock(
+        side_effect=httpx.HTTPStatusError(
+            "404",
+            request=httpx.Request("DELETE", "https://example.test"),
+            response=httpx.Response(404, json={"error": {"message": "not found"}}),
+        )
+    )
+    actions = asyncio.run(engine._manage_rests())
+    asyncio.run(engine.aclose())
+    assert any("expired" in a for a in actions)
+    assert all(r.get("status") != "open" for r in engine.tracker.state["rests"])
+    assert engine._open_idea_count() == 0
+    engine.kalshi.cancel_order.assert_awaited()
+    assert engine.kalshi.cancel_order.await_args.kwargs.get("ticker") == "KXGOLD15M-26AUG280700-00"
+
+
+def test_cancel_order_auto_routes_by_ticker():
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(200, json={"order_id": "ord-1", "reduced_by": "0"})
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = KalshiClient("https://external-api.kalshi.com/trade-api/v2", 5.0, client=http, min_interval=0)
+    asyncio.run(client.cancel_order("ord-1", ticker="KXXRP-26AUG2807-B1.4099500"))
+    asyncio.run(http.aclose())
+    assert "exchange_index=-1" in calls[0]
+    assert "market_ticker=KXXRP-26AUG2807-B1.4099500" in calls[0]
+
