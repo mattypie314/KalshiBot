@@ -1180,6 +1180,36 @@
       "loop": "maker",
       "message": "No 74\u201393\u00a2 favorite in the last 3 minutes. Sitting out is a valid trade.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T15:05:03.602291+00:00",
+      "loop": "fifteen",
+      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T15:05:12.224968+00:00",
+      "loop": "hourly",
+      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T15:05:12.224978+00:00",
+      "loop": "hourly",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T15:05:12.254763+00:00",
+      "loop": "maker",
+      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T15:05:12.254770+00:00",
+      "loop": "maker",
+      "message": "Maker window closed; stay quiet.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1195,5 +1225,5 @@
     "maker_auto": true,
     "risk_percent": 8.0
   },
-  "updated_at": "2026-08-28T12:59:44.504302+00:00"
+  "updated_at": "2026-08-28T15:05:12.254800+00:00"
 }
