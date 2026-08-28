@@ -71,7 +71,7 @@ def test_live_fire_drops_practice_tickets_without_ordering(tmp_path):
     engine.tracker.state["tickets"].append(
         {
             "id": "1",
-            "pot": "hourly",
+            "loop": "hourly",
             "ticker": "KXBNBD-26AUG2803-T524.99",
             "side": "yes",
             "fill": 1.0,

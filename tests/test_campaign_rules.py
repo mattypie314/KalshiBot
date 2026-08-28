@@ -173,3 +173,22 @@ def test_legacy_pots_fold_into_one_book(tmp_path):
     assert state["bankroll"] == 15.0
     assert state["realized"] == -2.02
     assert "stopped" not in state
+
+
+def test_legacy_ticket_pot_field_becomes_loop(tmp_path):
+    from kalshibot.campaign.tracker import Tracker
+
+    path = tmp_path / "crypto-campaign.json"
+    path.write_text(
+        """
+        {
+          "bankroll": 15.0,
+          "realized": 0,
+          "tickets": [{"id": "1", "pot": "hourly", "ticker": "KXBTC15M-1", "status": "open", "cost": 1.0}]
+        }
+        """
+    )
+    state = Tracker(path).load()
+    assert "pots" not in state
+    assert state["tickets"][0]["loop"] == "hourly"
+    assert "pot" not in state["tickets"][0]

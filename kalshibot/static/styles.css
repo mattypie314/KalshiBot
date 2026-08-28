@@ -176,12 +176,12 @@ button, input {
   border: 1px solid var(--line);
   background: var(--panel);
 }
-.pots {
+.book-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
-.pot .num { font-size: 22px; }
+.book-card .num { font-size: 22px; }
 .loop-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .loop-actions button {
   background: transparent;
@@ -200,7 +200,7 @@ button, input {
   white-space: pre-wrap;
 }
 @media (max-width: 800px) {
-  .pots { grid-template-columns: 1fr; }
+  .book-row { grid-template-columns: 1fr; }
   .sections, .card { grid-template-columns: 1fr; }
   .top { flex-direction: column; align-items: start; }
   .top-meta { text-align: left; }

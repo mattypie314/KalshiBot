@@ -66,6 +66,10 @@ class Tracker:
         self.state.setdefault("realized", 0.0)
         self.state.setdefault("last_loss_at", None)
         self.state.pop("pots", None)
+        for ticket in self.state.get("tickets", []):
+            if not ticket.get("loop") and ticket.get("pot"):
+                ticket["loop"] = ticket["pot"]
+            ticket.pop("pot", None)
         return self.state
 
     def save(self) -> None:
