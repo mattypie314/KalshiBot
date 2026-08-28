@@ -27,10 +27,19 @@ Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 
 **Raising the book as it grows**
 
-Percents live in one place: `kalshibot/campaign/playbook.py` (and matching fields in `kalshibot/config.py` / env vars). You usually leave those alone and only raise the dollar book:
+You do not have to edit code. Size is a **percent of the book**, so bigger cash means bigger tickets.
 
-- GitHub: **Actions → Kalshi campaign → Run workflow** and type the new dollar amount in `bankroll` (for example `35`).
-- Env: `CAMPAIGN_BANKROLL` for a fresh tracker, or the `bankroll` workflow input to update the saved book.
+On your iPhone: **Actions → Kalshi campaign → Run workflow**
+
+| Field | What to type | Leave blank / keep |
+| --- | --- | --- |
+| `bankroll` | Max dollars the bot may use, like `50` | Follows Kalshi cash (grows when you deposit) |
+| `follow_kalshi_cash` | `yes` or `no` | `keep` |
+| `risk_percent` | Max percent per idea, like `5` for 5% | Current 3–5% Kelly, 8% cap |
+
+Usual path: deposit on Kalshi, leave the fields blank. Next run sizes off your live cash. Type a `bankroll` only if you want a cap so the bot does not use the whole Kalshi account.
+
+The same knobs are saved on the `campaign-state` book so they stick until you change them.
 
 | Knob | Default | Env |
 | --- | --- | --- |
@@ -79,7 +88,7 @@ GitHub runs the campaign every 5 minutes after this pull request is merged.
 
 1. Merge this pull request.
 2. Open the repo **Actions** tab. If GitHub asks to enable workflows, tap Enable.
-3. Open **Kalshi campaign → Run workflow** on the latest `main`. Type a `bankroll` only when you want to change the dollar book. Do not re-run an old red job.
+3. Open **Kalshi campaign → Run workflow** on the latest `main`. Leave `bankroll` blank to follow Kalshi cash. Type a number only when you want a dollar cap. Do not re-run an old red job.
 
 It stays in practice mode (DRY) until Kalshi secrets are under **Settings → Secrets and variables → Actions**: `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY` (the full .pem text), and `KALSHI_LIVE` set to `1`.
 

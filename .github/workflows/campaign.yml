@@ -15,7 +15,19 @@ on:
           - maker
         default: auto
       bankroll:
-        description: "Set the campaign book in dollars. Leave blank to keep the saved book."
+        description: "Max dollars the bot may use. Leave blank to follow Kalshi cash / the saved book."
+        type: string
+        default: ""
+      follow_kalshi_cash:
+        description: "Use live Kalshi cash so size grows when you deposit."
+        type: choice
+        options:
+          - keep
+          - "yes"
+          - "no"
+        default: keep
+      risk_percent:
+        description: "Max percent of the book per idea (example: 5). Blank = keep 3–5% Kelly / 8% cap."
         type: string
         default: ""
 
@@ -64,6 +76,8 @@ jobs:
         env:
           LOOP: ${{ github.event.inputs.loop || 'auto' }}
           BANKROLL: ${{ github.event.inputs.bankroll || '' }}
+          FOLLOW_KALSHI: ${{ github.event.inputs.follow_kalshi_cash || 'keep' }}
+          RISK_PERCENT: ${{ github.event.inputs.risk_percent || '' }}
           KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
           KALSHI_LIVE: ${{ secrets.KALSHI_LIVE || 'false' }}
           TRACKER_PATH: /home/runner/.kalshi/crypto-campaign.json
