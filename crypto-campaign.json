@@ -188,6 +188,21 @@
       "order_id": "01a047ca-4368-7374-8ce5-5bc4eb390568",
       "conviction": "fat",
       "paper": false
+    },
+    {
+      "id": "d5dcd5ef-7a4e-4292-a49e-0f8e0d909198",
+      "pot": "hourly",
+      "ticker": "KXBTCD-26AUG2817-T75999.99",
+      "side": "yes",
+      "fill": 0.98,
+      "count": 4.8,
+      "cost": 4.704,
+      "filled_at": "2026-08-28T09:54:05.291854+00:00",
+      "status": "open",
+      "exchange_index": 2,
+      "order_id": "01a047ca-7248-7eda-83f3-72597722d800",
+      "conviction": "fat",
+      "paper": false
     }
   ],
   "rests": [
@@ -543,7 +558,19 @@
       "loop": "hourly",
       "message": "Loop error (live): Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"invalid_order\",\"message\":\"invalid order\",\"details\":\"reduce_only can only be used with IoC orders\"}}",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T09:53:56.152008+00:00",
+      "loop": "fifteen",
+      "message": "Nothing new.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T09:54:05.589297+00:00",
+      "loop": "hourly",
+      "message": "Loop error (live): Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"invalid_order\",\"message\":\"invalid order\",\"details\":\"reduce_only can only be used with IoC orders\"}}",
+      "tell_matt": true
     }
   ],
-  "updated_at": "2026-08-28T09:53:53.530190+00:00"
+  "updated_at": "2026-08-28T09:54:05.589369+00:00"
 }
