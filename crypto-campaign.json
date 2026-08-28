@@ -149,11 +149,13 @@
       "count": 5.0,
       "cost": 5.0,
       "filled_at": "2026-08-28T06:05:52.775229+00:00",
-      "status": "open",
+      "status": "flat",
       "exchange_index": 2,
       "order_id": null,
       "conviction": "fat",
-      "paper": true
+      "paper": true,
+      "exit_reason": "practice_ticket",
+      "realized": 0.0
     },
     {
       "id": "4295b884-faa9-4d50-90e4-303765b99274",
@@ -164,11 +166,28 @@
       "count": 4.7,
       "cost": 4.7,
       "filled_at": "2026-08-28T06:05:52.775270+00:00",
-      "status": "open",
+      "status": "flat",
       "exchange_index": 2,
       "order_id": null,
       "conviction": "fat",
-      "paper": true
+      "paper": true,
+      "exit_reason": "practice_ticket",
+      "realized": 0.0
+    },
+    {
+      "id": "32209484-b418-4410-8854-a3e76cd2b79d",
+      "pot": "hourly",
+      "ticker": "KXBTCD-26AUG2817-T75999.99",
+      "side": "yes",
+      "fill": 0.98,
+      "count": 5.1,
+      "cost": 4.998,
+      "filled_at": "2026-08-28T09:53:53.229951+00:00",
+      "status": "open",
+      "exchange_index": 2,
+      "order_id": "01a047ca-4368-7374-8ce5-5bc4eb390568",
+      "conviction": "fat",
+      "paper": false
     }
   ],
   "rests": [
@@ -177,72 +196,81 @@
       "ticket_id": "73e01d8a-bb4f-4981-9b48-566f4ee04f1b",
       "ticker": "KXSILVER15M-26AUG280130-30",
       "price": 0.99,
-      "status": "open",
-      "order_id": null
+      "status": "canceled",
+      "order_id": null,
+      "exit_reason": "practice_ticket"
     },
     {
       "id": "38c5f5af-756d-48f7-9b83-7bf051d0cf21",
       "ticket_id": "04d5fc61-5671-4bf1-a5f6-8bc4562ab1de",
       "ticker": "KXETHD-26AUG2802-T1749.99",
       "price": 0.99,
-      "status": "open",
-      "order_id": null
+      "status": "canceled",
+      "order_id": null,
+      "exit_reason": "practice_ticket"
     },
     {
       "id": "425e3149-5258-41d5-b18a-29a64314ac6d",
       "ticket_id": "87aee410-6018-4cc6-b643-2e890c90ad9b",
       "ticker": "KXETHD-26AUG2802-T1754.99",
       "price": 0.99,
-      "status": "open",
-      "order_id": null
+      "status": "canceled",
+      "order_id": null,
+      "exit_reason": "practice_ticket"
     },
     {
       "id": "b52dfeec-3bfb-437d-bf8a-d3b293eb07bd",
       "ticket_id": "4d800edc-efba-449c-8d02-59b6ba113453",
       "ticker": "KXXRPD-26AUG2802-T0.6599",
       "price": 0.99,
-      "status": "open",
-      "order_id": null
+      "status": "canceled",
+      "order_id": null,
+      "exit_reason": "practice_ticket"
     },
     {
       "id": "805f5a64-3e3a-46e0-96b3-8e32097ace8d",
       "ticket_id": "ff6c91da-0b0f-4d15-87a2-8e10a9bf8637",
       "ticker": "KXXRPD-26AUG2802-T0.6799",
       "price": 0.99,
-      "status": "open",
-      "order_id": null
+      "status": "canceled",
+      "order_id": null,
+      "exit_reason": "practice_ticket"
     },
     {
       "id": "24cb395d-04e0-4b97-89fe-1b435de61a9e",
       "ticket_id": "98e901c3-980a-4a36-afcb-ec2d4e1c4359",
       "ticker": "KXDOGED-26AUG2802-T0.0049999",
       "price": 0.99,
-      "status": "open",
-      "order_id": null
+      "status": "canceled",
+      "order_id": null,
+      "exit_reason": "practice_ticket"
     },
     {
       "id": "cd67f019-2646-4fa3-9bf6-4170b902af2b",
       "ticket_id": "37812680-2c44-4cf6-9df9-c2b45a73eb61",
       "ticker": "KXDOGED-26AUG2802-T0.0099999",
       "price": 0.99,
-      "status": "open",
-      "order_id": null
+      "status": "canceled",
+      "order_id": null,
+      "exit_reason": "practice_ticket"
     },
     {
       "id": "cf7d7bb3-661b-43d1-95c5-ca66b005fd74",
       "ticket_id": "1cebbc32-c16e-4ecc-8910-ae3a11cdd558",
       "ticker": "KXBNBD-26AUG2803-T519.99",
       "price": 0.99,
-      "status": "open",
-      "order_id": null
+      "status": "canceled",
+      "order_id": null,
+      "exit_reason": "practice_ticket"
     },
     {
       "id": "3eb18484-3bca-4bcf-a5f8-4b334f2e6ada",
       "ticket_id": "4295b884-faa9-4d50-90e4-303765b99274",
       "ticker": "KXBNBD-26AUG2803-T524.99",
       "price": 0.99,
-      "status": "open",
-      "order_id": null
+      "status": "canceled",
+      "order_id": null,
+      "exit_reason": "practice_ticket"
     }
   ],
   "log": [
@@ -503,7 +531,19 @@
       "loop": "hourly",
       "message": "Loop error (still practice mode): Client error '404 Not Found' for url 'https://api.elections.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T09:53:44.429893+00:00",
+      "loop": "fifteen",
+      "message": "Cleared 2 practice ticket(s) so live orders can start: KXBNBD-26AUG2803-T519.99, KXBNBD-26AUG2803-T524.99.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T09:53:53.530107+00:00",
+      "loop": "hourly",
+      "message": "Loop error (live): Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"invalid_order\",\"message\":\"invalid order\",\"details\":\"reduce_only can only be used with IoC orders\"}}",
+      "tell_matt": true
     }
   ],
-  "updated_at": "2026-08-28T09:31:35.815704+00:00"
+  "updated_at": "2026-08-28T09:53:53.530190+00:00"
 }
