@@ -44,6 +44,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: kalshi-campaign
+  cancel-in-progress: false
+
 jobs:
   fire:
     runs-on: ubuntu-latest

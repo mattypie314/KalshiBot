@@ -141,19 +141,21 @@ def fifteen_stopped(state: dict, now: datetime | None = None) -> bool:
 
 
 def fifteen_working(state: dict, now: datetime | None = None) -> bool:
-    """True if a 15m ticket or rest is already working this window."""
+    """True if a 15m ticket or rest is already working this window.
+
+    Leftover rests from an older window (or old saves with no window_id) must
+    not block a new look. Those get dropped as expired in the engine.
+    """
     wid = fifteen_window_id(now)
     for ticket in state.get("tickets") or []:
         if ticket.get("status") != "open" or ticket.get("loop") != "fifteen":
             continue
-        stored = ticket.get("window_id")
-        if stored in (None, "", wid):
+        if ticket.get("window_id") == wid:
             return True
     for rest in state.get("rests") or []:
         if rest.get("status") != "open" or rest.get("loop") != "fifteen":
             continue
-        stored = rest.get("window_id")
-        if stored in (None, "", wid):
+        if rest.get("window_id") == wid:
             return True
     return False
 

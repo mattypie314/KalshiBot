@@ -33,6 +33,7 @@ def test_total_value_from_balance():
     assert total_value_from_balance({"portfolio_value": 4250, "balance": 1800}) == 42.5
     assert total_value_from_balance({"portfolio_value_dollars": "48.00"}) == 48.0
     assert total_value_from_balance({"balance_dollars": "12.00"}) == 12.0
+    assert total_value_from_balance({"balance_dollars": "38.27", "portfolio_value": 546}) == 38.27
 
 
 def test_phone_override_saves_on_tracker(tmp_path):
