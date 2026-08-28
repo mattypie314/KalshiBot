@@ -27,6 +27,14 @@ def test_cash_from_balance_prefers_dollars():
     assert cash_from_balance({"balance": 1800}) == 18.0
 
 
+def test_total_value_from_balance():
+    from kalshibot.campaign.sizing import total_value_from_balance
+
+    assert total_value_from_balance({"portfolio_value": 4250, "balance": 1800}) == 42.5
+    assert total_value_from_balance({"portfolio_value_dollars": "48.00"}) == 48.0
+    assert total_value_from_balance({"balance_dollars": "12.00"}) == 12.0
+
+
 def test_phone_override_saves_on_tracker(tmp_path):
     from kalshibot.campaign.tracker import Tracker
 

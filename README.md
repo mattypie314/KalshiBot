@@ -10,11 +10,19 @@ Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 
 | Loop | Schedule | Universe |
 | --- | --- | --- |
-| 15m | every 3 minutes | BTC/ETH/SOL + gold/silver 15m |
+| 15m edge | first 2–4 minutes of each window (`:02–:04`, `:17–:19`, `:32–:34`, `:47–:49` ET) | BTC/ETH/SOL + gold/silver 15m. Pass/Fail vs mid. One post-only limit. 3–5% of Kalshi `total_value`. |
 | Hourly | every 5 minutes | hourly crypto/commodities ending in the next 75 minutes (no daily `…D` books) |
-| Maker | last 3 min of each 15m (:12–:14, :27–:29, :42–:44, :57–:59) | Rest post-only bids on **74–93¢** confirmed favorites. Edge is the spread (taker is at break-even). |
+| Maker | last 3 min of each 15m (`:12–:14`, `:27–:29`, `:42–:44`, `:57–:59`) | Rest post-only bids on **74–93¢** confirmed favorites. Edge is the spread (taker is at break-even). |
 
-**Small-account rules**
+**15m edge (not a scan-all-day scalp)**
+
+- Look only at the open of the window, or flatten/stay flat after a one-time half-sigma recheck. No new ticket at minute 0 (that is settlement of the window that just closed).
+- Before any order: **Pass or Fail** (model-fair vs live mid). Fail skips. Do not scalp a Fail.
+- Pass → one post-only limit. Yes joins the live Yes bid. No joins the live Yes ask. Never cross, never market, never IOC pay-through.
+- Hard skips: under ~8 minutes left unless the strike is decided; spread wider than the edge; news candle (CPI/FOMC); fair and mid within 4¢; revenge (skip the next 15m window after a losing 15m ticket); three 15m losses in a row this ET day (stop 15m and tell Matt); book not live; 15m already stopped; room below 3% of bankroll.
+- Manage: flatten if down ~$0.50 or ~10% from fill, held-side bid ≥ fill + 2¢, half-sigma says the edge died/flipped, or bid is 99¢. Never rest a sell under the bid. Flat is allowed.
+
+**Small-account rules (hourly / shared book)**
 
 - Risk about 3–5% of bankroll per idea. Cap 5–8%. Never more than 10% on one trade.
 - Fractional Kelly (default 0.33×). On a $35 book that is about $1.50–$2.80 per idea.

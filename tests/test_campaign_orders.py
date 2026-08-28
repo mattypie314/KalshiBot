@@ -208,10 +208,11 @@ def test_revenge_sit_out_after_a_loss(tmp_path):
 
     engine = _engine(tmp_path, 35)
     engine.tracker.state["last_loss_at"] = datetime.now(timezone.utc).isoformat()
+    engine.tracker.save()
     engine.kalshi.series_for_category = AsyncMock(return_value=[])
     engine.kalshi.open_events = AsyncMock(side_effect=AssertionError("revenge must not scan"))
     engine.kalshi.create_order_v2 = AsyncMock(side_effect=AssertionError("revenge must not order"))
-    result = asyncio.run(engine.fire("fifteen"))
+    result = asyncio.run(engine.fire("hourly"))
     asyncio.run(engine.aclose())
     assert any("revenge" in a.lower() for a in result["actions"])
 
@@ -420,4 +421,216 @@ def test_maker_auto_defaults_on(tmp_path):
 
     state = Tracker(tmp_path / "crypto-campaign.json").load()
     assert state["sizing"]["maker_auto"] is True
+
+
+def _fifteen_pick(**kwargs):
+    from kalshibot.assets import asset_by_key
+
+    pick = {
+        "series": "KXBTC15M",
+        "event": {"title": "BTC 15m"},
+        "market": {"ticker": "KXBTC15M-EDGE", "title": "BTC above"},
+        "asset": asset_by_key("BTC"),
+        "spot": 100.0,
+        "strike": 99.5,
+        "spec_kind": "greater",
+        "cap": None,
+        "secs": 12 * 60,
+        "close": None,
+        "hourly_vol": 0.0045,
+        "model_yes": 0.62,
+        "sigma": 0.4,
+        "idea": None,
+        "yes_bid": 0.54,
+        "yes_ask": 0.56,
+        "exchange_index": 2,
+    }
+    pick.update(kwargs)
+    return pick
+
+
+def _look_window():
+    return patch.multiple(
+        "kalshibot.campaign.engine",
+        in_fifteen_entry_window=lambda now=None: True,
+        in_fifteen_settlement=lambda now=None: False,
+        news_blackout=lambda now=None: None,
+    )
+
+
+def test_dry_fifteen_posts_rest_does_not_fake_fill(tmp_path):
+    engine = _engine(tmp_path, 50)
+    engine.tracker.state["kalshi_total_value"] = 50.0
+    engine._load_candidates = AsyncMock(return_value=[{"row": True}])
+    engine._score_market = AsyncMock(return_value=_fifteen_pick())
+    engine.kalshi.create_order_v2 = AsyncMock(side_effect=AssertionError("dry must not order"))
+    actions = asyncio.run(engine._enter_fifteen(news=None))
+    asyncio.run(engine.aclose())
+    assert engine.kalshi.create_order_v2.await_count == 0
+    assert any("DRY post-only yes" in a and "PASS" in a for a in actions)
+    rests = [r for r in engine.tracker.state["rests"] if r.get("status") == "open"]
+    assert len(rests) == 1
+    assert rests[0]["loop"] == "fifteen"
+    assert rests[0]["price"] == 0.54
+    assert all(t.get("status") != "open" for t in engine.tracker.state["tickets"])
+
+
+def test_live_fifteen_yes_joins_bid_never_ioc(tmp_path):
+    engine = _engine(tmp_path, 50)
+    engine.tracker.state["kalshi_total_value"] = 50.0
+    engine._load_candidates = AsyncMock(return_value=[{"row": True}])
+    engine._score_market = AsyncMock(return_value=_fifteen_pick())
+    engine.live = True
+    engine.kalshi.create_order_v2 = AsyncMock(
+        return_value={"order_id": "e1", "fill_count": 0, "average_fill_price": 0}
+    )
+    asyncio.run(engine._enter_fifteen(news=None))
+    asyncio.run(engine.aclose())
+    payload = engine.kalshi.create_order_v2.await_args.args[0]
+    assert payload["post_only"] is True
+    assert payload["time_in_force"] == "good_till_canceled"
+    assert payload["self_trade_prevention_type"] == "maker"
+    assert payload["side"] == "bid"
+    assert payload["price"] == "0.5400"
+    count = float(payload["count"])
+    assert 0.03 * 50 - 1e-6 <= count * 0.54 <= 0.05 * 50 + 1e-6
+
+
+def test_live_fifteen_no_joins_yes_ask(tmp_path):
+    engine = _engine(tmp_path, 50)
+    engine.tracker.state["kalshi_total_value"] = 50.0
+    engine._load_candidates = AsyncMock(return_value=[{"row": True}])
+    engine._score_market = AsyncMock(return_value=_fifteen_pick(model_yes=0.38))
+    engine.live = True
+    engine.kalshi.create_order_v2 = AsyncMock(
+        return_value={"order_id": "e2", "fill_count": 0, "average_fill_price": 0}
+    )
+    asyncio.run(engine._enter_fifteen(news=None))
+    asyncio.run(engine.aclose())
+    payload = engine.kalshi.create_order_v2.await_args.args[0]
+    assert payload["side"] == "ask"
+    assert payload["price"] == "0.5600"
+    assert payload["post_only"] is True
+
+
+def test_fifteen_one_idea_per_window(tmp_path):
+    engine = _engine(tmp_path, 50)
+    engine.tracker.state["kalshi_total_value"] = 50.0
+    engine._load_candidates = AsyncMock(return_value=[{"row": True}, {"row": True}])
+    engine._score_market = AsyncMock(
+        side_effect=[
+            _fifteen_pick(market={"ticker": "KXBTC15M-A", "title": "A"}),
+            _fifteen_pick(market={"ticker": "KXETH15M-B", "title": "B"}, model_yes=0.70),
+        ]
+    )
+    asyncio.run(engine._enter_fifteen(news=None))
+    asyncio.run(engine.aclose())
+    rests = [r for r in engine.tracker.state["rests"] if r.get("status") == "open"]
+    assert len(rests) == 1
+
+
+def test_fire_fifteen_stays_quiet_outside_look_window(tmp_path):
+    engine = _engine(tmp_path, 50)
+    engine._enter_fifteen = AsyncMock(side_effect=AssertionError("must not scan all day"))
+    with patch("kalshibot.campaign.engine.in_fifteen_entry_window", return_value=False):
+        with patch("kalshibot.campaign.engine.in_fifteen_settlement", return_value=False):
+            result = asyncio.run(engine.fire("fifteen"))
+    asyncio.run(engine.aclose())
+    assert engine._enter_fifteen.await_count == 0
+    log = engine.tracker.state["log"]
+    assert log
+    assert log[-1]["tell_matt"] is False
+
+
+def test_fire_fifteen_fail_skip_in_look_window(tmp_path):
+    engine = _engine(tmp_path, 50)
+    engine.tracker.state["kalshi_total_value"] = 50.0
+    engine._load_candidates = AsyncMock(return_value=[{"row": True}])
+    engine._score_market = AsyncMock(return_value=_fifteen_pick(model_yes=0.56))
+    with _look_window():
+        result = asyncio.run(engine.fire("fifteen"))
+    asyncio.run(engine.aclose())
+    assert any(a.startswith("FAIL") for a in result["actions"])
+    assert engine.tracker.state["log"][-1]["tell_matt"] is True
+    assert all(r.get("status") != "open" for r in engine.tracker.state.get("rests", []))
+
+
+def test_fifteen_revenge_skips_look_window(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    engine = _engine(tmp_path, 50)
+    engine.tracker.state["fifteen_revenge_until"] = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
+    engine.tracker.save()
+    engine._enter_fifteen = AsyncMock(side_effect=AssertionError("revenge window"))
+    with _look_window():
+        result = asyncio.run(engine.fire("fifteen"))
+    asyncio.run(engine.aclose())
+    assert engine._enter_fifteen.await_count == 0
+    assert any("revenge" in a.lower() for a in result["actions"])
+
+
+def test_fifteen_loss_does_not_block_hourly_via_last_loss_at(tmp_path):
+    engine = _engine(tmp_path, 50)
+    ticket = {
+        "ticker": "KXBTC15M-X",
+        "side": "yes",
+        "fill": 0.60,
+        "count": 2.0,
+        "loop": "fifteen",
+        "model_yes": 0.70,
+        "status": "open",
+        "paper": True,
+    }
+    asyncio.run(engine._flatten(ticket, 0.40, "down_pct"))
+    asyncio.run(engine.aclose())
+    assert engine.tracker.state.get("last_loss_at") is None
+    assert engine.tracker.state["fifteen_loss_streak"] == 1
+    assert engine.tracker.state["fifteen_revenge_until"]
+
+
+def test_fifteen_three_flatten_losses_stop_session(tmp_path):
+    engine = _engine(tmp_path, 50)
+
+    def lose(i):
+        return asyncio.run(
+            engine._flatten(
+                {
+                    "ticker": f"KXBTC15M-{i}",
+                    "side": "yes",
+                    "fill": 0.60,
+                    "count": 2.0,
+                    "loop": "fifteen",
+                    "model_yes": 0.70,
+                    "status": "open",
+                    "paper": True,
+                },
+                0.40,
+                "down_pct",
+            )
+        )
+
+    lose(1)
+    lose(2)
+    msg = lose(3)
+    asyncio.run(engine.aclose())
+    assert "Three 15m losses" in msg
+    from kalshibot.campaign.fifteen import fifteen_stopped
+
+    assert fifteen_stopped(engine.tracker.state)
+
+
+def test_sync_kalshi_cash_stores_total_value(tmp_path):
+    engine = _engine(tmp_path, 15)
+    engine.live = True
+    engine.kalshi.api_key_id = "x"
+    engine.kalshi._private_key = object()
+    engine.kalshi.get_balance = AsyncMock(
+        return_value={"balance_dollars": "48.25", "portfolio_value": 6125}
+    )
+    msg = asyncio.run(engine._sync_kalshi_cash())
+    asyncio.run(engine.aclose())
+    assert engine.tracker.state["kalshi_cash"] == 48.25
+    assert engine.tracker.state["kalshi_total_value"] == 61.25
+    assert engine._total_value() == 61.25
+    assert "48.25" in (msg or "")
 

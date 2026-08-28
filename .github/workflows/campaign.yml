@@ -3,6 +3,7 @@ name: Kalshi campaign
 on:
   schedule:
     - cron: "*/5 * * * *"
+    - cron: "2,3,4,17,18,19,32,33,34,47,48,49 * * * *"
     - cron: "12,13,14,27,28,29,42,43,44,57,58,59 * * * *"
   workflow_dispatch:
     inputs:

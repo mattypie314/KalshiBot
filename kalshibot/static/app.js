@@ -145,13 +145,14 @@ async function loadCampaign() {
   const idea = data.typical_idea != null ? ` · ~$${Number(data.typical_idea).toFixed(2)}/idea` : "";
   document.getElementById("book-meta").textContent =
     `realized $${Number(data.realized).toFixed(2)} · open $${Number(data.open_cost).toFixed(2)} · book $${Number(data.equity ?? data.bankroll).toFixed(2)}${cash}${cap}${idea}`;
+  const look = data.fifteen_look ? " · 15m look" : data.fifteen_stopped ? " · 15m stopped" : "";
   document.getElementById("maker-mode").textContent =
-    `${data.live ? "LIVE" : "DRY"} · maker ${data.maker_auto === false ? "OFF" : "ON"}`;
+    `${data.live ? "LIVE" : "DRY"} · maker ${data.maker_auto === false ? "OFF" : "ON"}${look}`;
   const pb = data.playbook || {};
   const follow = data.follow_kalshi_cash ? "follows Kalshi cash" : "fixed book";
   if (pb.risk_cap) {
     document.getElementById("playbook-meta").textContent =
-      `${follow} · ${(100 * pb.typical_risk_min).toFixed(0)}–${(100 * pb.typical_risk_max).toFixed(0)}% · cap ${(100 * pb.risk_cap).toFixed(0)}%`;
+      `15m :02–:04 Pass/Fail · maker last 3 min 74–93¢ · ${follow} · ${(100 * pb.typical_risk_min).toFixed(0)}–${(100 * pb.typical_risk_max).toFixed(0)}%`;
   }
   const lines = (data.log || []).map((row) => `${row.ts.slice(11, 19)}  ${row.loop}  ${row.message}`);
   document.getElementById("campaign-log").textContent = lines.join("\n") || "No campaign fires yet.";
