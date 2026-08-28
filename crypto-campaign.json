@@ -1,18 +1,6 @@
 {
-  "pots": {
-    "fifteen": {
-      "bankroll": 5.0,
-      "realized": 0.0,
-      "stopped": false,
-      "stop_reason": null
-    },
-    "hourly": {
-      "bankroll": 10.0,
-      "realized": -0.396,
-      "stopped": false,
-      "stop_reason": null
-    }
-  },
+  "bankroll": 32.0,
+  "realized": -0.396,
   "tickets": [
     {
       "id": "73e01d8a-bb4f-4981-9b48-566f4ee04f1b",
@@ -660,7 +648,32 @@
       "loop": "hourly",
       "message": "LIVE IOC KXETH-26AUG2807-B2487 no no fill",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:34:21.313625+00:00",
+      "loop": "fifteen",
+      "message": "LIVE limit failed KXSILVER15M-26AUG280645-45: Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"invalid_order\",\"message\":\"invalid order\",\"details\":\"post only cross\"}}",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:34:21.313638+00:00",
+      "loop": "fifteen",
+      "message": "LIVE limit failed KXGOLD15M-26AUG280645-45: Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"invalid_order\",\"message\":\"invalid order\",\"details\":\"post only cross\"}}",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:34:21.313643+00:00",
+      "loop": "fifteen",
+      "message": "Filters passed but size/room blocked a ticket. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:34:29.432854+00:00",
+      "loop": "hourly",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
     }
   ],
-  "updated_at": "2026-08-28T10:10:28.066123+00:00"
+  "last_loss_at": null,
+  "updated_at": "2026-08-28T10:34:29.432907+00:00"
 }
