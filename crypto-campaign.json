@@ -288,7 +288,7 @@
       "side": "yes",
       "price": 0.32,
       "count": 8.19,
-      "status": "open",
+      "status": "canceled",
       "order_id": "01a047fb-5200-7bea-ae7e-ebf3bb5a6180",
       "kind": "limit_join",
       "model_prob": 0.99,
@@ -301,7 +301,8 @@
       "asset_key": "GOLD",
       "close_at": "2026-08-28T11:00:00+00:00",
       "hourly_vol": 0.0020058808570207203,
-      "paper": false
+      "paper": false,
+      "exit_reason": "expired"
     },
     {
       "id": "65a18fff-5d52-4851-90ec-ef041fddc006",
@@ -310,7 +311,7 @@
       "side": "no",
       "price": 0.86,
       "count": 9.43,
-      "status": "open",
+      "status": "canceled",
       "order_id": "01a047fb-7528-7b8d-96ed-6ca7c0744de1",
       "kind": "limit_join",
       "model_prob": 0.2451849593446782,
@@ -323,7 +324,8 @@
       "asset_key": "XRP",
       "close_at": "2026-08-28T11:00:00+00:00",
       "hourly_vol": 0.005059310829582647,
-      "paper": false
+      "paper": false,
+      "exit_reason": "expired"
     }
   ],
   "log": [
@@ -1124,11 +1126,65 @@
       "loop": "fifteen",
       "message": "LIVE cancel failed KXXRP-26AUG2807-B1.4099500: Client error '404 Not Found' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders/01a047fb-7528-7b8d-96ed-6ca7c0744de1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404 Kalshi said: {\"error\":{\"code\":\"not_found\",\"message\":\"not found\"}}",
       "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T12:59:24.420418+00:00",
+      "loop": "sizing",
+      "message": "Follow Kalshi cash: yes.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T12:59:24.420439+00:00",
+      "loop": "sizing",
+      "message": "Maker auto is ON. It will rest 74\u201393\u00a2 bids every 15-minute window until you set this to no.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T12:59:25.144127+00:00",
+      "loop": "fifteen",
+      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T12:59:25.144139+00:00",
+      "loop": "fifteen",
+      "message": "LIVE cancel rest KXGOLD15M-26AUG280700-00 (expired)",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T12:59:25.144163+00:00",
+      "loop": "fifteen",
+      "message": "LIVE cancel rest KXXRP-26AUG2807-B1.4099500 (expired)",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T12:59:34.240798+00:00",
+      "loop": "hourly",
+      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T12:59:34.240806+00:00",
+      "loop": "hourly",
+      "message": "Nothing in range. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T12:59:44.504221+00:00",
+      "loop": "maker",
+      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T12:59:44.504240+00:00",
+      "loop": "maker",
+      "message": "No 74\u201393\u00a2 favorite in the last 3 minutes. Sitting out is a valid trade.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
   "kalshi_cash": 38.2661,
-  "kalshi_total_value": 5.46,
+  "kalshi_total_value": 38.2661,
   "fifteen_loss_streak": 0,
   "fifteen_session_date": null,
   "fifteen_stopped_until": null,
@@ -1139,5 +1195,5 @@
     "maker_auto": true,
     "risk_percent": 8.0
   },
-  "updated_at": "2026-08-28T12:32:13.164874+00:00"
+  "updated_at": "2026-08-28T12:59:44.504302+00:00"
 }
