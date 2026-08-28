@@ -6,11 +6,11 @@ Matt's Kalshi campaign loops (from GrokBot) plus a research desk for **Crypto**,
 
 Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 
-| Loop | Schedule | Universe | Pot |
-| --- | --- | --- | --- |
-| 15m | every 3 minutes | BTC/ETH/SOL (shard 2) + gold/silver 15m (shard 0) | $5, stop -$0.50, skip new if room < $0.50 |
-| Hourly | every 5 minutes | hourly crypto/commodities ending in the next 75 minutes (no daily `…D` books) | $10, stop -$0.50, skip new if room < $1 |
-| Maker | minutes 12–14, 27–29, 42–44, 57–59 | 15m books; hourlies at :57–:59 | same two pots, never share room |
+| Loop | Schedule | Universe |
+| --- | --- | --- |
+| 15m | every 3 minutes | BTC/ETH/SOL + gold/silver 15m |
+| Hourly | every 5 minutes | hourly crypto/commodities ending in the next 75 minutes (no daily `…D` books) |
+| Maker | minutes 12–14, 27–29, 42–44, 57–59 | 15m books; hourlies at :57–:59 |
 
 Shared ticket rules (all three loops):
 
@@ -44,7 +44,7 @@ pip install -r requirements.txt
 python -m kalshibot serve
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Campaign pots sit above the Crypto / Commodities / Sports Bets tabs.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The campaign book sits above the Crypto / Commodities / Sports Bets tabs.
 
 ```bash
 python -m kalshibot scan --section crypto
@@ -63,4 +63,4 @@ It stays in practice mode (DRY) until you add Kalshi secrets under **Settings �
 
 After secrets are on, tap **Run workflow** on the latest `main` — do not re-run an old red job. Practice tickets from DRY runs are not real Kalshi fills; the bot now drops those before placing live orders.
 
-The $5 / $10 pots are saved on a `campaign-state` branch so they survive between runs. If the $5 pot is stopped, tap **Run workflow**, turn on **reset_fifteen**, and run.
+The campaign book is saved on a `campaign-state` branch so it survives between runs. There are no $5 / $10 pots and no stopped buckets — 15m, hourly, and maker share one book.

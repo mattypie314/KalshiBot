@@ -23,7 +23,7 @@ def main() -> None:
 
     campaign = sub.add_parser("campaign", help="Run Matt's 15m / hourly / maker loops")
     camp_sub = campaign.add_subparsers(dest="campaign_cmd", required=True)
-    camp_sub.add_parser("status", help="Show pots, tickets, and recent log")
+    camp_sub.add_parser("status", help="Show campaign book, tickets, and recent log")
     fire = camp_sub.add_parser("fire", help="Run one loop once (dry-run unless KALSHI_LIVE=1)")
     fire.add_argument("loop", choices=["fifteen", "hourly", "maker"])
     camp_sub.add_parser("run", help="Scheduler: 15m every 3 min, hourly every 5 min, maker last 3 min")

@@ -139,14 +139,9 @@ async function loadCampaign() {
   const response = await fetch("/api/campaign");
   if (!response.ok) return;
   const data = await response.json();
-  const fifteen = data.pots.fifteen;
-  const hourly = data.pots.hourly;
-  document.getElementById("fifteen-room").textContent = `room $${Number(fifteen.room).toFixed(2)}`;
-  document.getElementById("hourly-room").textContent = `room $${Number(hourly.room).toFixed(2)}`;
-  document.getElementById("fifteen-meta").textContent =
-    `${fifteen.stopped ? "STOPPED · " : ""}realized $${Number(fifteen.realized).toFixed(2)} · open $${Number(fifteen.open_cost).toFixed(2)}`;
-  document.getElementById("hourly-meta").textContent =
-    `${hourly.stopped ? "STOPPED · " : ""}realized $${Number(hourly.realized).toFixed(2)} · open $${Number(hourly.open_cost).toFixed(2)}`;
+  document.getElementById("book-room").textContent = `room $${Number(data.room).toFixed(2)}`;
+  document.getElementById("book-meta").textContent =
+    `realized $${Number(data.realized).toFixed(2)} · open $${Number(data.open_cost).toFixed(2)} · bankroll $${Number(data.bankroll).toFixed(2)}`;
   document.getElementById("maker-mode").textContent = data.live ? "LIVE" : "DRY";
   const lines = (data.log || []).map((row) => `${row.ts.slice(11, 19)}  ${row.loop}  ${row.message}`);
   document.getElementById("campaign-log").textContent = lines.join("\n") || "No campaign fires yet.";

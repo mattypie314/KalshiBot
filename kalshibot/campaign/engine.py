@@ -9,8 +9,6 @@ import httpx
 
 from kalshibot.assets import identify_asset
 from kalshibot.campaign.rules import (
-    POT_FIFTEEN,
-    POT_HOURLY,
     already_there,
     classify_favorite,
     contracts_for_budget,
@@ -52,7 +50,7 @@ class CampaignEngine:
             private_key_path=self.cfg.kalshi_private_key_path,
         )
         self.spots = SpotService(self._http)
-        self.tracker = Tracker(self.cfg.tracker_path, self.cfg.fifteen_bankroll, self.cfg.hourly_bankroll)
+        self.tracker = Tracker(self.cfg.tracker_path, self.cfg.campaign_bankroll)
         self.live = bool(self.cfg.kalshi_live and self.kalshi.can_trade)
 
     async def aclose(self) -> None:
@@ -63,25 +61,26 @@ class CampaignEngine:
         self.tracker.load()
         state = self.tracker.snapshot()
         tickets = [t for t in state["tickets"] if t.get("status") == "open"]
-        pots = {}
-        for name in (POT_FIFTEEN, POT_HOURLY):
-            pot = state["pots"][name]
-            cost = open_cost(state["tickets"], name)
-            pots[name] = {
-                **pot,
-                "open_cost": round(cost, 4),
-                "room": round(room(float(pot["bankroll"]), float(pot["realized"]), cost), 4),
-            }
+        cost = open_cost(state["tickets"])
+        bankroll = float(state["bankroll"])
+        realized = float(state["realized"])
         return {
             "live": self.live,
             "can_trade": self.kalshi.can_trade,
             "tracker_path": str(self.tracker.path),
-            "pots": pots,
+            "bankroll": bankroll,
+            "realized": round(realized, 4),
+            "open_cost": round(cost, 4),
+            "room": round(room(bankroll, realized, cost), 4),
             "open_tickets": tickets,
             "rests": [r for r in state.get("rests", []) if r.get("status") == "open"],
             "log": list(reversed(state.get("log", [])[-20:])),
             "updated_at": state.get("updated_at"),
         }
+
+    def _room(self) -> float:
+        state = self.tracker.state
+        return room(float(state["bankroll"]), float(state["realized"]), open_cost(state["tickets"]))
 
     async def fire(self, loop: str) -> dict[str, Any]:
         self.tracker.load()
@@ -95,26 +94,15 @@ class CampaignEngine:
             if self.live:
                 actions.extend(self._drop_practice_tickets())
 
-            pots_to_manage = [POT_FIFTEEN, POT_HOURLY] if loop == "maker" else [loop if loop != "fifteen" else POT_FIFTEEN]
-            if loop == "fifteen":
-                pots_to_manage = [POT_FIFTEEN]
-            elif loop == "hourly":
-                pots_to_manage = [POT_HOURLY]
-
             quotes = await self._quotes_for_open_tickets()
-            for pot in pots_to_manage:
-                actions.extend(await self._manage_open(pot, quotes, loop))
-
-            for pot in pots_to_manage:
-                actions.extend(self._maybe_stop_pot(pot, loop))
+            actions.extend(await self._manage_open(quotes, loop))
 
             if loop == "fifteen":
-                actions.extend(await self._enter_taker(POT_FIFTEEN, FIFTEEN_SERIES, loop, skip_last=self.cfg.skip_last_seconds))
+                actions.extend(await self._enter_taker(FIFTEEN_SERIES, loop, skip_last=self.cfg.skip_last_seconds))
             elif loop == "hourly":
                 series = await self._hourly_series()
                 actions.extend(
                     await self._enter_taker(
-                        POT_HOURLY,
                         series,
                         loop,
                         skip_last=self.cfg.skip_last_seconds,
@@ -162,15 +150,6 @@ class CampaignEngine:
         self.tracker.save()
         return {"loop": loop, "live": self.live, "actions": actions, "status": self.status()}
 
-    def _maybe_stop_pot(self, pot: str, loop: str) -> list[str]:
-        state = self.tracker.state["pots"][pot]
-        realized = float(state["realized"])
-        if realized <= self.cfg.pot_stop and not state["stopped"]:
-            state["stopped"] = True
-            state["stop_reason"] = f"realized {realized:.2f} hit stop {self.cfg.pot_stop:.2f}"
-            return [f"Tell Matt: {pot} pot stopped ({state['stop_reason']})."]
-        return []
-
     async def _quotes_for_open_tickets(self) -> dict[str, dict[str, float]]:
         quotes: dict[str, dict[str, float]] = {}
         tickers = {t["ticker"] for t in self.tracker.state["tickets"] if t.get("status") == "open"}
@@ -182,10 +161,10 @@ class CampaignEngine:
             quotes[ticker] = {"yes_bid": bid, "yes_ask": ask}
         return quotes
 
-    async def _manage_open(self, pot: str, quotes: dict[str, dict[str, float]], loop: str) -> list[str]:
+    async def _manage_open(self, quotes: dict[str, dict[str, float]], loop: str) -> list[str]:
         actions: list[str] = []
         for ticket in list(self.tracker.state["tickets"]):
-            if ticket.get("status") != "open" or ticket.get("pot") != pot:
+            if ticket.get("status") != "open":
                 continue
             q = quotes.get(ticket["ticker"])
             if not q:
@@ -240,10 +219,7 @@ class CampaignEngine:
         ticket["exit_reason"] = reason
         ticket["exit_price"] = avg
         ticket["realized"] = round(pnl, 4)
-        pot = ticket["pot"]
-        self.tracker.state["pots"][pot]["realized"] = round(
-            float(self.tracker.state["pots"][pot]["realized"]) + pnl, 4
-        )
+        self.tracker.state["realized"] = round(float(self.tracker.state["realized"]) + pnl, 4)
         mode = "LIVE" if self.live else "DRY"
         return f"{mode} flatten {ticket['ticker']} {ticket['side']} {reason} pnl {pnl:+.2f}"
 
@@ -319,21 +295,16 @@ class CampaignEngine:
 
     async def _enter_taker(
         self,
-        pot: str,
         series_tickers: list[str],
         loop: str,
         skip_last: float,
         max_secs: float | None = None,
     ) -> list[str]:
         actions: list[str] = []
-        pot_state = self.tracker.state["pots"][pot]
-        if pot_state.get("stopped"):
-            return actions
-        cost = open_cost(self.tracker.state["tickets"], pot)
-        available = room(float(pot_state["bankroll"]), float(pot_state["realized"]), cost)
-        min_room = 0.50 if pot == POT_FIFTEEN else 1.0
+        available = self._room()
+        min_room = 0.50
         if available < min_room:
-            return [f"{pot} room ${available:.2f} < ${min_room:.2f}; skip new {pot}."]
+            return [f"room ${available:.2f} < ${min_room:.2f}; skip new {loop}."]
 
         scored: list[dict[str, Any]] = []
         for row in await self._load_candidates(list(series_tickers)):
@@ -355,16 +326,11 @@ class CampaignEngine:
         for pick in scored:
             if placed >= 3:
                 break
-            pot_state = self.tracker.state["pots"][pot]
-            available = room(
-                float(pot_state["bankroll"]),
-                float(pot_state["realized"]),
-                open_cost(self.tracker.state["tickets"], pot),
-            )
+            available = self._room()
             if available < min_room:
                 break
             fav = pick["favorite"]
-            budget = min(size_for_conviction(pot, fav.conviction), available)
+            budget = min(size_for_conviction(loop, fav.conviction), available)
             if budget < 0.50:
                 continue
             if already_there(fav) or not in_pay_band(fav):
@@ -398,7 +364,7 @@ class CampaignEngine:
                 continue
             ticket = {
                 "id": str(uuid.uuid4()),
-                "pot": pot,
+                "loop": loop,
                 "ticker": ticker,
                 "side": fav.side,
                 "fill": avg,
@@ -478,15 +444,8 @@ class CampaignEngine:
         for item in scored[:4]:
             fav = item["favorite"]
             ticker = item["market"]["ticker"]
-            # 15m series use fifteen pot; hourly tickers use hourly pot
-            pot = POT_HOURLY if item["series"] not in FIFTEEN_SERIES else POT_FIFTEEN
-            pot_state = self.tracker.state["pots"][pot]
-            if pot_state.get("stopped"):
-                continue
-            cost = open_cost(self.tracker.state["tickets"], pot)
-            available = room(float(pot_state["bankroll"]), float(pot_state["realized"]), cost)
-            min_room = 0.50 if pot == POT_FIFTEEN else 1.0
-            if available < min_room:
+            available = self._room()
+            if available < 0.50:
                 continue
             budget = min(maker_size(fav.conviction), available)
             count = contracts_for_budget(budget, fav.join_price)
@@ -508,7 +467,7 @@ class CampaignEngine:
                 order_id = resp.get("order_id")
             rest = {
                 "id": str(uuid.uuid4()),
-                "pot": pot,
+                "loop": "maker",
                 "ticker": ticker,
                 "side": fav.side,
                 "price": fav.join_price,
