@@ -32,13 +32,14 @@ def test_phone_override_saves_on_tracker(tmp_path):
 
     path = tmp_path / "crypto-campaign.json"
     tracker = Tracker(path, 15.0)
-    notes = apply_phone_overrides(tracker, bankroll="35", follow="yes", risk_percent="5")
+    notes = apply_phone_overrides(tracker, bankroll="35", follow="yes", risk_percent="5", maker_auto="no")
     state = tracker.load()
     assert state["bankroll"] == 35.0
     assert state["sizing"]["follow_kalshi_cash"] is True
     assert state["sizing"]["bankroll_cap"] == 35.0
     assert state["sizing"]["risk_percent"] == 5.0
-    assert any("35" in n for n in notes)
+    assert state["sizing"]["maker_auto"] is False
+    assert any("OFF" in n for n in notes)
 
 
 def test_playbook_risk_percent_becomes_the_cap():

@@ -6,7 +6,6 @@ import logging
 import os
 
 from kalshibot.campaign.engine import CampaignEngine
-from kalshibot.campaign.rules import in_maker_window
 from kalshibot.campaign.sizing import apply_phone_overrides, playbook_from_sizing
 
 
@@ -18,6 +17,7 @@ async def main() -> None:
         engine.tracker,
         bankroll=os.environ.get("BANKROLL"),
         follow=os.environ.get("FOLLOW_KALSHI"),
+        maker_auto=os.environ.get("MAKER_AUTO"),
         risk_percent=os.environ.get("RISK_PERCENT"),
         risk_cap_percent=os.environ.get("RISK_CAP_PERCENT"),
     )
@@ -36,8 +36,7 @@ async def main() -> None:
         results = []
         results.append(await engine.fire("fifteen"))
         results.append(await engine.fire("hourly"))
-        if in_maker_window():
-            results.append(await engine.fire("maker"))
+        results.append(await engine.fire("maker"))
         print(json.dumps({"results": results, "status": engine.status()}, indent=2, default=str))
     finally:
         await engine.aclose()

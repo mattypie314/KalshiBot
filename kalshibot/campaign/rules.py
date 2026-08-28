@@ -8,6 +8,8 @@ ET = ZoneInfo("America/New_York")
 LEGACY_FLATTEN_CUTOFF = datetime(2026, 8, 27, 3, 0, tzinfo=ET)
 
 MAKER_MINUTES = {12, 13, 14, 27, 28, 29, 42, 43, 44, 57, 58, 59}
+# Extra minutes so a late GitHub job still catches the 15-minute window.
+MAKER_SCAN_MINUTES = MAKER_MINUTES | {11, 15, 26, 30, 41, 45, 56, 0}
 
 
 @dataclass(frozen=True)
@@ -207,7 +209,7 @@ def maker_spread_ok(
 def in_maker_window(now: datetime | None = None) -> bool:
     now = now or datetime.now(ET)
     local = now.astimezone(ET)
-    return local.minute in MAKER_MINUTES
+    return local.minute in MAKER_SCAN_MINUTES
 
 
 def hourly_scan_window(now: datetime | None = None) -> bool:

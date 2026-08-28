@@ -27,7 +27,9 @@ Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 
 **Last-3-minute maker (spread capture)**
 
-This is a separate routine from the 4–6% playbook. In the final 3 minutes, a confirmed favorite often sits at **taker break-even**. Taking the ask has no edge after fees. Resting a bid at 74–93¢ earns the spread (cents per fill, many fills). Never IOC. Size is still small-account (about 3% cap). GitHub also fires on those minutes, not only every 5 minutes.
+This is a separate routine from the 4–6% playbook. In the final 3 minutes, a confirmed favorite often sits at **taker break-even**. Taking the ask has no edge after fees. Resting a bid at 74–93¢ earns the spread (cents per fill, many fills). Never IOC. Size is still small-account (about 3% cap).
+
+After this is merged it **runs every 15-minute window by itself** (GitHub schedule). To stop it: **Actions → Kalshi campaign → Run workflow** and set `maker_auto` to **no**. To start again, set `maker_auto` to **yes**. Leave `keep` if you are only changing bankroll.
 
 **Raising the book as it grows**
 
@@ -39,7 +41,7 @@ On your iPhone: **Actions → Kalshi campaign → Run workflow**
 | --- | --- | --- |
 | `bankroll` | Max dollars the bot may use, like `50` | Follows Kalshi cash (grows when you deposit) |
 | `follow_kalshi_cash` | `yes` or `no` | `keep` |
-| `risk_percent` | Max percent per idea, like `5` for 5% | Current 3–5% Kelly, 8% cap |
+| `maker_auto` | `yes` to run every 15-minute window, `no` to stop | `keep` |
 
 Usual path: deposit on Kalshi, leave the fields blank. Next run sizes off your live cash. Type a `bankroll` only if you want a cap so the bot does not use the whole Kalshi account.
 
@@ -92,7 +94,7 @@ GitHub runs the campaign every 5 minutes after this pull request is merged.
 
 1. Merge this pull request.
 2. Open the repo **Actions** tab. If GitHub asks to enable workflows, tap Enable.
-3. Open **Kalshi campaign → Run workflow** on the latest `main`. Leave `bankroll` blank to follow Kalshi cash. Type a number only when you want a dollar cap. Do not re-run an old red job.
+3. Open **Kalshi campaign → Run workflow** on the latest `main`. Maker auto is already on. Set `maker_auto` to **no** when you want it to stop. Do not re-run an old red job.
 
 It stays in practice mode (DRY) until Kalshi secrets are under **Settings → Secrets and variables → Actions**: `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY` (the full .pem text), and `KALSHI_LIVE` set to `1`.
 

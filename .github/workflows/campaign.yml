@@ -31,6 +31,14 @@ on:
         description: "Max percent of the book per idea (example: 5). Blank = keep 3–5% Kelly / 8% cap."
         type: string
         default: ""
+      maker_auto:
+        description: "Rest 74–93¢ maker bids every 15-minute window until you turn this off."
+        type: choice
+        options:
+          - keep
+          - "yes"
+          - "no"
+        default: keep
 
 permissions:
   contents: write
@@ -78,6 +86,7 @@ jobs:
           LOOP: ${{ github.event.inputs.loop || 'auto' }}
           BANKROLL: ${{ github.event.inputs.bankroll || '' }}
           FOLLOW_KALSHI: ${{ github.event.inputs.follow_kalshi_cash || 'keep' }}
+          MAKER_AUTO: ${{ github.event.inputs.maker_auto || 'keep' }}
           RISK_PERCENT: ${{ github.event.inputs.risk_percent || '' }}
           KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
           KALSHI_LIVE: ${{ secrets.KALSHI_LIVE || 'false' }}

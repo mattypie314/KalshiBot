@@ -145,7 +145,8 @@ async function loadCampaign() {
   const idea = data.typical_idea != null ? ` · ~$${Number(data.typical_idea).toFixed(2)}/idea` : "";
   document.getElementById("book-meta").textContent =
     `realized $${Number(data.realized).toFixed(2)} · open $${Number(data.open_cost).toFixed(2)} · book $${Number(data.equity ?? data.bankroll).toFixed(2)}${cash}${cap}${idea}`;
-  document.getElementById("maker-mode").textContent = data.live ? "LIVE" : "DRY";
+  document.getElementById("maker-mode").textContent =
+    `${data.live ? "LIVE" : "DRY"} · maker ${data.maker_auto === false ? "OFF" : "ON"}`;
   const pb = data.playbook || {};
   const follow = data.follow_kalshi_cash ? "follows Kalshi cash" : "fixed book";
   if (pb.risk_cap) {
