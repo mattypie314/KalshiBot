@@ -143,6 +143,11 @@ async function loadCampaign() {
   document.getElementById("book-meta").textContent =
     `realized $${Number(data.realized).toFixed(2)} · open $${Number(data.open_cost).toFixed(2)} · bankroll $${Number(data.bankroll).toFixed(2)}`;
   document.getElementById("maker-mode").textContent = data.live ? "LIVE" : "DRY";
+  const pb = data.playbook || {};
+  if (pb.risk_cap) {
+    document.getElementById("playbook-meta").textContent =
+      `Post-only · ${(100 * pb.typical_risk_min).toFixed(0)}–${(100 * pb.typical_risk_max).toFixed(0)}% risk · cap ${(100 * pb.risk_cap).toFixed(0)}% · Kelly ${pb.kelly_fraction}×`;
+  }
   const lines = (data.log || []).map((row) => `${row.ts.slice(11, 19)}  ${row.loop}  ${row.message}`);
   document.getElementById("campaign-log").textContent = lines.join("\n") || "No campaign fires yet.";
 }

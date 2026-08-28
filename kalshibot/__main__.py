@@ -9,7 +9,7 @@ from kalshibot.assets import SECTION_LABELS, SECTIONS
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="KalshiBot — GrokBot campaign loops + prediction desk")
+    parser = argparse.ArgumentParser(description="KalshiBot — small-account campaign + prediction desk")
     sub = parser.add_subparsers(dest="command", required=True)
 
     serve = sub.add_parser("serve", help="Run the dashboard")

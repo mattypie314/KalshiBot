@@ -18,9 +18,28 @@ class Settings(BaseSettings):
     kalshi_live: bool = False
     tracker_path: str = "~/.kalshi/crypto-campaign.json"
     campaign_bankroll: float = 15.0
-    skip_last_seconds: float = 60.0
+    skip_last_seconds: float = 180.0
     hourly_max_seconds: float = 75 * 60
-    maker_skip_last_seconds: float = 15.0
+    maker_skip_last_seconds: float = 180.0
+    # Small-account playbook. Raise campaign_bankroll as the book grows;
+    # leave the percents unless you want a more aggressive book.
+    kelly_fraction: float = 0.33
+    typical_risk_min: float = 0.03
+    typical_risk_max: float = 0.05
+    risk_cap: float = 0.08
+    risk_hard_max: float = 0.10
+    small_bankroll: float = 20.0
+    small_bankroll_risk: float = 0.03
+    min_net_edge: float = 0.04
+    target_net_edge: float = 0.06
+    model_buffer: float = 0.025
+    max_open_ideas: int = 2
+    max_new_ideas_per_fire: int = 1
+    min_time_seconds: float = 180.0
+    min_stake: float = 0.25
+    thin_spread: float = 0.03
+    edge_decay_floor: float = 0.02
+    revenge_seconds: float = 15 * 60
 
 
 settings = Settings()

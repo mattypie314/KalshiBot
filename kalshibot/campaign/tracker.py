@@ -13,6 +13,7 @@ def _default_state(bankroll: float) -> dict[str, Any]:
         "tickets": [],
         "rests": [],
         "log": [],
+        "last_loss_at": None,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -63,6 +64,7 @@ class Tracker:
         self.state.setdefault("log", [])
         self.state.setdefault("bankroll", self.bankroll)
         self.state.setdefault("realized", 0.0)
+        self.state.setdefault("last_loss_at", None)
         self.state.pop("pots", None)
         return self.state
 
@@ -88,3 +90,7 @@ class Tracker:
 
     def snapshot(self) -> dict[str, Any]:
         return json.loads(json.dumps(self.state))
+
+    def set_bankroll(self, bankroll: float) -> None:
+        """Raise or lower the book size without touching realized P&L."""
+        self.state["bankroll"] = float(bankroll)

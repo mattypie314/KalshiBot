@@ -56,6 +56,13 @@ COMMODITY_ASSETS: tuple[Asset, ...] = (
 )
 
 _ALL_ASSETS = CRYPTO_ASSETS + COMMODITY_ASSETS
+ASSETS_BY_KEY = {asset.key: asset for asset in _ALL_ASSETS}
+
+
+def asset_by_key(key: str | None) -> Asset | None:
+    if not key:
+        return None
+    return ASSETS_BY_KEY.get(str(key).upper())
 
 
 def identify_asset(series_ticker: str, title: str, subtitle: str = "") -> Asset | None:

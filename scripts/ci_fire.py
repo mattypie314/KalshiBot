@@ -13,6 +13,12 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     requested = os.environ.get("LOOP", "auto").strip().lower() or "auto"
     engine = CampaignEngine()
+    raw_bankroll = os.environ.get("BANKROLL", "").strip()
+    if raw_bankroll:
+        engine.tracker.load()
+        engine.tracker.set_bankroll(float(raw_bankroll.replace("$", "").replace(",", "")))
+        engine.tracker.save()
+        print(f"Campaign bankroll set to ${float(raw_bankroll):.2f}")
     mode = "LIVE MONEY" if engine.live else "PRACTICE (no real Kalshi orders)"
     print(f"KalshiBot campaign: {mode} · loop={requested} · can_trade={engine.kalshi.can_trade}")
     try:
