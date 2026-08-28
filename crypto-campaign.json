@@ -8,7 +8,7 @@
     },
     "hourly": {
       "bankroll": 10.0,
-      "realized": -0.199,
+      "realized": -0.297,
       "stopped": false,
       "stop_reason": null
     }
@@ -113,11 +113,14 @@
       "count": 5.0,
       "cost": 5.0,
       "filled_at": "2026-08-28T05:55:45.591199+00:00",
-      "status": "open",
+      "status": "flat",
       "exchange_index": 2,
       "order_id": null,
       "conviction": "fat",
-      "paper": true
+      "paper": true,
+      "exit_reason": "bid_99",
+      "exit_price": 0.99,
+      "realized": -0.05
     },
     {
       "id": "37812680-2c44-4cf6-9df9-c2b45a73eb61",
@@ -128,6 +131,39 @@
       "count": 4.8,
       "cost": 4.8,
       "filled_at": "2026-08-28T05:55:45.591253+00:00",
+      "status": "flat",
+      "exchange_index": 2,
+      "order_id": null,
+      "conviction": "fat",
+      "paper": true,
+      "exit_reason": "bid_99",
+      "exit_price": 0.99,
+      "realized": -0.048
+    },
+    {
+      "id": "1cebbc32-c16e-4ecc-8910-ae3a11cdd558",
+      "pot": "hourly",
+      "ticker": "KXBNBD-26AUG2803-T519.99",
+      "side": "yes",
+      "fill": 1.0,
+      "count": 5.0,
+      "cost": 5.0,
+      "filled_at": "2026-08-28T06:05:52.775229+00:00",
+      "status": "open",
+      "exchange_index": 2,
+      "order_id": null,
+      "conviction": "fat",
+      "paper": true
+    },
+    {
+      "id": "4295b884-faa9-4d50-90e4-303765b99274",
+      "pot": "hourly",
+      "ticker": "KXBNBD-26AUG2803-T524.99",
+      "side": "yes",
+      "fill": 1.0,
+      "count": 4.7,
+      "cost": 4.7,
+      "filled_at": "2026-08-28T06:05:52.775270+00:00",
       "status": "open",
       "exchange_index": 2,
       "order_id": null,
@@ -188,6 +224,22 @@
       "id": "cd67f019-2646-4fa3-9bf6-4170b902af2b",
       "ticket_id": "37812680-2c44-4cf6-9df9-c2b45a73eb61",
       "ticker": "KXDOGED-26AUG2802-T0.0099999",
+      "price": 0.99,
+      "status": "open",
+      "order_id": null
+    },
+    {
+      "id": "cf7d7bb3-661b-43d1-95c5-ca66b005fd74",
+      "ticket_id": "1cebbc32-c16e-4ecc-8910-ae3a11cdd558",
+      "ticker": "KXBNBD-26AUG2803-T519.99",
+      "price": 0.99,
+      "status": "open",
+      "order_id": null
+    },
+    {
+      "id": "3eb18484-3bca-4bcf-a5f8-4b334f2e6ada",
+      "ticket_id": "4295b884-faa9-4d50-90e4-303765b99274",
+      "ticker": "KXBNBD-26AUG2803-T524.99",
       "price": 0.99,
       "status": "open",
       "order_id": null
@@ -319,7 +371,49 @@
       "loop": "hourly",
       "message": "DRY rest 99\u00a2 post-only on KXDOGED-26AUG2802-T0.0099999 (never rest under the bid)",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T06:05:43.735926+00:00",
+      "loop": "fifteen",
+      "message": "Nothing new.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T06:05:52.777814+00:00",
+      "loop": "hourly",
+      "message": "DRY flatten KXDOGED-26AUG2802-T0.0049999 yes bid_99 pnl -0.05",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T06:05:52.777828+00:00",
+      "loop": "hourly",
+      "message": "DRY flatten KXDOGED-26AUG2802-T0.0099999 yes bid_99 pnl -0.05",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T06:05:52.777831+00:00",
+      "loop": "hourly",
+      "message": "DRY IOC fat yes KXBNBD-26AUG2803-T519.99 5.00@ 1.00 \u00b7 spot 712.7050 vs target 520.0000; book yes 0.99/1.00",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T06:05:52.777833+00:00",
+      "loop": "hourly",
+      "message": "DRY rest 99\u00a2 post-only on KXBNBD-26AUG2803-T519.99 (never rest under the bid)",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T06:05:52.777835+00:00",
+      "loop": "hourly",
+      "message": "DRY IOC fat yes KXBNBD-26AUG2803-T524.99 4.70@ 1.00 \u00b7 spot 712.7050 vs target 525.0000; book yes 0.99/1.00",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T06:05:52.777837+00:00",
+      "loop": "hourly",
+      "message": "DRY rest 99\u00a2 post-only on KXBNBD-26AUG2803-T524.99 (never rest under the bid)",
+      "tell_matt": true
     }
   ],
-  "updated_at": "2026-08-28T05:55:45.593624+00:00"
+  "updated_at": "2026-08-28T06:05:52.777883+00:00"
 }
