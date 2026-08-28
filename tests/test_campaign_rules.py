@@ -61,6 +61,23 @@ def test_maker_band():
     fat = classify_favorite(spot=100, strike=90, yes_bid=0.96, yes_ask=0.97, model_yes=0.99)
     assert fat is not None and fat.conviction == "fat"
     assert not maker_join_ok(fat)
+    no_fav = classify_favorite(spot=99, strike=100, yes_bid=0.18, yes_ask=0.20, model_yes=0.17)
+    assert no_fav is not None and no_fav.side == "no"
+    assert maker_join_ok(no_fav)
+
+
+def test_maker_spread_is_taker_breakeven_not_a_model_misprice():
+    from kalshibot.campaign.rules import maker_spread_ok, taker_net_edge
+
+    fair = classify_favorite(spot=100, strike=99.8, yes_bid=0.80, yes_ask=0.82, model_yes=0.83)
+    assert fair is not None
+    assert abs(taker_net_edge(fair)) < 0.02
+    assert maker_spread_ok(fair, 0.80, 0.82)
+    stale = classify_favorite(spot=99, strike=100, yes_bid=0.80, yes_ask=0.82, model_yes=0.40)
+    assert stale is None  # book disagrees with spot
+    rich = classify_favorite(spot=100, strike=99, yes_bid=0.80, yes_ask=0.82, model_yes=0.70)
+    assert rich is not None
+    assert not maker_spread_ok(rich, 0.80, 0.82)
 
 
 def test_flatten_take_profit_and_stops():
