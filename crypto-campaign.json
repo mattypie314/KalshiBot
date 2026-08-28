@@ -1106,15 +1106,38 @@
       "loop": "maker",
       "message": "Maker window closed; stay quiet.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T12:32:13.164828+00:00",
+      "loop": "fifteen",
+      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T12:32:13.164835+00:00",
+      "loop": "fifteen",
+      "message": "LIVE cancel failed KXGOLD15M-26AUG280700-00: Client error '404 Not Found' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders/01a047fb-5200-7bea-ae7e-ebf3bb5a6180'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404 Kalshi said: {\"error\":{\"code\":\"not_found\",\"message\":\"not found\"}}",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T12:32:13.164838+00:00",
+      "loop": "fifteen",
+      "message": "LIVE cancel failed KXXRP-26AUG2807-B1.4099500: Client error '404 Not Found' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders/01a047fb-7528-7b8d-96ed-6ca7c0744de1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404 Kalshi said: {\"error\":{\"code\":\"not_found\",\"message\":\"not found\"}}",
+      "tell_matt": false
     }
   ],
   "last_loss_at": null,
   "kalshi_cash": 38.2661,
+  "kalshi_total_value": 5.46,
+  "fifteen_loss_streak": 0,
+  "fifteen_session_date": null,
+  "fifteen_stopped_until": null,
+  "fifteen_revenge_until": null,
   "sizing": {
     "follow_kalshi_cash": true,
     "bankroll_cap": null,
     "maker_auto": true,
     "risk_percent": 8.0
   },
-  "updated_at": "2026-08-28T12:06:02.308856+00:00"
+  "updated_at": "2026-08-28T12:32:13.164874+00:00"
 }
