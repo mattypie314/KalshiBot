@@ -402,7 +402,7 @@
       "side": "no",
       "price": 0.89,
       "count": 14.0,
-      "status": "open",
+      "status": "canceled",
       "order_id": "01a04a40-e8b8-7a83-b305-7d1fe5078ccd",
       "kind": "limit_join",
       "model_prob": 0.25202932312912163,
@@ -415,6 +415,29 @@
       "asset_key": "BNB",
       "close_at": "2026-08-28T22:00:00+00:00",
       "hourly_vol": 0.004005266751329536,
+      "paper": false,
+      "exit_reason": "expired"
+    },
+    {
+      "id": "2227a020-699f-4d5d-a5dc-18e25466a4c7",
+      "loop": "hourly",
+      "ticker": "KXETH-26AUG2819-B2432",
+      "side": "no",
+      "price": 0.43,
+      "count": 4.25,
+      "status": "open",
+      "order_id": "01a04a83-48e8-7bb5-8131-8e8d30f5e883",
+      "kind": "limit_join",
+      "model_prob": 0.6873966487430463,
+      "model_yes": 0.31260335125695365,
+      "sigma": 0.7906029258492218,
+      "spot": 2434.595,
+      "strike": 2430.0,
+      "spec_kind": "range",
+      "cap": 2434.99,
+      "asset_key": "ETH",
+      "close_at": "2026-08-28T23:00:00+00:00",
+      "hourly_vol": 0.0037189393214528185,
       "paper": false
     }
   ],
@@ -1450,11 +1473,47 @@
       "loop": "maker",
       "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T22:35:05.257201+00:00",
+      "loop": "fifteen",
+      "message": "Kalshi cash $30.27 \u00b7 campaign equity $30.27.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T22:35:05.257215+00:00",
+      "loop": "fifteen",
+      "message": "LIVE cancel rest KXBNB-26AUG2818-B687 (expired)",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T22:35:13.802053+00:00",
+      "loop": "hourly",
+      "message": "Kalshi cash $30.27 \u00b7 campaign equity $30.27.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T22:35:13.802072+00:00",
+      "loop": "hourly",
+      "message": "LIVE post-only no KXETH-26AUG2819-B2432 4.25@ 0.43 \u00b7 fair 0.69 vs mid 0.57 \u00b7 net +9.5% after fees \u00b7 0.79\u03c3 \u00b7 spread 0.03",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T22:35:14.490765+00:00",
+      "loop": "maker",
+      "message": "Kalshi cash $30.27 \u00b7 campaign equity $30.27.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T22:35:14.490778+00:00",
+      "loop": "maker",
+      "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
-  "kalshi_cash": 29.3131,
-  "kalshi_total_value": 29.3131,
+  "kalshi_cash": 30.2731,
+  "kalshi_total_value": 30.2731,
   "fifteen_loss_streak": 0,
   "fifteen_session_date": null,
   "fifteen_stopped_until": null,
@@ -1465,5 +1524,5 @@
     "maker_auto": false,
     "risk_percent": 8.0
   },
-  "updated_at": "2026-08-28T21:22:44.558910+00:00"
+  "updated_at": "2026-08-28T22:35:14.490816+00:00"
 }
