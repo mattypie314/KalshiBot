@@ -15,7 +15,7 @@ def _default_state(bankroll: float) -> dict[str, Any]:
         "log": [],
         "last_loss_at": None,
         "kalshi_cash": None,
-        "sizing": {"follow_kalshi_cash": True, "bankroll_cap": None},
+        "sizing": {"follow_kalshi_cash": True, "bankroll_cap": None, "maker_auto": True},
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -68,7 +68,12 @@ class Tracker:
         self.state.setdefault("realized", 0.0)
         self.state.setdefault("last_loss_at", None)
         self.state.setdefault("kalshi_cash", None)
-        self.state.setdefault("sizing", {"follow_kalshi_cash": True, "bankroll_cap": None})
+        sizing = self.state.get("sizing")
+        if not isinstance(sizing, dict):
+            sizing = {}
+        sizing.setdefault("follow_kalshi_cash", True)
+        sizing.setdefault("maker_auto", True)
+        self.state["sizing"] = sizing
         self.state.pop("pots", None)
         return self.state
 

@@ -1,6 +1,6 @@
 import asyncio
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -400,4 +400,24 @@ def test_live_maker_is_post_only_never_ioc(tmp_path):
     assert payload["self_trade_prevention_type"] == "maker"
     assert payload["side"] == "bid"
     assert payload["price"] == "0.8000"
+
+
+def test_maker_auto_off_skips_new_bids(tmp_path):
+    engine = _engine(tmp_path, 35)
+    engine.tracker.state["sizing"] = {"maker_auto": False, "follow_kalshi_cash": True}
+    engine.tracker.save()
+    engine._enter_maker = AsyncMock(side_effect=AssertionError("maker auto is off"))
+    with patch("kalshibot.campaign.engine.in_maker_window", return_value=True):
+        result = asyncio.run(engine.fire("maker"))
+    asyncio.run(engine.aclose())
+    assert engine._enter_maker.await_count == 0
+    assert any("Maker auto is off" in a for a in result["actions"])
+    assert result["status"]["maker_auto"] is False
+
+
+def test_maker_auto_defaults_on(tmp_path):
+    from kalshibot.campaign.tracker import Tracker
+
+    state = Tracker(tmp_path / "crypto-campaign.json").load()
+    assert state["sizing"]["maker_auto"] is True
 

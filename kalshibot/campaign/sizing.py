@@ -78,6 +78,7 @@ def apply_phone_overrides(
     *,
     bankroll: object = None,
     follow: object = None,
+    maker_auto: object = None,
     risk_percent: object = None,
     risk_cap_percent: object = None,
 ) -> list[str]:
@@ -89,6 +90,14 @@ def apply_phone_overrides(
     if follow_val is not None:
         sizing["follow_kalshi_cash"] = follow_val
         notes.append(f"Follow Kalshi cash: {'yes' if follow_val else 'no'}.")
+    maker_auto_val = parse_yes_no(maker_auto)
+    if maker_auto_val is not None:
+        sizing["maker_auto"] = maker_auto_val
+        notes.append(
+            "Maker auto is ON. It will rest 74–93¢ bids every 15-minute window until you set this to no."
+            if maker_auto_val
+            else "Maker auto is OFF. No new last-3-min bids until you set maker_auto to yes."
+        )
     money = parse_money(bankroll)
     if money is not None:
         if money <= 0:
@@ -105,6 +114,7 @@ def apply_phone_overrides(
         sizing["risk_cap_percent"] = round(100 * cap, 4)
         notes.append(f"Risk cap set to {100 * cap:.1f}%.")
     sizing.setdefault("follow_kalshi_cash", True)
+    sizing.setdefault("maker_auto", True)
     tracker.state["sizing"] = sizing
     tracker.save()
     return notes

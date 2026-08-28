@@ -110,6 +110,7 @@ def test_legacy_18_percent_flatten():
 def test_maker_window_minutes():
     et = ZoneInfo("America/New_York")
     assert in_maker_window(datetime(2026, 8, 27, 10, 57, tzinfo=et))
+    assert in_maker_window(datetime(2026, 8, 27, 10, 15, tzinfo=et))
     assert not in_maker_window(datetime(2026, 8, 27, 10, 10, tzinfo=et))
 
 

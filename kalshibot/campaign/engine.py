@@ -84,6 +84,7 @@ class CampaignEngine:
             "equity": round(equity, 4),
             "kalshi_cash": state.get("kalshi_cash"),
             "follow_kalshi_cash": bool(sizing.get("follow_kalshi_cash", True)),
+            "maker_auto": bool(sizing.get("maker_auto", True)),
             "bankroll_cap": sizing.get("bankroll_cap"),
             "typical_idea": round(typical, 2),
             "open_tickets": tickets,
@@ -155,17 +156,15 @@ class CampaignEngine:
         rests = sum(1 for r in self.tracker.state.get("rests", []) if r.get("status") == "open")
         return tickets + rests
 
+    def _maker_auto(self) -> bool:
+        return bool((self.tracker.state.get("sizing") or {}).get("maker_auto", True))
+
     async def fire(self, loop: str) -> dict[str, Any]:
         self.tracker.load()
         self._reload_playbook()
         self.spots.clear()
         actions: list[str] = []
         try:
-            if loop == "maker" and not in_maker_window():
-                msg = "Maker window closed; stay quiet."
-                actions.append(msg)
-                return self._finish(loop, actions, quiet=True)
-
             synced = await self._sync_kalshi_cash()
             if synced:
                 actions.append(synced)
@@ -177,7 +176,7 @@ class CampaignEngine:
             actions.extend(await self._manage_open(quotes, loop))
             actions.extend(await self._manage_rests())
 
-            if self._revenge_active():
+            if self._revenge_active() and loop in {"fifteen", "hourly", "maker"}:
                 actions.append("Sit out: no revenge betting after a loss.")
             elif loop == "fifteen":
                 actions.extend(await self._enter_limit(FIFTEEN_SERIES, loop, skip_last=self.cfg.skip_last_seconds))
@@ -192,7 +191,12 @@ class CampaignEngine:
                     )
                 )
             elif loop == "maker":
-                actions.extend(await self._enter_maker())
+                if not self._maker_auto():
+                    actions.append("Maker auto is off. Run workflow and set maker_auto to yes to start.")
+                elif not in_maker_window():
+                    actions.append("Maker window closed; stay quiet.")
+                else:
+                    actions.extend(await self._enter_maker())
 
             if not actions:
                 actions.append("Nothing new.")
