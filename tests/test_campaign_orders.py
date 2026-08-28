@@ -281,3 +281,44 @@ def test_set_bankroll_keeps_realized(tmp_path):
     assert state["bankroll"] == 35.0
     assert state["realized"] == -1.25
 
+
+def test_equity_follows_kalshi_cash_and_respects_a_cap(tmp_path):
+    engine = _engine(tmp_path, 15)
+    engine.tracker.state["realized"] = 0
+    engine.tracker.state["kalshi_cash"] = 42.0
+    engine.tracker.state["sizing"] = {"follow_kalshi_cash": True, "bankroll_cap": None}
+    assert engine._equity() == 42.0
+    engine.tracker.state["sizing"]["bankroll_cap"] = 30.0
+    assert engine._equity() == 30.0
+    engine.tracker.state["sizing"]["follow_kalshi_cash"] = False
+    engine.tracker.state["bankroll"] = 15.0
+    assert engine._equity() == 15.0
+    asyncio.run(engine.aclose())
+
+
+def test_sync_kalshi_cash_when_live(tmp_path):
+    engine = _engine(tmp_path, 15)
+    engine.live = True
+    engine.kalshi.api_key_id = "x"
+    engine.kalshi._private_key = object()
+    engine.kalshi.get_balance = AsyncMock(return_value={"balance_dollars": "48.25"})
+    msg = asyncio.run(engine._sync_kalshi_cash())
+    asyncio.run(engine.aclose())
+    assert engine.tracker.state["kalshi_cash"] == 48.25
+    assert "48.25" in (msg or "")
+
+
+def test_cash_sync_does_not_abort_the_loop(tmp_path):
+    engine = _engine(tmp_path, 15)
+    engine.live = True
+    engine.kalshi.api_key_id = "x"
+    engine.kalshi._private_key = object()
+    engine.kalshi.get_balance = AsyncMock(return_value={"balance_dollars": "40.00"})
+    engine.kalshi.series_for_category = AsyncMock(return_value=[])
+    engine.kalshi.create_order_v2 = AsyncMock(side_effect=AssertionError("should sit out, not order"))
+    result = asyncio.run(engine.fire("hourly"))
+    asyncio.run(engine.aclose())
+    joined = " ".join(result["actions"])
+    assert "Maker window closed" not in joined
+    assert "40.00" in joined
+

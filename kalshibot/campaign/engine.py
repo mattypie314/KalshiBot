@@ -9,6 +9,7 @@ import httpx
 
 from kalshibot.assets import asset_by_key, identify_asset
 from kalshibot.campaign.playbook import playbook_from_settings
+from kalshibot.campaign.sizing import cash_from_balance, playbook_from_sizing
 from kalshibot.campaign.rules import (
     contracts_for_budget,
     flatten_reason,
@@ -16,7 +17,6 @@ from kalshibot.campaign.rules import (
     hourly_scan_window,
     in_maker_window,
     open_cost,
-    room,
 )
 from kalshibot.campaign.tracker import Tracker
 from kalshibot.campaign.universe import FIFTEEN_SERIES, is_campaign_hourly_universe, is_daily_ticker, shard_for_series
@@ -67,6 +67,9 @@ class CampaignEngine:
         cost = open_cost(state["tickets"])
         bankroll = float(state["bankroll"])
         realized = float(state["realized"])
+        sizing = state.get("sizing") or {}
+        equity = self._equity()
+        typical = float(self.playbook.typical_risk_max) * equity
         return {
             "live": self.live,
             "can_trade": self.kalshi.can_trade,
@@ -74,15 +77,40 @@ class CampaignEngine:
             "bankroll": bankroll,
             "realized": round(realized, 4),
             "open_cost": round(cost, 4),
-            "room": round(room(bankroll, realized, cost), 4),
+            "room": round(self._room(), 4),
+            "equity": round(equity, 4),
+            "kalshi_cash": state.get("kalshi_cash"),
+            "follow_kalshi_cash": bool(sizing.get("follow_kalshi_cash", True)),
+            "bankroll_cap": sizing.get("bankroll_cap"),
+            "typical_idea": round(typical, 2),
             "open_tickets": tickets,
             "rests": [r for r in state.get("rests", []) if r.get("status") == "open"],
             "log": list(reversed(state.get("log", [])[-20:])),
             "updated_at": state.get("updated_at"),
             "playbook": self.playbook.as_status(),
+            "sizing": sizing,
         }
 
+    def _reload_playbook(self) -> None:
+        self.playbook = playbook_from_sizing(self.cfg, self.tracker.state.get("sizing") or {})
+
+    def _follow_kalshi(self) -> bool:
+        return bool((self.tracker.state.get("sizing") or {}).get("follow_kalshi_cash", True))
+
+    def _bankroll_cap(self) -> float | None:
+        cap = (self.tracker.state.get("sizing") or {}).get("bankroll_cap")
+        if cap in (None, ""):
+            return None
+        return float(cap)
+
     def _equity(self) -> float:
+        cash = self.tracker.state.get("kalshi_cash")
+        if self._follow_kalshi() and cash is not None:
+            equity = float(cash) + open_cost(self.tracker.state["tickets"])
+            cap = self._bankroll_cap()
+            if cap is not None:
+                equity = min(equity, cap)
+            return max(equity, 0.0)
         return float(self.tracker.state["bankroll"]) + float(self.tracker.state["realized"])
 
     def _revenge_active(self) -> bool:
@@ -98,8 +126,26 @@ class CampaignEngine:
         return (datetime.now(timezone.utc) - when).total_seconds() < self.cfg.revenge_seconds
 
     def _room(self) -> float:
-        state = self.tracker.state
-        return room(float(state["bankroll"]), float(state["realized"]), open_cost(state["tickets"]))
+        open_c = open_cost(self.tracker.state["tickets"])
+        budget = self._equity() - open_c
+        cash = self.tracker.state.get("kalshi_cash")
+        if self._follow_kalshi() and cash is not None:
+            return max(0.0, min(float(cash), budget))
+        return max(0.0, budget)
+
+    async def _sync_kalshi_cash(self) -> str | None:
+        if not (self.live and self.kalshi.can_trade and self._follow_kalshi()):
+            return None
+        try:
+            payload = await self.kalshi.get_balance()
+        except Exception as exc:  # noqa: BLE001 — keep last cash rather than crash the job
+            logger.warning("Kalshi balance failed: %s", exc)
+            return f"Could not refresh Kalshi cash ({exc}); using the saved book."
+        cash = cash_from_balance(payload)
+        if cash is None:
+            return None
+        self.tracker.state["kalshi_cash"] = round(cash, 4)
+        return f"Kalshi cash ${cash:.2f} · campaign equity ${self._equity():.2f}."
 
     def _open_idea_count(self) -> int:
         tickets = sum(1 for t in self.tracker.state["tickets"] if t.get("status") == "open")
@@ -108,6 +154,7 @@ class CampaignEngine:
 
     async def fire(self, loop: str) -> dict[str, Any]:
         self.tracker.load()
+        self._reload_playbook()
         self.spots.clear()
         actions: list[str] = []
         try:
@@ -115,6 +162,10 @@ class CampaignEngine:
                 msg = "Maker window closed; stay quiet."
                 actions.append(msg)
                 return self._finish(loop, actions, quiet=True)
+
+            synced = await self._sync_kalshi_cash()
+            if synced:
+                actions.append(synced)
 
             if self.live:
                 actions.extend(self._drop_practice_tickets())

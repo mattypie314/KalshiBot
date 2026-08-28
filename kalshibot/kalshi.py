@@ -142,3 +142,6 @@ class KalshiClient:
 
     async def cancel_order(self, order_id: str) -> None:
         await self.delete(f"/portfolio/events/orders/{order_id}")
+
+    async def get_balance(self) -> dict[str, Any]:
+        return await self.get_json("/portfolio/balance")

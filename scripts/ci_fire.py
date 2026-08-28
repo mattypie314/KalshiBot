@@ -7,18 +7,25 @@ import os
 
 from kalshibot.campaign.engine import CampaignEngine
 from kalshibot.campaign.rules import in_maker_window
+from kalshibot.campaign.sizing import apply_phone_overrides, playbook_from_sizing
 
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     requested = os.environ.get("LOOP", "auto").strip().lower() or "auto"
     engine = CampaignEngine()
-    raw_bankroll = os.environ.get("BANKROLL", "").strip()
-    if raw_bankroll:
-        engine.tracker.load()
-        engine.tracker.set_bankroll(float(raw_bankroll.replace("$", "").replace(",", "")))
-        engine.tracker.save()
-        print(f"Campaign bankroll set to ${float(raw_bankroll):.2f}")
+    notes = apply_phone_overrides(
+        engine.tracker,
+        bankroll=os.environ.get("BANKROLL"),
+        follow=os.environ.get("FOLLOW_KALSHI"),
+        risk_percent=os.environ.get("RISK_PERCENT"),
+        risk_cap_percent=os.environ.get("RISK_CAP_PERCENT"),
+    )
+    engine.playbook = playbook_from_sizing(engine.cfg, engine.tracker.state.get("sizing") or {})
+    for note in notes:
+        print(note)
+        engine.tracker.note(note, "sizing")
+    engine.tracker.save()
     mode = "LIVE MONEY" if engine.live else "PRACTICE (no real Kalshi orders)"
     print(f"KalshiBot campaign: {mode} · loop={requested} · can_trade={engine.kalshi.can_trade}")
     try:
