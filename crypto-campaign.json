@@ -3,8 +3,8 @@
     "fifteen": {
       "bankroll": 5.0,
       "realized": -1.7228,
-      "stopped": false,
-      "stop_reason": "realized 0 hit stop -0.50"
+      "stopped": true,
+      "stop_reason": "realized -1.72 hit stop -0.50"
     },
     "hourly": {
       "bankroll": 10.0,
@@ -491,7 +491,19 @@
       "loop": "hourly",
       "message": "Loop error (still practice mode): Client error '404 Not Found' for url 'https://api.elections.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T09:31:34.914864+00:00",
+      "loop": "fifteen",
+      "message": "Tell Matt: fifteen pot stopped (realized -1.72 hit stop -0.50).",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T09:31:35.815633+00:00",
+      "loop": "hourly",
+      "message": "Loop error (still practice mode): Client error '404 Not Found' for url 'https://api.elections.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+      "tell_matt": true
     }
   ],
-  "updated_at": "2026-08-28T08:49:17.547121+00:00"
+  "updated_at": "2026-08-28T09:31:35.815704+00:00"
 }
