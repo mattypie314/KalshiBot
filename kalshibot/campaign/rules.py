@@ -155,6 +155,11 @@ def classify_favorite(
     )
 
 
+def already_there(favorite: Favorite) -> bool:
+    """Skip IOC when the book is already 99¢ — buying then instantly flattening is noise."""
+    return favorite.take_price >= 0.99 or favorite.held_bid >= 0.99
+
+
 def maker_join_ok(favorite: Favorite) -> bool:
     return 0.74 <= favorite.join_price <= 0.93 and favorite.conviction in {"real", "fat", "thin"}
 

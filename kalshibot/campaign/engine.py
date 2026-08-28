@@ -11,6 +11,7 @@ from kalshibot.assets import identify_asset
 from kalshibot.campaign.rules import (
     POT_FIFTEEN,
     POT_HOURLY,
+    already_there,
     classify_favorite,
     contracts_for_budget,
     flatten_reason,
@@ -90,6 +91,9 @@ class CampaignEngine:
                 actions.append(msg)
                 return self._finish(loop, actions, quiet=True)
 
+            if self.live:
+                actions.extend(self._drop_practice_tickets())
+
             pots_to_manage = [POT_FIFTEEN, POT_HOURLY] if loop == "maker" else [loop if loop != "fifteen" else POT_FIFTEEN]
             if loop == "fifteen":
                 pots_to_manage = [POT_FIFTEEN]
@@ -117,8 +121,31 @@ class CampaignEngine:
             return self._finish(loop, actions, quiet=False)
         except Exception as exc:  # noqa: BLE001 — campaign loop must not crash the GitHub job
             logger.exception("Campaign %s failed", loop)
-            actions.append(f"Loop error (still practice mode): {exc}")
+            mode = "live" if self.live else "practice mode"
+            actions.append(f"Loop error ({mode}): {exc}")
             return self._finish(loop, actions, quiet=False)
+
+    def _drop_practice_tickets(self) -> list[str]:
+        """Practice fills were never on Kalshi. Do not flatten them live."""
+        dropped: list[str] = []
+        for ticket in self.tracker.state["tickets"]:
+            if ticket.get("status") != "open":
+                continue
+            if ticket.get("order_id") and not ticket.get("paper"):
+                continue
+            ticket["status"] = "flat"
+            ticket["exit_reason"] = "practice_ticket"
+            ticket["realized"] = 0.0
+            dropped.append(str(ticket.get("ticker") or "?"))
+        for rest in self.tracker.state.get("rests", []):
+            if rest.get("status") == "open" and not rest.get("order_id"):
+                rest["status"] = "canceled"
+                rest["exit_reason"] = "practice_ticket"
+        if not dropped:
+            return []
+        sample = ", ".join(dropped[:6])
+        extra = "" if len(dropped) <= 6 else f" (+{len(dropped) - 6} more)"
+        return [f"Cleared {len(dropped)} practice ticket(s) so live orders can start: {sample}{extra}."]
 
     def _finish(self, loop: str, actions: list[str], quiet: bool) -> dict[str, Any]:
         for action in actions:
@@ -176,11 +203,17 @@ class CampaignEngine:
             "reduce_only": True,
             "post_only": False,
             "client_order_id": str(uuid.uuid4()),
-            "exchange_index": ticket.get("exchange_index", -1),
+            "exchange_index": -1,
         }
         fill_count = count
         avg = price
         if self.live:
+            if ticket.get("paper") or not ticket.get("order_id"):
+                ticket["status"] = "flat"
+                ticket["exit_reason"] = "practice_ticket"
+                ticket["exit_price"] = price
+                ticket["realized"] = 0.0
+                return f"Dropped practice ticket {ticket['ticker']} (never a real Kalshi fill)."
             resp = await self.kalshi.create_order_v2(payload)
             fill_count = float(resp.get("fill_count") or 0)
             avg = float(resp.get("average_fill_price") or price)
@@ -305,6 +338,8 @@ class CampaignEngine:
             budget = min(size_for_conviction(pot, fav.conviction), available)
             if budget < 0.50:
                 continue
+            if already_there(fav):
+                continue
             count = contracts_for_budget(budget, fav.take_price)
             ticker = pick["market"]["ticker"]
             book_side = "bid" if fav.side == "yes" else "ask"
@@ -317,7 +352,7 @@ class CampaignEngine:
                 "self_trade_prevention_type": "taker_at_cross",
                 "post_only": False,
                 "client_order_id": str(uuid.uuid4()),
-                "exchange_index": pick["exchange_index"],
+                "exchange_index": -1,
             }
             fill_count = 0.0
             avg = fav.take_price
@@ -369,10 +404,12 @@ class CampaignEngine:
             "post_only": True,
             "reduce_only": True,
             "client_order_id": str(uuid.uuid4()),
-            "exchange_index": ticket.get("exchange_index", -1),
+            "exchange_index": -1,
         }
         order_id = None
         if self.live:
+            if ticket.get("paper") or not ticket.get("order_id"):
+                return None
             resp = await self.kalshi.create_order_v2(payload)
             order_id = resp.get("order_id")
         rest = {
@@ -427,7 +464,7 @@ class CampaignEngine:
                 "self_trade_prevention_type": "maker",
                 "post_only": True,
                 "client_order_id": str(uuid.uuid4()),
-                "exchange_index": item["exchange_index"],
+                "exchange_index": -1,
             }
             order_id = None
             if self.live:

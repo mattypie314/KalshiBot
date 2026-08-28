@@ -60,4 +60,6 @@ GitHub can run the campaign every 5 minutes after this pull request is merged.
 
 It stays in practice mode (DRY) until you add Kalshi secrets under **Settings → Secrets and variables → Actions**: `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY` (the full .pem text), and `KALSHI_LIVE` set to `1`.
 
+After secrets are on, tap **Run workflow** on the latest `main` — do not re-run an old red job. Practice tickets from DRY runs are not real Kalshi fills; the bot now drops those before placing live orders.
+
 The $5 / $10 pots are saved on a `campaign-state` branch so they survive between runs.
