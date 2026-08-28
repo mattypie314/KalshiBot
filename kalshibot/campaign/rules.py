@@ -152,6 +152,20 @@ def classify_favorite(
     )
 
 
+def maker_contract_price(favorite: Favorite) -> float:
+    """Dollar cost of the resting maker bid (yes price or 1 − yes price for no)."""
+    if favorite.side == "yes":
+        return favorite.join_price
+    return max(0.0, 1.0 - favorite.join_price)
+
+
+def taker_net_edge(favorite: Favorite) -> float:
+    """Model minus the ask, minus taker fees. ~0 means the favorite is taker break-even."""
+    from kalshibot.fees import TAKER_K, fee_points
+
+    return favorite.model_side - favorite.take_price - fee_points(favorite.take_price, TAKER_K)
+
+
 def already_there(favorite: Favorite) -> bool:
     """Skip IOC locks at 99¢–$1.00."""
     return favorite.take_price >= 0.99 or favorite.held_bid >= 0.99
@@ -162,8 +176,32 @@ def in_pay_band(favorite: Favorite) -> bool:
     return 0.74 <= favorite.take_price <= 0.96
 
 
-def maker_join_ok(favorite: Favorite) -> bool:
-    return 0.74 <= favorite.join_price <= 0.93 and favorite.conviction in {"real", "fat", "thin"}
+def maker_join_ok(favorite: Favorite, join_min: float = 0.74, join_max: float = 0.93) -> bool:
+    """Rest maker bids on favorites priced 74–93¢ (contract cost, either side)."""
+    return join_min <= maker_contract_price(favorite) <= join_max
+
+
+def maker_spread_ok(
+    favorite: Favorite,
+    yes_bid: float,
+    yes_ask: float,
+    *,
+    join_min: float = 0.74,
+    join_max: float = 0.93,
+    min_spread: float = 0.01,
+    taker_net_min: float = -0.02,
+) -> bool:
+    """Last-3-min maker: confirmed favorite, 74–93¢, edge is the spread not a taker misprice."""
+    if not maker_join_ok(favorite, join_min, join_max):
+        return False
+    if yes_ask - yes_bid < min_spread:
+        return False
+    if taker_net_edge(favorite) < taker_net_min:
+        return False
+    cost = maker_contract_price(favorite)
+    if favorite.model_side + 0.01 < cost:
+        return False
+    return True
 
 
 def in_maker_window(now: datetime | None = None) -> bool:

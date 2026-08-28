@@ -11,11 +11,14 @@ from kalshibot.assets import asset_by_key, identify_asset
 from kalshibot.campaign.playbook import playbook_from_settings
 from kalshibot.campaign.sizing import cash_from_balance, playbook_from_sizing
 from kalshibot.campaign.rules import (
+    classify_favorite,
     contracts_for_budget,
     flatten_reason,
     held_bid,
     hourly_scan_window,
     in_maker_window,
+    maker_contract_price,
+    maker_spread_ok,
     open_cost,
 )
 from kalshibot.campaign.tracker import Tracker
@@ -251,7 +254,10 @@ class CampaignEngine:
             reason = flatten_reason(ticket, q["yes_bid"], q["yes_ask"])
             if is_daily_ticker(ticket["ticker"]):
                 reason = "wrong_universe_daily"
-            if not reason and ticket.get("model_prob") is not None:
+            if ticket.get("kind") == "maker_spread":
+                if not reason:
+                    continue
+            elif not reason and ticket.get("model_prob") is not None:
                 idea = await self._rescore_held(ticket, q["yes_bid"], q["yes_ask"])
                 if idea is not None and self.playbook.edge_decayed(idea):
                     reason = "edge_decay"
@@ -391,6 +397,18 @@ class CampaignEngine:
             market = data.get("market") or data
             yes_bid = parse_dollars(market.get("yes_bid_dollars")) or 0.0
             yes_ask = parse_dollars(market.get("yes_ask_dollars")) or 0.0
+            if rest.get("kind") == "maker_spread":
+                close = parse_close_time(market.get("close_time")) or parse_close_time(rest.get("close_at"))
+                secs = seconds_until(close) or 0
+                if secs < 10:
+                    actions.append(await self._cancel_rest(rest, "near_settlement"))
+                    continue
+                mid = (yes_bid + yes_ask) / 2.0
+                if rest.get("side") == "yes" and mid < 0.45:
+                    actions.append(await self._cancel_rest(rest, "favorite_flipped"))
+                elif rest.get("side") == "no" and mid > 0.55:
+                    actions.append(await self._cancel_rest(rest, "favorite_flipped"))
+                continue
             idea = await self._rescore_held(rest, yes_bid, yes_ask)
             if idea is not None and self.playbook.edge_decayed(idea):
                 actions.append(await self._cancel_rest(rest, "edge_decay"))
@@ -631,16 +649,146 @@ class CampaignEngine:
         return actions
 
     async def _enter_maker(self) -> list[str]:
+        """Rest post-only bids on 74–93¢ favorites in the last 3 minutes.
+
+        Taker is at (or near) break-even after fees. The edge is the spread.
+        """
+        book = self.playbook
+        if self._open_idea_count() >= book.max_open_ideas:
+            return ["Already in two ideas. Sitting out of last-3-min maker."]
+        available = self._room()
+        if available < book.min_stake:
+            return [f"room ${available:.2f}; sitting out of last-3-min maker."]
+
         series = list(FIFTEEN_SERIES)
         if hourly_scan_window():
             series.extend(await self._hourly_series())
-        max_secs = None
-        return await self._enter_limit(
-            series,
-            "maker",
-            skip_last=self.cfg.maker_skip_last_seconds,
-            max_secs=max_secs,
-        )
+
+        scored: list[dict[str, Any]] = []
+        for row in await self._load_candidates(series):
+            item = await self._score_market(row)
+            if not item:
+                continue
+            if item["secs"] < book.maker_min_seconds or item["secs"] > book.maker_max_seconds:
+                continue
+            fav = classify_favorite(
+                spot=item["spot"],
+                strike=item["strike"],
+                yes_bid=item["yes_bid"],
+                yes_ask=item["yes_ask"],
+                model_yes=item["model_yes"],
+            )
+            if not fav:
+                continue
+            if not maker_spread_ok(
+                fav,
+                item["yes_bid"],
+                item["yes_ask"],
+                join_min=book.maker_join_min,
+                join_max=book.maker_join_max,
+                min_spread=book.maker_min_spread,
+                taker_net_min=book.maker_taker_net_min,
+            ):
+                continue
+            item["favorite"] = fav
+            scored.append(item)
+        scored.sort(key=lambda r: r["favorite"].model_side, reverse=True)
+
+        from types import SimpleNamespace
+
+        actions: list[str] = []
+        mode = "LIVE" if self.live else "DRY"
+        placed = 0
+        for pick in scored:
+            if placed >= book.maker_max_new:
+                break
+            if self._open_idea_count() >= book.max_open_ideas:
+                break
+            available = self._room()
+            if available < book.min_stake:
+                break
+            fav = pick["favorite"]
+            ticker = pick["market"]["ticker"]
+            if self._already_in(ticker):
+                continue
+            join = fav.join_price
+            cost_px = maker_contract_price(fav)
+            equity = self._equity()
+            cap = min(book.maker_risk_cap, book.risk_limit(equity)) * equity
+            budget = min(book.kelly_stake(equity, fav.model_side, cost_px), available, cap)
+            if budget < book.min_stake:
+                budget = min(book.min_stake, available, cap)
+            if budget < book.min_stake:
+                continue
+            count = contracts_for_budget(budget, cost_px)
+            if count <= 0 or count * cost_px > book.risk_hard_max * equity + 1e-9:
+                continue
+            book_side = "bid" if fav.side == "yes" else "ask"
+            payload = {
+                "ticker": ticker,
+                "side": book_side,
+                "count": f"{count:.2f}",
+                "price": f"{join:.4f}",
+                "time_in_force": "good_till_canceled",
+                "self_trade_prevention_type": "maker",
+                "post_only": True,
+                "client_order_id": str(uuid.uuid4()),
+                "exchange_index": -1,
+            }
+            order_id = None
+            fill_count = 0.0
+            avg_yes = join
+            if self.live:
+                try:
+                    resp = await self.kalshi.create_order_v2(payload)
+                except httpx.HTTPStatusError as exc:
+                    actions.append(f"LIVE maker failed {ticker}: {exc}")
+                    continue
+                fill_count = float(resp.get("fill_count") or 0)
+                avg_yes = float(resp.get("average_fill_price") or join)
+                order_id = resp.get("order_id")
+            fill_cost = self._yes_to_cost(fav.side, avg_yes)
+            rest = {
+                "id": str(uuid.uuid4()),
+                "loop": "maker",
+                "kind": "maker_spread",
+                "ticker": ticker,
+                "side": fav.side,
+                "price": join,
+                "count": count,
+                "status": "open",
+                "order_id": order_id,
+                "model_prob": fav.model_side,
+                "model_yes": pick["model_yes"],
+                "sigma": pick["sigma"],
+                "spot": pick["spot"],
+                "strike": pick["strike"],
+                "spec_kind": pick["spec_kind"],
+                "cap": pick.get("cap"),
+                "asset_key": pick["asset"].key,
+                "close_at": pick.get("close"),
+                "paper": not self.live,
+            }
+            if fill_count > 0:
+                idea = SimpleNamespace(side=fav.side, model_prob=fav.model_side)
+                ticket = self._ticket_fields(pick, idea, fill_count, fill_cost, order_id)
+                ticket["kind"] = "maker_spread"
+                ticket["loop"] = "maker"
+                self.tracker.state["tickets"].append(ticket)
+                actions.append(
+                    f"{mode} maker filled {fav.side} {ticker} {fill_count:.2f}@ {fill_cost:.2f} · {fav.rationale}"
+                )
+            else:
+                self.tracker.state.setdefault("rests", []).append(rest)
+                spread = pick["yes_ask"] - pick["yes_bid"]
+                actions.append(
+                    f"{mode} maker rest {fav.side} {ticker} {count:.2f}@ {join:.2f} "
+                    f"(74–93¢ · spread {spread:.2f} · {fav.conviction}) · {fav.rationale}"
+                )
+            placed += 1
+        if placed == 0:
+            actions.append("No 74–93¢ favorite in the last 3 minutes. Sitting out is a valid trade.")
+        return actions
 
 
 async def run_scheduler(engine: CampaignEngine) -> None:

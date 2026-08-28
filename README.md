@@ -12,7 +12,7 @@ Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 | --- | --- | --- |
 | 15m | every 3 minutes | BTC/ETH/SOL + gold/silver 15m |
 | Hourly | every 5 minutes | hourly crypto/commodities ending in the next 75 minutes (no daily `…D` books) |
-| Maker | minutes 12–14, 27–29, 42–44, 57–59 | extra limit-posting scan of the same books |
+| Maker | last 3 min of each 15m (:12–:14, :27–:29, :42–:44, :57–:59) | Rest post-only bids on **74–93¢** confirmed favorites. Edge is the spread (taker is at break-even). |
 
 **Small-account rules**
 
@@ -24,6 +24,10 @@ Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 - Hard filters: net edge after fees ≥ 4% (6% if the book is thin or the account is under $20); model must also clear fees + a 2–3% buffer; the spread cannot eat most of the edge; at least 3 minutes left.
 - Price 15-minute crypto from live spot, time left, and recent 1-minute realized vol (not daily vol). Quiet starting points: BTC ~0.3–0.6%/hour, ETH jumpy-er.
 - Exit: take profit (+2¢ or 99¢ bid), flatten if the statistical edge decays, or hold to settlement. You can lose the full amount on a contract.
+
+**Last-3-minute maker (spread capture)**
+
+This is a separate routine from the 4–6% playbook. In the final 3 minutes, a confirmed favorite often sits at **taker break-even**. Taking the ask has no edge after fees. Resting a bid at 74–93¢ earns the spread (cents per fill, many fills). Never IOC. Size is still small-account (about 3% cap). GitHub also fires on those minutes, not only every 5 minutes.
 
 **Raising the book as it grows**
 

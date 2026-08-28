@@ -322,3 +322,82 @@ def test_cash_sync_does_not_abort_the_loop(tmp_path):
     assert "Maker window closed" not in joined
     assert "40.00" in joined
 
+
+def _maker_pick(**kwargs):
+    from kalshibot.assets import asset_by_key
+    from kalshibot.campaign.playbook import evaluate_idea
+
+    idea = evaluate_idea(
+        yes_bid=0.80,
+        yes_ask=0.82,
+        model_yes=0.83,
+        sigma=0.2,
+        secs_left=90,
+        equity=35.0,
+    )
+    pick = {
+        "series": "KXBTC15M",
+        "event": {"title": "BTC 15m"},
+        "market": {"ticker": "KXBTC15M-M", "title": "BTC above"},
+        "asset": asset_by_key("BTC"),
+        "spot": 100.0,
+        "strike": 99.5,
+        "spec_kind": "greater",
+        "cap": None,
+        "secs": 90,
+        "close": None,
+        "hourly_vol": 0.0045,
+        "model_yes": 0.83,
+        "sigma": 0.2,
+        "idea": idea,
+        "yes_bid": 0.80,
+        "yes_ask": 0.82,
+        "exchange_index": 2,
+    }
+    pick.update(kwargs)
+    return pick
+
+
+def test_maker_rests_74_to_93_in_last_three_minutes(tmp_path):
+    engine = _engine(tmp_path, 35)
+    engine._load_candidates = AsyncMock(return_value=[{"row": True}])
+    engine._score_market = AsyncMock(return_value=_maker_pick())
+    engine.kalshi.create_order_v2 = AsyncMock(side_effect=AssertionError("dry must not order"))
+    actions = asyncio.run(engine._enter_maker())
+    asyncio.run(engine.aclose())
+    assert any("maker rest" in a and "74–93" in a for a in actions)
+    rests = [r for r in engine.tracker.state["rests"] if r.get("status") == "open"]
+    assert len(rests) == 1
+    assert rests[0]["kind"] == "maker_spread"
+    assert 0.74 <= rests[0]["price"] <= 0.93
+    assert engine.kalshi.create_order_v2.await_count == 0
+
+
+def test_maker_skips_when_more_than_three_minutes_left(tmp_path):
+    engine = _engine(tmp_path, 35)
+    engine._load_candidates = AsyncMock(return_value=[{"row": True}])
+    engine._score_market = AsyncMock(return_value=_maker_pick(secs=400))
+    engine.kalshi.create_order_v2 = AsyncMock(side_effect=AssertionError("too early to rest"))
+    actions = asyncio.run(engine._enter_maker())
+    asyncio.run(engine.aclose())
+    assert engine.kalshi.create_order_v2.await_count == 0
+    assert any("last 3 minutes" in a for a in actions)
+
+
+def test_live_maker_is_post_only_never_ioc(tmp_path):
+    engine = _engine(tmp_path, 35)
+    engine._load_candidates = AsyncMock(return_value=[{"row": True}])
+    engine._score_market = AsyncMock(return_value=_maker_pick())
+    engine.live = True
+    engine.kalshi.create_order_v2 = AsyncMock(
+        return_value={"order_id": "m1", "fill_count": 0, "average_fill_price": 0}
+    )
+    asyncio.run(engine._enter_maker())
+    asyncio.run(engine.aclose())
+    payload = engine.kalshi.create_order_v2.await_args.args[0]
+    assert payload["post_only"] is True
+    assert payload["time_in_force"] == "good_till_canceled"
+    assert payload["self_trade_prevention_type"] == "maker"
+    assert payload["side"] == "bid"
+    assert payload["price"] == "0.8000"
+

@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     thin_spread: float = 0.03
     edge_decay_floor: float = 0.02
     revenge_seconds: float = 15 * 60
+    maker_join_min: float = 0.74
+    maker_join_max: float = 0.93
+    maker_min_seconds: float = 15.0
+    maker_max_seconds: float = 180.0
+    maker_min_spread: float = 0.01
+    maker_max_new: int = 2
+    maker_risk_cap: float = 0.03
+    maker_taker_net_min: float = -0.02
 
 
 settings = Settings()
