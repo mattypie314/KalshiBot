@@ -8,7 +8,7 @@
     },
     "hourly": {
       "bankroll": 10.0,
-      "realized": -0.297,
+      "realized": -0.396,
       "stopped": false,
       "stop_reason": null
     }
@@ -183,11 +183,14 @@
       "count": 5.1,
       "cost": 4.998,
       "filled_at": "2026-08-28T09:53:53.229951+00:00",
-      "status": "open",
+      "status": "flat",
       "exchange_index": 2,
       "order_id": "01a047ca-4368-7374-8ce5-5bc4eb390568",
       "conviction": "fat",
-      "paper": false
+      "paper": false,
+      "exit_reason": "wrong_universe_daily",
+      "exit_price": 0.97,
+      "realized": -0.051
     },
     {
       "id": "d5dcd5ef-7a4e-4292-a49e-0f8e0d909198",
@@ -198,11 +201,14 @@
       "count": 4.8,
       "cost": 4.704,
       "filled_at": "2026-08-28T09:54:05.291854+00:00",
-      "status": "open",
+      "status": "flat",
       "exchange_index": 2,
       "order_id": "01a047ca-7248-7eda-83f3-72597722d800",
       "conviction": "fat",
-      "paper": false
+      "paper": false,
+      "exit_reason": "wrong_universe_daily",
+      "exit_price": 0.97,
+      "realized": -0.048
     }
   ],
   "rests": [
@@ -570,7 +576,91 @@
       "loop": "hourly",
       "message": "Loop error (live): Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"invalid_order\",\"message\":\"invalid order\",\"details\":\"reduce_only can only be used with IoC orders\"}}",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:14.190170+00:00",
+      "loop": "fifteen",
+      "message": "Reset $5 fifteen pot to $5 / $0 / unstopped.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:16.325090+00:00",
+      "loop": "fifteen",
+      "message": "Loop error (live): Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"insufficient_balance\",\"message\":\"insufficient balance\"}}",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066044+00:00",
+      "loop": "hourly",
+      "message": "LIVE flatten KXBTCD-26AUG2817-T75999.99 yes wrong_universe_daily pnl -0.05",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066056+00:00",
+      "loop": "hourly",
+      "message": "LIVE flatten KXBTCD-26AUG2817-T75999.99 yes wrong_universe_daily pnl -0.05",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066060+00:00",
+      "loop": "hourly",
+      "message": "LIVE IOC KXBTC-26AUG2807-B79450 no no fill",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066063+00:00",
+      "loop": "hourly",
+      "message": "LIVE IOC KXBTC-26AUG2807-B79350 no no fill",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066065+00:00",
+      "loop": "hourly",
+      "message": "LIVE IOC KXBTC-26AUG2807-B79250 no no fill",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066068+00:00",
+      "loop": "hourly",
+      "message": "LIVE IOC KXSOLE-26AUG2807-B105.625 no no fill",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066070+00:00",
+      "loop": "hourly",
+      "message": "LIVE IOC KXETH-26AUG2807-B2497 no no fill",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066074+00:00",
+      "loop": "hourly",
+      "message": "LIVE IOC KXBTC-26AUG2807-B79150 no no fill",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066077+00:00",
+      "loop": "hourly",
+      "message": "LIVE IOC KXSOLE-26AUG2807-B105.375 no no fill",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066079+00:00",
+      "loop": "hourly",
+      "message": "LIVE IOC KXETH-26AUG2807-B2492 no no fill",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066081+00:00",
+      "loop": "hourly",
+      "message": "LIVE IOC KXSOLE-26AUG2807-B105.125 no no fill",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:10:28.066084+00:00",
+      "loop": "hourly",
+      "message": "LIVE IOC KXETH-26AUG2807-B2487 no no fill",
+      "tell_matt": true
     }
   ],
-  "updated_at": "2026-08-28T09:54:05.589369+00:00"
+  "updated_at": "2026-08-28T10:10:28.066123+00:00"
 }
