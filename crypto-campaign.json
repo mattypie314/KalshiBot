@@ -413,7 +413,19 @@
       "loop": "hourly",
       "message": "DRY rest 99\u00a2 post-only on KXBNBD-26AUG2803-T524.99 (never rest under the bid)",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T07:10:20.590442+00:00",
+      "loop": "fifteen",
+      "message": "Nothing new.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-28T07:10:21.511751+00:00",
+      "loop": "hourly",
+      "message": "Loop error (still practice mode): Client error '404 Not Found' for url 'https://api.elections.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+      "tell_matt": true
     }
   ],
-  "updated_at": "2026-08-28T06:05:52.777883+00:00"
+  "updated_at": "2026-08-28T07:10:21.511814+00:00"
 }
