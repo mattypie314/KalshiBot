@@ -7,9 +7,6 @@ from zoneinfo import ZoneInfo
 ET = ZoneInfo("America/New_York")
 LEGACY_FLATTEN_CUTOFF = datetime(2026, 8, 27, 3, 0, tzinfo=ET)
 
-POT_FIFTEEN = "fifteen"
-POT_HOURLY = "hourly"
-
 MAKER_MINUTES = {12, 13, 14, 27, 28, 29, 42, 43, 44, 57, 58, 59}
 
 
@@ -42,8 +39,8 @@ def contracts_for_budget(budget: float, price: float) -> float:
     return max(0.01, round(budget / price, 2))
 
 
-def size_for_conviction(pot: str, conviction: str) -> float:
-    if pot == POT_HOURLY:
+def size_for_conviction(loop: str, conviction: str) -> float:
+    if loop == "hourly":
         return {"thin": 1.0, "real": 3.5, "fat": 5.0}.get(conviction, 0.0)
     return {"thin": 0.50, "real": 1.75, "fat": 2.50}.get(conviction, 0.0)
 
@@ -56,8 +53,8 @@ def room(bankroll: float, realized: float, open_cost: float) -> float:
     return bankroll + realized - open_cost
 
 
-def open_cost(tickets: list[dict], pot: str) -> float:
-    return sum(float(t.get("cost") or 0) for t in tickets if t.get("pot") == pot and t.get("status") == "open")
+def open_cost(tickets: list[dict]) -> float:
+    return sum(float(t.get("cost") or 0) for t in tickets if t.get("status") == "open")
 
 
 def flatten_pct(filled_at: str | None, now: datetime | None = None) -> float:

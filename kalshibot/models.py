@@ -22,6 +22,32 @@ def digital_call_prob(spot: float, strike: float, years: float, vol: float) -> f
     return clamp_prob(norm_cdf(d2))
 
 
+HOURS_PER_YEAR = 365.25 * 24
+
+
+def annual_vol_from_hourly(hour_vol: float) -> float:
+    return hour_vol * math.sqrt(HOURS_PER_YEAR)
+
+
+def hours_to_years(hours: float) -> float:
+    return max(hours, 1e-8) / HOURS_PER_YEAR
+
+
+def distance_in_sigma(spot: float, strike: float, hour_vol: float, hours_left: float) -> float:
+    """How many typical remaining moves (σ) spot is from the strike."""
+    move = hour_vol * math.sqrt(max(hours_left, 1e-8))
+    if spot <= 0 or strike <= 0 or move <= 0:
+        return 0.0
+    return math.log(spot / strike) / move
+
+
+QUIET_HOUR_VOL = {
+    "BTC": 0.0045,
+    "ETH": 0.0060,
+    "SOL": 0.0080,
+}
+
+
 def digital_put_prob(spot: float, strike: float, years: float, vol: float) -> float:
     return clamp_prob(1.0 - digital_call_prob(spot, strike, years, vol))
 

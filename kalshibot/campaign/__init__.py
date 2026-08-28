@@ -1,1 +1,1 @@
-"""GrokBot campaign loops: 15m, hourly, and last-minute maker."""
+"""Small-account campaign loops: 15m, hourly, and maker limits."""

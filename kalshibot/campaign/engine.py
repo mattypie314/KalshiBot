@@ -7,28 +7,28 @@ from typing import Any
 
 import httpx
 
-from kalshibot.assets import identify_asset
+from kalshibot.assets import asset_by_key, identify_asset
+from kalshibot.campaign.playbook import playbook_from_settings
 from kalshibot.campaign.rules import (
-    POT_FIFTEEN,
-    POT_HOURLY,
-    already_there,
-    classify_favorite,
     contracts_for_budget,
     flatten_reason,
+    held_bid,
     hourly_scan_window,
     in_maker_window,
-    in_pay_band,
-    maker_join_ok,
-    maker_size,
     open_cost,
     room,
-    size_for_conviction,
 )
 from kalshibot.campaign.tracker import Tracker
 from kalshibot.campaign.universe import FIFTEEN_SERIES, is_campaign_hourly_universe, is_daily_ticker, shard_for_series
 from kalshibot.config import Settings, settings
 from kalshibot.kalshi import KalshiClient
-from kalshibot.models import parse_strike, price_threshold_prob
+from kalshibot.models import (
+    annual_vol_from_hourly,
+    distance_in_sigma,
+    hours_to_years,
+    parse_strike,
+    price_threshold_prob,
+)
 from kalshibot.money import parse_close_time, parse_dollars, seconds_until
 from kalshibot.spots import SpotService
 
@@ -52,7 +52,8 @@ class CampaignEngine:
             private_key_path=self.cfg.kalshi_private_key_path,
         )
         self.spots = SpotService(self._http)
-        self.tracker = Tracker(self.cfg.tracker_path, self.cfg.fifteen_bankroll, self.cfg.hourly_bankroll)
+        self.tracker = Tracker(self.cfg.tracker_path, self.cfg.campaign_bankroll)
+        self.playbook = playbook_from_settings(self.cfg)
         self.live = bool(self.cfg.kalshi_live and self.kalshi.can_trade)
 
     async def aclose(self) -> None:
@@ -63,28 +64,51 @@ class CampaignEngine:
         self.tracker.load()
         state = self.tracker.snapshot()
         tickets = [t for t in state["tickets"] if t.get("status") == "open"]
-        pots = {}
-        for name in (POT_FIFTEEN, POT_HOURLY):
-            pot = state["pots"][name]
-            cost = open_cost(state["tickets"], name)
-            pots[name] = {
-                **pot,
-                "open_cost": round(cost, 4),
-                "room": round(room(float(pot["bankroll"]), float(pot["realized"]), cost), 4),
-            }
+        cost = open_cost(state["tickets"])
+        bankroll = float(state["bankroll"])
+        realized = float(state["realized"])
         return {
             "live": self.live,
             "can_trade": self.kalshi.can_trade,
             "tracker_path": str(self.tracker.path),
-            "pots": pots,
+            "bankroll": bankroll,
+            "realized": round(realized, 4),
+            "open_cost": round(cost, 4),
+            "room": round(room(bankroll, realized, cost), 4),
             "open_tickets": tickets,
             "rests": [r for r in state.get("rests", []) if r.get("status") == "open"],
             "log": list(reversed(state.get("log", [])[-20:])),
             "updated_at": state.get("updated_at"),
+            "playbook": self.playbook.as_status(),
         }
+
+    def _equity(self) -> float:
+        return float(self.tracker.state["bankroll"]) + float(self.tracker.state["realized"])
+
+    def _revenge_active(self) -> bool:
+        raw = self.tracker.state.get("last_loss_at")
+        if not raw:
+            return False
+        try:
+            when = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - when).total_seconds() < self.cfg.revenge_seconds
+
+    def _room(self) -> float:
+        state = self.tracker.state
+        return room(float(state["bankroll"]), float(state["realized"]), open_cost(state["tickets"]))
+
+    def _open_idea_count(self) -> int:
+        tickets = sum(1 for t in self.tracker.state["tickets"] if t.get("status") == "open")
+        rests = sum(1 for r in self.tracker.state.get("rests", []) if r.get("status") == "open")
+        return tickets + rests
 
     async def fire(self, loop: str) -> dict[str, Any]:
         self.tracker.load()
+        self.spots.clear()
         actions: list[str] = []
         try:
             if loop == "maker" and not in_maker_window():
@@ -95,26 +119,18 @@ class CampaignEngine:
             if self.live:
                 actions.extend(self._drop_practice_tickets())
 
-            pots_to_manage = [POT_FIFTEEN, POT_HOURLY] if loop == "maker" else [loop if loop != "fifteen" else POT_FIFTEEN]
-            if loop == "fifteen":
-                pots_to_manage = [POT_FIFTEEN]
-            elif loop == "hourly":
-                pots_to_manage = [POT_HOURLY]
-
             quotes = await self._quotes_for_open_tickets()
-            for pot in pots_to_manage:
-                actions.extend(await self._manage_open(pot, quotes, loop))
+            actions.extend(await self._manage_open(quotes, loop))
+            actions.extend(await self._manage_rests())
 
-            for pot in pots_to_manage:
-                actions.extend(self._maybe_stop_pot(pot, loop))
-
-            if loop == "fifteen":
-                actions.extend(await self._enter_taker(POT_FIFTEEN, FIFTEEN_SERIES, loop, skip_last=self.cfg.skip_last_seconds))
+            if self._revenge_active():
+                actions.append("Sit out: no revenge betting after a loss.")
+            elif loop == "fifteen":
+                actions.extend(await self._enter_limit(FIFTEEN_SERIES, loop, skip_last=self.cfg.skip_last_seconds))
             elif loop == "hourly":
                 series = await self._hourly_series()
                 actions.extend(
-                    await self._enter_taker(
-                        POT_HOURLY,
+                    await self._enter_limit(
                         series,
                         loop,
                         skip_last=self.cfg.skip_last_seconds,
@@ -162,15 +178,6 @@ class CampaignEngine:
         self.tracker.save()
         return {"loop": loop, "live": self.live, "actions": actions, "status": self.status()}
 
-    def _maybe_stop_pot(self, pot: str, loop: str) -> list[str]:
-        state = self.tracker.state["pots"][pot]
-        realized = float(state["realized"])
-        if realized <= self.cfg.pot_stop and not state["stopped"]:
-            state["stopped"] = True
-            state["stop_reason"] = f"realized {realized:.2f} hit stop {self.cfg.pot_stop:.2f}"
-            return [f"Tell Matt: {pot} pot stopped ({state['stop_reason']})."]
-        return []
-
     async def _quotes_for_open_tickets(self) -> dict[str, dict[str, float]]:
         quotes: dict[str, dict[str, float]] = {}
         tickers = {t["ticker"] for t in self.tracker.state["tickets"] if t.get("status") == "open"}
@@ -182,10 +189,10 @@ class CampaignEngine:
             quotes[ticker] = {"yes_bid": bid, "yes_ask": ask}
         return quotes
 
-    async def _manage_open(self, pot: str, quotes: dict[str, dict[str, float]], loop: str) -> list[str]:
+    async def _manage_open(self, quotes: dict[str, dict[str, float]], loop: str) -> list[str]:
         actions: list[str] = []
         for ticket in list(self.tracker.state["tickets"]):
-            if ticket.get("status") != "open" or ticket.get("pot") != pot:
+            if ticket.get("status") != "open":
                 continue
             q = quotes.get(ticket["ticker"])
             if not q:
@@ -193,6 +200,14 @@ class CampaignEngine:
             reason = flatten_reason(ticket, q["yes_bid"], q["yes_ask"])
             if is_daily_ticker(ticket["ticker"]):
                 reason = "wrong_universe_daily"
+            if not reason and ticket.get("model_prob") is not None:
+                idea = await self._rescore_held(ticket, q["yes_bid"], q["yes_ask"])
+                if idea is not None and self.playbook.edge_decayed(idea):
+                    reason = "edge_decay"
+                elif idea is None:
+                    market_now = held_bid(ticket["side"], q["yes_bid"], q["yes_ask"])
+                    if float(ticket["model_prob"]) - market_now < self.playbook.edge_decay_floor:
+                        reason = "edge_decay"
             if not reason:
                 continue
             sell_px = max(q["yes_bid"] if ticket["side"] == "yes" else q["yes_ask"], 0.01)
@@ -240,10 +255,9 @@ class CampaignEngine:
         ticket["exit_reason"] = reason
         ticket["exit_price"] = avg
         ticket["realized"] = round(pnl, 4)
-        pot = ticket["pot"]
-        self.tracker.state["pots"][pot]["realized"] = round(
-            float(self.tracker.state["pots"][pot]["realized"]) + pnl, 4
-        )
+        self.tracker.state["realized"] = round(float(self.tracker.state["realized"]) + pnl, 4)
+        if pnl < 0:
+            self.tracker.state["last_loss_at"] = datetime.now(timezone.utc).isoformat()
         mode = "LIVE" if self.live else "DRY"
         return f"{mode} flatten {ticket['ticker']} {ticket['side']} {reason} pnl {pnl:+.2f}"
 
@@ -271,6 +285,77 @@ class CampaignEngine:
                     out.append({"series": ticker, "event": event, "market": market})
         return out
 
+    async def _rescore_held(self, ticket: dict[str, Any], yes_bid: float, yes_ask: float):
+        asset = asset_by_key(ticket.get("asset_key"))
+        strike = ticket.get("strike")
+        spec_kind = ticket.get("spec_kind") or "greater"
+        if not asset or not strike:
+            return None
+        spec = parse_strike(
+            {
+                "strike_type": spec_kind,
+                "custom_strike": {
+                    "floor_strike": None if spec_kind in {"less", "less_or_equal"} else strike,
+                    "cap_strike": ticket.get("cap") or (strike if spec_kind in {"less", "less_or_equal", "range"} else None),
+                },
+            }
+        )
+        spots = await self.spots.prices_for([asset])
+        spot = spots.get(asset.key)
+        if not spot:
+            return None
+        secs = float(ticket.get("secs_left") or self.playbook.min_time_seconds)
+        close = parse_close_time(ticket.get("close_at"))
+        if close:
+            secs = seconds_until(close) or secs
+        hour_vol = await self.spots.hourly_vol(asset)
+        vol = annual_vol_from_hourly(hour_vol)
+        hours_left = max(secs, 1.0) / 3600.0
+        model_yes = price_threshold_prob(spec, spot, hours_to_years(hours_left), vol)
+        if model_yes is None:
+            return None
+        sigma = distance_in_sigma(spot, float(strike), hour_vol, hours_left)
+        return self.playbook.evaluate(
+            yes_bid=yes_bid,
+            yes_ask=yes_ask,
+            model_yes=model_yes,
+            sigma=sigma,
+            secs_left=secs,
+            equity=self._equity(),
+        )
+
+    async def _manage_rests(self) -> list[str]:
+        actions: list[str] = []
+        for rest in list(self.tracker.state.get("rests", [])):
+            if rest.get("status") != "open":
+                continue
+            ticker = rest.get("ticker") or ""
+            if is_daily_ticker(ticker):
+                actions.append(await self._cancel_rest(rest, "wrong_universe_daily"))
+                continue
+            try:
+                data = await self.kalshi.get_json(f"/markets/{ticker}")
+            except Exception:
+                continue
+            market = data.get("market") or data
+            yes_bid = parse_dollars(market.get("yes_bid_dollars")) or 0.0
+            yes_ask = parse_dollars(market.get("yes_ask_dollars")) or 0.0
+            idea = await self._rescore_held(rest, yes_bid, yes_ask)
+            if idea is not None and self.playbook.edge_decayed(idea):
+                actions.append(await self._cancel_rest(rest, "edge_decay"))
+        return [a for a in actions if a]
+
+    async def _cancel_rest(self, rest: dict[str, Any], reason: str) -> str:
+        if self.live and rest.get("order_id") and not rest.get("paper"):
+            try:
+                await self.kalshi.cancel_order(str(rest["order_id"]))
+            except httpx.HTTPStatusError as exc:
+                return f"LIVE cancel failed {rest.get('ticker')}: {exc}"
+        rest["status"] = "canceled"
+        rest["exit_reason"] = reason
+        mode = "LIVE" if self.live else "DRY"
+        return f"{mode} cancel rest {rest.get('ticker')} ({reason})"
+
     async def _score_market(self, row: dict[str, Any]) -> dict[str, Any] | None:
         market = row["market"]
         event = row["event"]
@@ -290,19 +375,21 @@ class CampaignEngine:
         spot = spots.get(asset.key)
         if not spot:
             return None
-        years = max((secs or 0) / (365.25 * 24 * 3600), 1e-8)
-        model_yes = price_threshold_prob(spec, spot, years, asset.annual_vol)
+        hour_vol = await self.spots.hourly_vol(asset)
+        vol = annual_vol_from_hourly(hour_vol)
+        hours_left = max(secs, 1.0) / 3600.0
+        model_yes = price_threshold_prob(spec, spot, hours_to_years(hours_left), vol)
         if model_yes is None:
             model_yes = 0.5 if spec.kind == "unknown" else (0.99 if spot >= strike else 0.01)
-        fav = classify_favorite(
-            spot=spot,
-            strike=strike,
+        sigma = distance_in_sigma(spot, float(strike), hour_vol, hours_left)
+        idea = self.playbook.evaluate(
             yes_bid=yes_bid,
             yes_ask=yes_ask,
             model_yes=model_yes,
+            sigma=sigma,
+            secs_left=secs,
+            equity=self._equity(),
         )
-        if not fav:
-            return None
         return {
             "series": series,
             "event": event,
@@ -310,32 +397,75 @@ class CampaignEngine:
             "asset": asset,
             "spot": spot,
             "strike": strike,
+            "spec_kind": spec.kind,
+            "cap": spec.cap,
             "secs": secs,
-            "favorite": fav,
+            "close": close.isoformat() if close else None,
+            "hourly_vol": hour_vol,
+            "model_yes": model_yes,
+            "sigma": sigma,
+            "idea": idea,
             "yes_bid": yes_bid,
             "yes_ask": yes_ask,
             "exchange_index": shard_for_series(series, event.get("title") or ""),
         }
 
-    async def _enter_taker(
+    def _yes_to_cost(self, side: str, yes_price: float) -> float:
+        return yes_price if side == "yes" else max(0.0, 1.0 - yes_price)
+
+    def _already_in(self, ticker: str) -> bool:
+        for ticket in self.tracker.state["tickets"]:
+            if ticket.get("status") == "open" and ticket.get("ticker") == ticker:
+                return True
+        for rest in self.tracker.state.get("rests", []):
+            if rest.get("status") == "open" and rest.get("ticker") == ticker:
+                return True
+        return False
+
+    def _ticket_fields(self, pick: dict[str, Any], idea, count: float, fill: float, order_id: str | None) -> dict[str, Any]:
+        return {
+            "id": str(uuid.uuid4()),
+            "loop": pick.get("loop") or "campaign",
+            "ticker": pick["market"]["ticker"],
+            "title": pick["market"].get("title") or pick["event"].get("title"),
+            "side": idea.side,
+            "fill": fill,
+            "count": count,
+            "cost": round(fill * count, 4),
+            "filled_at": datetime.now(timezone.utc).isoformat(),
+            "status": "open",
+            "exchange_index": pick["exchange_index"],
+            "order_id": order_id,
+            "model_prob": idea.model_prob,
+            "model_yes": pick["model_yes"],
+            "sigma": pick["sigma"],
+            "spot": pick["spot"],
+            "strike": pick["strike"],
+            "spec_kind": pick["spec_kind"],
+            "cap": pick.get("cap"),
+            "asset_key": pick["asset"].key,
+            "close_at": pick.get("close"),
+            "hourly_vol": pick.get("hourly_vol"),
+            "paper": not self.live,
+        }
+
+    async def _enter_limit(
         self,
-        pot: str,
         series_tickers: list[str],
         loop: str,
         skip_last: float,
         max_secs: float | None = None,
     ) -> list[str]:
         actions: list[str] = []
-        pot_state = self.tracker.state["pots"][pot]
-        if pot_state.get("stopped"):
-            return actions
-        cost = open_cost(self.tracker.state["tickets"], pot)
-        available = room(float(pot_state["bankroll"]), float(pot_state["realized"]), cost)
-        min_room = 0.50 if pot == POT_FIFTEEN else 1.0
-        if available < min_room:
-            return [f"{pot} room ${available:.2f} < ${min_room:.2f}; skip new {pot}."]
+        book = self.playbook
+        if self._open_idea_count() >= book.max_open_ideas:
+            return ["Already in two ideas. Sitting out."]
+        available = self._room()
+        if available < book.min_stake:
+            return [f"room ${available:.2f} < ${book.min_stake:.2f}; sitting out."]
 
         scored: list[dict[str, Any]] = []
+        sat_out = 0
         for row in await self._load_candidates(list(series_tickers)):
             item = await self._score_market(row)
             if not item:
@@ -344,185 +474,122 @@ class CampaignEngine:
                 continue
             if max_secs is not None and item["secs"] > max_secs:
                 continue
-            if not item["favorite"].is_real_or_better:
+            if item["series"] not in FIFTEEN_SERIES and item["secs"] > self.cfg.hourly_max_seconds:
                 continue
-            if not in_pay_band(item["favorite"]):
+            item["loop"] = loop
+            if item["idea"].sit_out:
+                sat_out += 1
                 continue
             scored.append(item)
-        scored.sort(key=lambda r: r["favorite"].model_side, reverse=True)
+        scored.sort(key=lambda r: r["idea"].net_edge, reverse=True)
         mode = "LIVE" if self.live else "DRY"
         placed = 0
         for pick in scored:
-            if placed >= 3:
+            if placed >= book.max_new_ideas_per_fire:
                 break
-            pot_state = self.tracker.state["pots"][pot]
-            available = room(
-                float(pot_state["bankroll"]),
-                float(pot_state["realized"]),
-                open_cost(self.tracker.state["tickets"], pot),
-            )
-            if available < min_room:
+            if self._open_idea_count() >= book.max_open_ideas:
                 break
-            fav = pick["favorite"]
-            budget = min(size_for_conviction(pot, fav.conviction), available)
-            if budget < 0.50:
-                continue
-            if already_there(fav) or not in_pay_band(fav):
-                continue
-            count = contracts_for_budget(budget, fav.take_price)
+            available = self._room()
+            if available < book.min_stake:
+                break
+            idea = pick["idea"]
             ticker = pick["market"]["ticker"]
-            book_side = "bid" if fav.side == "yes" else "ask"
+            if self._already_in(ticker):
+                continue
+            join = idea.join_price
+            cost_px = self._yes_to_cost(idea.side, join)
+            equity = self._equity()
+            budget = min(book.kelly_stake(equity, idea.model_prob, cost_px), available)
+            if budget < book.min_stake:
+                continue
+            if budget > book.risk_hard_max * equity:
+                budget = book.risk_hard_max * equity
+            count = contracts_for_budget(budget, cost_px)
+            cost = count * cost_px
+            if cost > book.risk_hard_max * equity + 1e-9:
+                count = contracts_for_budget(book.risk_hard_max * equity, cost_px)
+                cost = count * cost_px
+            if count <= 0 or cost < book.min_stake:
+                continue
+            book_side = "bid" if idea.side == "yes" else "ask"
             payload = {
                 "ticker": ticker,
                 "side": book_side,
                 "count": f"{count:.2f}",
-                "price": f"{fav.take_price:.4f}",
-                "time_in_force": "immediate_or_cancel",
-                "self_trade_prevention_type": "taker_at_cross",
-                "post_only": False,
-                "client_order_id": str(uuid.uuid4()),
-                "exchange_index": -1,
-            }
-            fill_count = 0.0
-            avg = fav.take_price
-            order_id = None
-            if self.live:
-                resp = await self.kalshi.create_order_v2(payload)
-                fill_count = float(resp.get("fill_count") or 0)
-                avg = float(resp.get("average_fill_price") or fav.take_price)
-                order_id = resp.get("order_id")
-            else:
-                fill_count = count
-            if fill_count <= 0:
-                actions.append(f"{mode} IOC {ticker} {fav.side} no fill")
-                continue
-            ticket = {
-                "id": str(uuid.uuid4()),
-                "pot": pot,
-                "ticker": ticker,
-                "side": fav.side,
-                "fill": avg,
-                "count": fill_count,
-                "cost": round(avg * fill_count, 4),
-                "filled_at": datetime.now(timezone.utc).isoformat(),
-                "status": "open",
-                "exchange_index": pick["exchange_index"],
-                "order_id": order_id,
-                "conviction": fav.conviction,
-                "paper": not self.live,
-            }
-            self.tracker.state["tickets"].append(ticket)
-            rest_msg = await self._rest_99(ticket, yes_bid=pick["yes_bid"])
-            actions.append(
-                f"{mode} IOC {fav.conviction} {fav.side} {ticker} {fill_count:.2f}@ {avg:.2f} · {fav.rationale}"
-            )
-            if rest_msg:
-                actions.append(rest_msg)
-            placed += 1
-        return actions
-
-    async def _rest_99(self, ticket: dict[str, Any], yes_bid: float | None = None) -> str | None:
-        if yes_bid is not None and yes_bid >= 0.99:
-            return None
-        side = "ask" if ticket["side"] == "yes" else "bid"
-        payload = {
-            "ticker": ticket["ticker"],
-            "side": side,
-            "count": f"{float(ticket['count']):.2f}",
-            "price": "0.9900",
-            "time_in_force": "good_till_canceled",
-            "self_trade_prevention_type": "maker",
-            "post_only": True,
-            "client_order_id": str(uuid.uuid4()),
-            "exchange_index": -1,
-        }
-        order_id = None
-        if self.live:
-            if ticket.get("paper") or not ticket.get("order_id"):
-                return None
-            try:
-                resp = await self.kalshi.create_order_v2(payload)
-            except httpx.HTTPStatusError as exc:
-                logger.warning("rest 99 failed on %s: %s", ticket["ticker"], exc)
-                return f"LIVE rest 99¢ skipped on {ticket['ticker']}: {exc}"
-            order_id = resp.get("order_id")
-        rest = {
-            "id": str(uuid.uuid4()),
-            "ticket_id": ticket["id"],
-            "ticker": ticket["ticker"],
-            "price": 0.99,
-            "status": "open",
-            "order_id": order_id,
-        }
-        self.tracker.state.setdefault("rests", []).append(rest)
-        mode = "LIVE" if self.live else "DRY"
-        return f"{mode} rest 99¢ post-only on {ticket['ticker']} (never rest under the bid)"
-
-    async def _enter_maker(self) -> list[str]:
-        actions: list[str] = []
-        series = list(FIFTEEN_SERIES)
-        if hourly_scan_window():
-            series.extend(await self._hourly_series())
-        scored: list[dict[str, Any]] = []
-        for row in await self._load_candidates(series):
-            item = await self._score_market(row)
-            if not item or item["secs"] < self.cfg.maker_skip_last_seconds:
-                continue
-            if item["series"] not in FIFTEEN_SERIES and item["secs"] > self.cfg.hourly_max_seconds:
-                continue
-            if not maker_join_ok(item["favorite"]):
-                continue
-            scored.append(item)
-        scored.sort(key=lambda r: r["favorite"].model_side, reverse=True)
-
-        for item in scored[:4]:
-            fav = item["favorite"]
-            ticker = item["market"]["ticker"]
-            # 15m series use fifteen pot; hourly tickers use hourly pot
-            pot = POT_HOURLY if item["series"] not in FIFTEEN_SERIES else POT_FIFTEEN
-            pot_state = self.tracker.state["pots"][pot]
-            if pot_state.get("stopped"):
-                continue
-            cost = open_cost(self.tracker.state["tickets"], pot)
-            available = room(float(pot_state["bankroll"]), float(pot_state["realized"]), cost)
-            min_room = 0.50 if pot == POT_FIFTEEN else 1.0
-            if available < min_room:
-                continue
-            budget = min(maker_size(fav.conviction), available)
-            count = contracts_for_budget(budget, fav.join_price)
-            book_side = "bid" if fav.side == "yes" else "ask"
-            payload = {
-                "ticker": ticker,
-                "side": book_side,
-                "count": f"{count:.2f}",
-                "price": f"{fav.join_price:.4f}",
+                "price": f"{join:.4f}",
                 "time_in_force": "good_till_canceled",
                 "self_trade_prevention_type": "maker",
                 "post_only": True,
                 "client_order_id": str(uuid.uuid4()),
                 "exchange_index": -1,
             }
+            fill_count = 0.0
+            avg_yes = join
             order_id = None
             if self.live:
-                resp = await self.kalshi.create_order_v2(payload)
+                try:
+                    resp = await self.kalshi.create_order_v2(payload)
+                except httpx.HTTPStatusError as exc:
+                    actions.append(f"LIVE limit failed {ticker}: {exc}")
+                    continue
+                fill_count = float(resp.get("fill_count") or 0)
+                avg_yes = float(resp.get("average_fill_price") or join)
                 order_id = resp.get("order_id")
+            fill_cost = self._yes_to_cost(idea.side, avg_yes)
             rest = {
                 "id": str(uuid.uuid4()),
-                "pot": pot,
+                "loop": loop,
                 "ticker": ticker,
-                "side": fav.side,
-                "price": fav.join_price,
+                "side": idea.side,
+                "price": join,
                 "count": count,
                 "status": "open",
                 "order_id": order_id,
-                "kind": "maker_join",
+                "kind": "limit_join",
+                "model_prob": idea.model_prob,
+                "model_yes": pick["model_yes"],
+                "sigma": pick["sigma"],
+                "spot": pick["spot"],
+                "strike": pick["strike"],
+                "spec_kind": pick["spec_kind"],
+                "cap": pick.get("cap"),
+                "asset_key": pick["asset"].key,
+                "close_at": pick.get("close"),
+                "hourly_vol": pick.get("hourly_vol"),
+                "paper": not self.live,
             }
-            self.tracker.state.setdefault("rests", []).append(rest)
-            mode = "LIVE" if self.live else "DRY"
-            actions.append(
-                f"{mode} maker rest {fav.side} {ticker} {count:.2f}@ {fav.join_price:.2f} ({fav.conviction})"
-            )
+            if fill_count > 0:
+                ticket = self._ticket_fields(pick, idea, fill_count, fill_cost, order_id)
+                self.tracker.state["tickets"].append(ticket)
+                actions.append(
+                    f"{mode} filled {idea.side} {ticker} {fill_count:.2f}@ {fill_cost:.2f} · {idea.rationale}"
+                )
+            else:
+                self.tracker.state.setdefault("rests", []).append(rest)
+                actions.append(
+                    f"{mode} post-only {idea.side} {ticker} {count:.2f}@ {join:.2f} · {idea.rationale}"
+                )
+            placed += 1
+        if placed == 0:
+            if scored:
+                actions.append("Filters passed but size/room blocked a ticket. Sitting out is a valid trade.")
+            elif sat_out:
+                actions.append("No idea passed the filters. Sitting out is a valid trade.")
+            else:
+                actions.append("Nothing in range. Sitting out is a valid trade.")
         return actions
+
+    async def _enter_maker(self) -> list[str]:
+        series = list(FIFTEEN_SERIES)
+        if hourly_scan_window():
+            series.extend(await self._hourly_series())
+        max_secs = None
+        return await self._enter_limit(
+            series,
+            "maker",
+            skip_last=self.cfg.maker_skip_last_seconds,
+            max_secs=max_secs,
+        )
 
 
 async def run_scheduler(engine: CampaignEngine) -> None:

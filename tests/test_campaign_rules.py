@@ -17,12 +17,12 @@ from kalshibot.campaign.universe import HOURLY_MAX_SECONDS, is_campaign_hourly_u
 
 def test_room_and_open_cost():
     tickets = [
-        {"pot": "fifteen", "status": "open", "cost": 1.75},
-        {"pot": "hourly", "status": "open", "cost": 3.0},
-        {"pot": "fifteen", "status": "flat", "cost": 2.0},
+        {"status": "open", "cost": 1.75},
+        {"status": "open", "cost": 3.0},
+        {"status": "flat", "cost": 2.0},
     ]
-    assert open_cost(tickets, "fifteen") == 1.75
-    assert room(5.0, 0.25, 1.75) == 3.5
+    assert open_cost(tickets) == 4.75
+    assert room(15.0, 0.25, 4.75) == 10.5
 
 
 def test_sizing_matches_grokbot():
@@ -103,7 +103,9 @@ def test_empty_tracker_file_starts_fresh(tmp_path):
     path.write_text("")
     tracker = Tracker(path)
     state = tracker.load()
-    assert state["pots"]["fifteen"]["bankroll"] == 5.0
+    assert state["bankroll"] == 15.0
+    assert state["realized"] == 0.0
+    assert "pots" not in state
     assert path.read_text().startswith("{")
 
 
@@ -150,19 +152,24 @@ def test_hourly_universe_ignores_daily_d_tickers():
     assert shard_for_series("KXBTC15M", "BTC 15 min") == 2
 
 
-def test_reset_fifteen_pot(tmp_path):
+def test_legacy_pots_fold_into_one_book(tmp_path):
     from kalshibot.campaign.tracker import Tracker
 
     path = tmp_path / "crypto-campaign.json"
+    path.write_text(
+        """
+        {
+          "pots": {
+            "fifteen": {"bankroll": 5.0, "realized": -1.72, "stopped": true, "stop_reason": "x"},
+            "hourly": {"bankroll": 10.0, "realized": -0.30, "stopped": false, "stop_reason": null}
+          },
+          "tickets": []
+        }
+        """
+    )
     tracker = Tracker(path)
-    tracker.load()
-    tracker.state["pots"]["fifteen"] = {
-        "bankroll": 5.0,
-        "realized": -1.7228,
-        "stopped": True,
-        "stop_reason": "realized -1.72 hit stop -0.50",
-    }
-    tracker.save()
-    pot = tracker.reset_pot("fifteen")
-    assert pot == {"bankroll": 5.0, "realized": 0.0, "stopped": False, "stop_reason": None}
-    assert tracker.load()["pots"]["fifteen"]["stopped"] is False
+    state = tracker.load()
+    assert "pots" not in state
+    assert state["bankroll"] == 15.0
+    assert state["realized"] == -2.02
+    assert "stopped" not in state

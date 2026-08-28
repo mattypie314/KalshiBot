@@ -14,10 +14,10 @@ on:
           - hourly
           - maker
         default: auto
-      reset_fifteen:
-        description: Reset the dead $5 15m pot (bankroll $5, realized $0, unstop)
-        type: boolean
-        default: false
+      bankroll:
+        description: "Set the campaign book in dollars. Leave blank to keep the saved book."
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -63,7 +63,7 @@ jobs:
       - name: Fire loops
         env:
           LOOP: ${{ github.event.inputs.loop || 'auto' }}
-          RESET_FIFTEEN: ${{ github.event.inputs.reset_fifteen || 'false' }}
+          BANKROLL: ${{ github.event.inputs.bankroll || '' }}
           KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
           KALSHI_LIVE: ${{ secrets.KALSHI_LIVE || 'false' }}
           TRACKER_PATH: /home/runner/.kalshi/crypto-campaign.json
