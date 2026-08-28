@@ -672,8 +672,25 @@
       "loop": "hourly",
       "message": "No idea passed the filters. Sitting out is a valid trade.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:45:11.524434+00:00",
+      "loop": "fifteen",
+      "message": "Kalshi cash $32.78 \u00b7 campaign equity $32.78.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-28T10:45:11.524441+00:00",
+      "loop": "fifteen",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
-  "updated_at": "2026-08-28T10:34:29.432907+00:00"
+  "kalshi_cash": 32.7771,
+  "sizing": {
+    "follow_kalshi_cash": true,
+    "bankroll_cap": null
+  },
+  "updated_at": "2026-08-28T10:45:11.524486+00:00"
 }
