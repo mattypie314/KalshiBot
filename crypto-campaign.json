@@ -2,9 +2,9 @@
   "pots": {
     "fifteen": {
       "bankroll": 5.0,
-      "realized": -1.7228,
-      "stopped": true,
-      "stop_reason": "realized -1.72 hit stop -0.50"
+      "realized": 0.0,
+      "stopped": false,
+      "stop_reason": null
     },
     "hourly": {
       "bankroll": 10.0,
