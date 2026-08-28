@@ -77,5 +77,17 @@ class Tracker:
         self.state["log"] = log[-200:]
         return entry
 
+    def reset_pot(self, name: str) -> dict[str, Any]:
+        bankroll = self.fifteen_bankroll if name == "fifteen" else self.hourly_bankroll
+        pot = {
+            "bankroll": bankroll,
+            "realized": 0.0,
+            "stopped": False,
+            "stop_reason": None,
+        }
+        self.state.setdefault("pots", {})[name] = pot
+        self.save()
+        return pot
+
     def snapshot(self) -> dict[str, Any]:
         return json.loads(json.dumps(self.state))
