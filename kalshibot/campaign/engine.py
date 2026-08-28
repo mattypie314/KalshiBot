@@ -8,8 +8,22 @@ from typing import Any
 import httpx
 
 from kalshibot.assets import asset_by_key, identify_asset
+from kalshibot.campaign.fifteen import (
+    enough_room,
+    fifteen_stake,
+    fifteen_stopped,
+    fifteen_window_id,
+    fifteen_working,
+    half_sigma_move,
+    in_fifteen_entry_window,
+    in_fifteen_revenge,
+    in_fifteen_settlement,
+    news_blackout,
+    pass_fail,
+    record_fifteen_result,
+)
 from kalshibot.campaign.playbook import playbook_from_settings
-from kalshibot.campaign.sizing import cash_from_balance, playbook_from_sizing
+from kalshibot.campaign.sizing import cash_from_balance, playbook_from_sizing, total_value_from_balance
 from kalshibot.campaign.rules import (
     classify_favorite,
     contracts_for_budget,
@@ -83,8 +97,12 @@ class CampaignEngine:
             "room": round(self._room(), 4),
             "equity": round(equity, 4),
             "kalshi_cash": state.get("kalshi_cash"),
+            "kalshi_total_value": state.get("kalshi_total_value"),
             "follow_kalshi_cash": bool(sizing.get("follow_kalshi_cash", True)),
             "maker_auto": bool(sizing.get("maker_auto", True)),
+            "fifteen_stopped": fifteen_stopped(state),
+            "fifteen_revenge": in_fifteen_revenge(state),
+            "fifteen_look": in_fifteen_entry_window(),
             "bankroll_cap": sizing.get("bankroll_cap"),
             "typical_idea": round(typical, 2),
             "open_tickets": tickets,
@@ -117,6 +135,17 @@ class CampaignEngine:
             return max(equity, 0.0)
         return float(self.tracker.state["bankroll"]) + float(self.tracker.state["realized"])
 
+    def _total_value(self) -> float:
+        """Kalshi portfolio_value (total_value). 15m sizes 3–5% of this, not just cash."""
+        tv = self.tracker.state.get("kalshi_total_value")
+        if self._follow_kalshi() and tv is not None:
+            value = float(tv)
+            cap = self._bankroll_cap()
+            if cap is not None:
+                value = min(value, cap)
+            return max(value, 0.0)
+        return self._equity()
+
     def _revenge_active(self) -> bool:
         raw = self.tracker.state.get("last_loss_at")
         if not raw:
@@ -146,9 +175,13 @@ class CampaignEngine:
             logger.warning("Kalshi balance failed: %s", exc)
             return f"Could not refresh Kalshi cash ({exc}); using the saved book."
         cash = cash_from_balance(payload)
+        total = total_value_from_balance(payload)
+        if cash is not None:
+            self.tracker.state["kalshi_cash"] = round(cash, 4)
+        if total is not None:
+            self.tracker.state["kalshi_total_value"] = round(total, 4)
         if cash is None:
             return None
-        self.tracker.state["kalshi_cash"] = round(cash, 4)
         return f"Kalshi cash ${cash:.2f} · campaign equity ${self._equity():.2f}."
 
     def _open_idea_count(self) -> int:
@@ -176,10 +209,12 @@ class CampaignEngine:
             actions.extend(await self._manage_open(quotes, loop))
             actions.extend(await self._manage_rests())
 
-            if self._revenge_active() and loop in {"fifteen", "hourly", "maker"}:
+            expect_ticket = False
+            if loop == "fifteen":
+                expect_ticket = in_fifteen_entry_window()
+                actions.extend(await self._fifteen_gate_and_enter(expect_ticket=expect_ticket))
+            elif self._revenge_active() and loop in {"hourly", "maker"}:
                 actions.append("Sit out: no revenge betting after a loss.")
-            elif loop == "fifteen":
-                actions.extend(await self._enter_limit(FIFTEEN_SERIES, loop, skip_last=self.cfg.skip_last_seconds))
             elif loop == "hourly":
                 series = await self._hourly_series()
                 actions.extend(
@@ -198,6 +233,11 @@ class CampaignEngine:
                 else:
                     actions.extend(await self._enter_maker())
 
+            if loop == "fifteen":
+                if not actions:
+                    actions.append("Nothing new.")
+                tell = [self._tell_fifteen(a, expect_ticket=expect_ticket) for a in actions]
+                return self._finish(loop, actions, quiet=True, tell=tell)
             if not actions:
                 actions.append("Nothing new.")
                 return self._finish(loop, actions, quiet=True)
@@ -230,11 +270,35 @@ class CampaignEngine:
         extra = "" if len(dropped) <= 6 else f" (+{len(dropped) - 6} more)"
         return [f"Cleared {len(dropped)} practice ticket(s) so live orders can start: {sample}{extra}."]
 
-    def _finish(self, loop: str, actions: list[str], quiet: bool) -> dict[str, Any]:
-        for action in actions:
-            self.tracker.note(action, loop, quiet=quiet and action == actions[-1])
+    def _finish(self, loop: str, actions: list[str], quiet: bool, tell: list[bool] | None = None) -> dict[str, Any]:
+        for i, action in enumerate(actions):
+            if tell is not None:
+                is_quiet = not tell[i] if i < len(tell) else True
+            else:
+                is_quiet = quiet and action == actions[-1]
+            self.tracker.note(action, loop, quiet=is_quiet)
         self.tracker.save()
         return {"loop": loop, "live": self.live, "actions": actions, "status": self.status()}
+
+    def _tell_fifteen(self, action: str, *, expect_ticket: bool) -> bool:
+        low = action.lower()
+        if "three 15m losses" in low or "15m loop stopped" in low:
+            return True
+        if "flatten" in low and "pnl -" in low:
+            return True
+        if " filled " in low:
+            return True
+        if not expect_ticket:
+            return False
+        if low.startswith("fail") or " fail " in low:
+            return True
+        if "revenge" in low or "not live" in low or "news candle" in low:
+            return True
+        if "below 3%" in low or "15m skipped" in low or "already stopped" in low:
+            return True
+        if "post-only" in low:
+            return True
+        return False
 
     async def _quotes_for_open_tickets(self) -> dict[str, dict[str, float]]:
         quotes: dict[str, dict[str, float]] = {}
@@ -258,7 +322,10 @@ class CampaignEngine:
             reason = flatten_reason(ticket, q["yes_bid"], q["yes_ask"])
             if is_daily_ticker(ticket["ticker"]):
                 reason = "wrong_universe_daily"
-            if ticket.get("kind") == "maker_spread":
+            if ticket.get("loop") == "fifteen":
+                if not reason:
+                    reason = await self._fifteen_manage_reason(ticket, q["yes_bid"], q["yes_ask"])
+            elif ticket.get("kind") == "maker_spread":
                 if not reason:
                     continue
             elif not reason and ticket.get("model_prob") is not None:
@@ -317,10 +384,18 @@ class CampaignEngine:
         ticket["exit_price"] = avg
         ticket["realized"] = round(pnl, 4)
         self.tracker.state["realized"] = round(float(self.tracker.state["realized"]) + pnl, 4)
-        if pnl < 0:
+        extra = ""
+        if ticket.get("loop") == "fifteen":
+            fair = ticket.get("model_yes")
+            if fair is not None:
+                extra = f" · fair {float(fair):.2f}"
+            stop_msg = record_fifteen_result(self.tracker.state, pnl)
+            if stop_msg:
+                extra = f"{extra}. {stop_msg}"
+        elif pnl < 0:
             self.tracker.state["last_loss_at"] = datetime.now(timezone.utc).isoformat()
         mode = "LIVE" if self.live else "DRY"
-        return f"{mode} flatten {ticket['ticker']} {ticket['side']} {reason} pnl {pnl:+.2f}"
+        return f"{mode} flatten {ticket['ticker']} {ticket['side']} {reason} pnl {pnl:+.2f}{extra}"
 
     async def _hourly_series(self) -> list[str]:
         tickers: list[str] = []
@@ -412,6 +487,11 @@ class CampaignEngine:
                     actions.append(await self._cancel_rest(rest, "favorite_flipped"))
                 elif rest.get("side") == "no" and mid > 0.55:
                     actions.append(await self._cancel_rest(rest, "favorite_flipped"))
+                continue
+            if rest.get("loop") == "fifteen":
+                reason = await self._fifteen_manage_reason(rest, yes_bid, yes_ask)
+                if reason:
+                    actions.append(await self._cancel_rest(rest, reason))
                 continue
             idea = await self._rescore_held(rest, yes_bid, yes_ask)
             if idea is not None and self.playbook.edge_decayed(idea):
@@ -520,7 +600,181 @@ class CampaignEngine:
             "close_at": pick.get("close"),
             "hourly_vol": pick.get("hourly_vol"),
             "paper": not self.live,
+            "kind": pick.get("kind"),
+            "window_id": pick.get("window_id"),
+            "pass_line": pick.get("pass_line"),
         }
+
+    async def _fifteen_manage_reason(self, held: dict[str, Any], yes_bid: float, yes_ask: float) -> str | None:
+        close = parse_close_time(held.get("close_at"))
+        secs = seconds_until(close) if close else 0.0
+        if close and secs is not None and secs <= 0:
+            return "settlement"
+        if held.get("rechecked"):
+            return None
+        asset = asset_by_key(held.get("asset_key"))
+        if not asset:
+            return None
+        spots = await self.spots.prices_for([asset])
+        spot = spots.get(asset.key)
+        if not spot:
+            return None
+        hour_vol = float(held.get("hourly_vol") or 0)
+        if not hour_vol:
+            hour_vol = await self.spots.hourly_vol(asset)
+        entry_spot = float(held.get("spot") or 0)
+        if not half_sigma_move(spot, entry_spot, hour_vol):
+            return None
+        held["rechecked"] = True
+        idea = await self._rescore_held(held, yes_bid, yes_ask)
+        if idea is None:
+            return "edge_died"
+        model_yes = idea.model_prob if idea.side == "yes" else (1.0 - idea.model_prob)
+        decision = pass_fail(
+            model_yes=model_yes,
+            yes_bid=yes_bid,
+            yes_ask=yes_ask,
+            secs_left=secs or 1.0,
+            sigma=idea.sigma,
+            news=news_blackout(),
+        )
+        if not decision.passed:
+            return "edge_died"
+        if decision.side != held.get("side"):
+            return "edge_flipped"
+        return None
+
+    async def _fifteen_gate_and_enter(self, *, expect_ticket: bool) -> list[str]:
+        state = self.tracker.state
+        if fifteen_stopped(state):
+            if expect_ticket:
+                return ["15m already stopped this session."]
+            return []
+        if in_fifteen_settlement():
+            return []
+        if self.cfg.kalshi_live and not self.kalshi.can_trade:
+            if expect_ticket:
+                return ["Book not live. 15m skipped."]
+            return []
+        if in_fifteen_revenge(state):
+            if expect_ticket:
+                return ["Skip this 15m window (revenge after a loss)."]
+            return []
+        if not expect_ticket:
+            return []
+        if fifteen_working(state):
+            return []
+        total = self._total_value()
+        room = self._room()
+        if not enough_room(room, total):
+            return [f"Room ${room:.2f} below 3% of bankroll ${total:.2f}. 15m skipped."]
+        return await self._enter_fifteen(news=news_blackout())
+
+    async def _enter_fifteen(self, *, news: str | None) -> list[str]:
+        """One post-only limit after a Pass. Never market, never IOC pay-through."""
+        from types import SimpleNamespace
+
+        scored: list[dict[str, Any]] = []
+        fails: list[str] = []
+        for row in await self._load_candidates(list(FIFTEEN_SERIES)):
+            item = await self._score_market(row)
+            if not item:
+                continue
+            decision = pass_fail(
+                model_yes=item["model_yes"],
+                yes_bid=item["yes_bid"],
+                yes_ask=item["yes_ask"],
+                secs_left=item["secs"],
+                sigma=item["sigma"],
+                news=news,
+            )
+            item["decision"] = decision
+            item["loop"] = "fifteen"
+            item["kind"] = "fifteen_edge"
+            item["window_id"] = fifteen_window_id()
+            item["pass_line"] = decision.line
+            if decision.passed:
+                scored.append(item)
+            else:
+                fails.append(decision.line)
+        scored.sort(key=lambda row: abs(row["decision"].edge), reverse=True)
+        if not scored:
+            return [fails[0] if fails else "FAIL no live 15m book"]
+
+        pick = None
+        for candidate in scored:
+            if not self._already_in(candidate["market"]["ticker"]):
+                pick = candidate
+                break
+        if pick is None:
+            return []
+
+        decision = pick["decision"]
+        ticker = pick["market"]["ticker"]
+        join = decision.join_price
+        cost_px = self._yes_to_cost(decision.side, join)
+        budget = fifteen_stake(self._total_value(), self._room())
+        count = contracts_for_budget(budget, cost_px)
+        cost = count * cost_px
+        if count <= 0 or cost < self.playbook.min_stake:
+            return [f"{decision.line} · size blocked. Sitting out."]
+
+        book_side = "bid" if decision.side == "yes" else "ask"
+        payload = {
+            "ticker": ticker,
+            "side": book_side,
+            "count": f"{count:.2f}",
+            "price": f"{join:.4f}",
+            "time_in_force": "good_till_canceled",
+            "self_trade_prevention_type": "maker",
+            "post_only": True,
+            "client_order_id": str(uuid.uuid4()),
+            "exchange_index": -1,
+        }
+        fill_count = 0.0
+        avg_yes = join
+        order_id = None
+        mode = "LIVE" if self.live else "DRY"
+        if self.live:
+            try:
+                resp = await self.kalshi.create_order_v2(payload)
+            except httpx.HTTPStatusError as exc:
+                return [f"LIVE limit failed {ticker}: {exc}"]
+            fill_count = float(resp.get("fill_count") or 0)
+            avg_yes = float(resp.get("average_fill_price") or join)
+            order_id = resp.get("order_id")
+        fill_cost = self._yes_to_cost(decision.side, avg_yes)
+        idea = SimpleNamespace(side=decision.side, model_prob=decision.model_prob)
+        rest = {
+            "id": str(uuid.uuid4()),
+            "loop": "fifteen",
+            "kind": "fifteen_edge",
+            "ticker": ticker,
+            "side": decision.side,
+            "price": join,
+            "count": count,
+            "status": "open",
+            "order_id": order_id,
+            "model_prob": decision.model_prob,
+            "model_yes": pick["model_yes"],
+            "sigma": pick["sigma"],
+            "spot": pick["spot"],
+            "strike": pick["strike"],
+            "spec_kind": pick["spec_kind"],
+            "cap": pick.get("cap"),
+            "asset_key": pick["asset"].key,
+            "close_at": pick.get("close"),
+            "hourly_vol": pick.get("hourly_vol"),
+            "window_id": pick["window_id"],
+            "pass_line": decision.line,
+            "paper": not self.live,
+        }
+        if fill_count > 0:
+            ticket = self._ticket_fields(pick, idea, fill_count, fill_cost, order_id)
+            self.tracker.state["tickets"].append(ticket)
+            return [f"{mode} filled {decision.side} {ticker} {fill_count:.2f}@ {fill_cost:.2f} · {decision.line}"]
+        self.tracker.state.setdefault("rests", []).append(rest)
+        return [f"{mode} post-only {decision.side} {ticker} {count:.2f}@ {join:.2f} · {decision.line}"]
 
     async def _enter_limit(
         self,
@@ -801,19 +1055,23 @@ async def run_scheduler(engine: CampaignEngine) -> None:
     from zoneinfo import ZoneInfo
 
     et = ZoneInfo("America/New_York")
-    last_fifteen = 0.0
     last_hourly = 0.0
+    last_fifteen_minute = None
     last_maker_minute = None
     while True:
         now = datetime.now(et)
         loop_time = asyncio.get_running_loop().time()
-        if loop_time - last_fifteen >= 180:
+        minute_key = (now.hour, now.minute)
+        look = in_fifteen_entry_window(now)
+        if look and minute_key != last_fifteen_minute:
             await engine.fire("fifteen")
-            last_fifteen = loop_time
+            last_fifteen_minute = minute_key
+        elif now.minute % 5 == 0 and minute_key != last_fifteen_minute:
+            await engine.fire("fifteen")
+            last_fifteen_minute = minute_key
         if loop_time - last_hourly >= 300:
             await engine.fire("hourly")
             last_hourly = loop_time
-        minute_key = (now.hour, now.minute)
         if in_maker_window(now) and minute_key != last_maker_minute:
             await engine.fire("maker")
             last_maker_minute = minute_key

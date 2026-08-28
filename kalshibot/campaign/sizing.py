@@ -53,6 +53,17 @@ def cash_from_balance(payload: dict[str, Any]) -> float | None:
     return None
 
 
+def total_value_from_balance(payload: dict[str, Any]) -> float | None:
+    """Kalshi portfolio_value is total account value (cents), not just available cash."""
+    raw = payload.get("portfolio_value_dollars")
+    if raw not in (None, ""):
+        return float(raw)
+    cents = payload.get("portfolio_value")
+    if isinstance(cents, (int, float)):
+        return float(cents) / 100.0
+    return cash_from_balance(payload)
+
+
 def playbook_from_sizing(cfg: object, sizing: dict[str, Any] | None) -> Playbook:
     book = playbook_from_settings(cfg)
     if not sizing:
