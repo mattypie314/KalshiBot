@@ -513,30 +513,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T09:53:56.152008+00:00",
-      "loop": "fifteen",
-      "message": "Nothing new.",
-      "tell_matt": false
-    },
-    {
-      "ts": "2026-08-28T09:54:05.589297+00:00",
-      "loop": "hourly",
-      "message": "Loop error (live): Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"invalid_order\",\"message\":\"invalid order\",\"details\":\"reduce_only can only be used with IoC orders\"}}",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:10:14.190170+00:00",
-      "loop": "fifteen",
-      "message": "Reset $5 fifteen pot to $5 / $0 / unstopped.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:10:16.325090+00:00",
-      "loop": "fifteen",
-      "message": "Loop error (live): Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"insufficient_balance\",\"message\":\"insufficient balance\"}}",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T10:10:28.066044+00:00",
       "loop": "hourly",
       "message": "LIVE flatten KXBTCD-26AUG2817-T75999.99 yes wrong_universe_daily pnl -0.05",
@@ -1711,6 +1687,30 @@
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T21:57:38.344400+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T21:57:38.346272+00:00",
+      "loop": "fifteen",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T21:57:38.348989+00:00",
+      "loop": "hourly",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T21:57:38.351574+00:00",
+      "loop": "maker",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1727,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": true
   },
-  "updated_at": "2026-08-29T21:19:20.758211+00:00"
+  "updated_at": "2026-08-29T21:57:38.351602+00:00"
 }
