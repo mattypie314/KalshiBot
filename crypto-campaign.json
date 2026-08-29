@@ -513,30 +513,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T05:19:43.639736+00:00",
-      "loop": "fifteen",
-      "message": "DRY rest 99\u00a2 post-only on KXSILVER15M-26AUG280130-30 (never rest under the bid)",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T05:19:51.779197+00:00",
-      "loop": "hourly",
-      "message": "DRY IOC fat yes KXETHD-26AUG2802-T1749.99 5.00@ 1.00 \u00b7 spot 2485.7950 vs target 1750.0000; book yes 0.99/1.00",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T05:19:51.779205+00:00",
-      "loop": "hourly",
-      "message": "DRY rest 99\u00a2 post-only on KXETHD-26AUG2802-T1749.99 (never rest under the bid)",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T05:19:51.779208+00:00",
-      "loop": "hourly",
-      "message": "DRY IOC fat yes KXETHD-26AUG2802-T1754.99 5.00@ 1.00 \u00b7 spot 2485.7950 vs target 1755.0000; book yes 0.99/1.00",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T05:19:51.779210+00:00",
       "loop": "hourly",
       "message": "DRY rest 99\u00a2 post-only on KXETHD-26AUG2802-T1754.99 (never rest under the bid)",
@@ -1711,6 +1687,30 @@
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T10:28:47.670873+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T10:28:47.672786+00:00",
+      "loop": "fifteen",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T10:28:47.675599+00:00",
+      "loop": "hourly",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T10:28:47.678271+00:00",
+      "loop": "maker",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1727,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": true
   },
-  "updated_at": "2026-08-29T07:48:30.846271+00:00"
+  "updated_at": "2026-08-29T10:28:47.678300+00:00"
 }
