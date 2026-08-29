@@ -494,7 +494,7 @@
       "side": "no",
       "price": 0.84,
       "count": 15.81,
-      "status": "open",
+      "status": "canceled",
       "order_id": "01a04b8d-5260-7956-9d06-5f3e8a80c5c8",
       "kind": "limit_join",
       "model_prob": 0.38652491919894527,
@@ -507,16 +507,11 @@
       "asset_key": "BNB",
       "close_at": "2026-08-29T04:00:00+00:00",
       "hourly_vol": 0.0025233976469663704,
-      "paper": false
+      "paper": false,
+      "exit_reason": "halted"
     }
   ],
   "log": [
-    {
-      "ts": "2026-08-28T05:19:43.639730+00:00",
-      "loop": "fifteen",
-      "message": "DRY IOC real yes KXSILVER15M-26AUG280130-30 2.36@ 0.74 \u00b7 spot 69.5750 vs target 68.7950; book yes 0.73/0.74",
-      "tell_matt": true
-    },
     {
       "ts": "2026-08-28T05:19:43.639736+00:00",
       "loop": "fifteen",
@@ -1686,6 +1681,36 @@
       "loop": "sizing",
       "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T07:48:30.663586+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T07:48:30.840462+00:00",
+      "loop": "fifteen",
+      "message": "LIVE cancel rest KXBNB-26AUG2900-B692 (halted)",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-29T07:48:30.840477+00:00",
+      "loop": "fifteen",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T07:48:30.843482+00:00",
+      "loop": "hourly",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T07:48:30.846241+00:00",
+      "loop": "maker",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1702,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": true
   },
-  "updated_at": "2026-08-29T03:36:00.231350+00:00"
+  "updated_at": "2026-08-29T07:48:30.846271+00:00"
 }
