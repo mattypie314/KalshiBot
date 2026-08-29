@@ -513,30 +513,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T05:53:50.382819+00:00",
-      "loop": "hourly",
-      "message": "DRY flatten KXETHD-26AUG2802-T1754.99 yes bid_99 pnl -0.05",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T05:53:50.382822+00:00",
-      "loop": "hourly",
-      "message": "DRY IOC fat yes KXXRPD-26AUG2802-T0.6599 5.00@ 1.00 \u00b7 spot 1.4233 vs target 0.6599; book yes 0.99/1.00",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T05:53:50.382824+00:00",
-      "loop": "hourly",
-      "message": "DRY rest 99\u00a2 post-only on KXXRPD-26AUG2802-T0.6599 (never rest under the bid)",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T05:53:50.382826+00:00",
-      "loop": "hourly",
-      "message": "DRY IOC fat yes KXXRPD-26AUG2802-T0.6799 4.90@ 1.00 \u00b7 spot 1.4233 vs target 0.6799; book yes 0.99/1.00",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T05:53:50.382829+00:00",
       "loop": "hourly",
       "message": "DRY rest 99\u00a2 post-only on KXXRPD-26AUG2802-T0.6799 (never rest under the bid)",
@@ -1711,6 +1687,30 @@
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T13:22:51.617071+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T13:22:51.618820+00:00",
+      "loop": "fifteen",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T13:22:51.621376+00:00",
+      "loop": "hourly",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T13:22:51.623826+00:00",
+      "loop": "maker",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1727,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": true
   },
-  "updated_at": "2026-08-29T10:38:45.045489+00:00"
+  "updated_at": "2026-08-29T13:22:51.623851+00:00"
 }
