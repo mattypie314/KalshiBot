@@ -97,6 +97,7 @@ def apply_phone_overrides(
     maker_auto: object = None,
     risk_percent: object = None,
     risk_cap_percent: object = None,
+    halted: object = None,
 ) -> list[str]:
     """Save iPhone/Actions knobs onto the campaign tracker. Blank means keep."""
     tracker.load()
@@ -106,6 +107,14 @@ def apply_phone_overrides(
     if follow_val is not None:
         sizing["follow_kalshi_cash"] = follow_val
         notes.append(f"Follow Kalshi cash: {'yes' if follow_val else 'no'}.")
+    halted_val = parse_yes_no(halted)
+    if halted_val is not None:
+        sizing["halted"] = halted_val
+        notes.append(
+            "Campaign HALTED until further notice. No new trades; resting orders get canceled."
+            if halted_val
+            else "Campaign is live again. New tickets are allowed."
+        )
     maker_auto_val = parse_yes_no(maker_auto)
     if maker_auto_val is not None:
         sizing["maker_auto"] = maker_auto_val
@@ -131,6 +140,7 @@ def apply_phone_overrides(
         notes.append(f"Risk cap set to {100 * cap:.1f}%.")
     sizing.setdefault("follow_kalshi_cash", True)
     sizing.setdefault("maker_auto", True)
+    sizing.setdefault("halted", False)
     tracker.state["sizing"] = sizing
     tracker.save()
     return notes

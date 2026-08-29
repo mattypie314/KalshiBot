@@ -403,6 +403,37 @@ def test_live_maker_is_post_only_never_ioc(tmp_path):
     assert payload["price"] == "0.8000"
 
 
+def test_halted_cancels_rests_and_skips_new_tickets(tmp_path):
+    engine = _engine(tmp_path, 35)
+    engine.tracker.state["sizing"] = {"halted": True, "maker_auto": True, "follow_kalshi_cash": True}
+    engine.tracker.state["rests"] = [
+        {
+            "id": "r1",
+            "loop": "hourly",
+            "ticker": "KXBNB-26AUG2900-B692",
+            "side": "no",
+            "status": "open",
+            "order_id": "ord-halt",
+            "paper": False,
+        }
+    ]
+    engine.tracker.save()
+    engine.live = True
+    engine.kalshi.cancel_order = AsyncMock()
+    engine._enter_limit = AsyncMock(side_effect=AssertionError("halted must not enter"))
+    engine._fifteen_gate_and_enter = AsyncMock(side_effect=AssertionError("halted must not enter"))
+    engine._quotes_for_open_tickets = AsyncMock(return_value={})
+    engine._manage_open = AsyncMock(return_value=[])
+    result = asyncio.run(engine.fire("hourly"))
+    asyncio.run(engine.aclose())
+    engine.kalshi.cancel_order.assert_awaited_once()
+    assert engine._enter_limit.await_count == 0
+    assert any("halted until further notice" in a for a in result["actions"])
+    assert result["status"]["halted"] is True
+    assert engine.tracker.state["rests"][0]["status"] == "canceled"
+    assert engine.tracker.state["rests"][0]["exit_reason"] == "halted"
+
+
 def test_maker_auto_off_skips_new_bids(tmp_path):
     engine = _engine(tmp_path, 35)
     engine.tracker.state["sizing"] = {"maker_auto": False, "follow_kalshi_cash": True}

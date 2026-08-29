@@ -37,7 +37,7 @@ Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 
 This is a separate routine from the 4–6% playbook. In the final 3 minutes, a confirmed favorite often sits at **taker break-even**. Taking the ask has no edge after fees. Resting a bid at 74–93¢ earns the spread (cents per fill, many fills). Never IOC. Size is still small-account (about 3% cap).
 
-After this is merged it **runs every 15-minute window by itself** (GitHub schedule). To stop it: **Actions → Kalshi campaign → Run workflow** and set `maker_auto` to **no**. To start again, set `maker_auto` to **yes**. Leave `keep` if you are only changing bankroll.
+After this is merged it **runs every 15-minute window by itself** (GitHub schedule). To stop everything: **Actions → Kalshi campaign → Run workflow** and set `halted` to **yes** (this is the default now). That cancels resting orders and blocks new tickets until you set `halted` to **no**. To stop only maker: set `maker_auto` to **no**. Leave `keep` if you are only changing bankroll.
 
 **Raising the book as it grows**
 
@@ -102,7 +102,7 @@ GitHub runs the campaign every 5 minutes after this pull request is merged.
 
 1. Merge this pull request.
 2. Open the repo **Actions** tab. If GitHub asks to enable workflows, tap Enable.
-3. Open **Kalshi campaign → Run workflow** on the latest `main`. Maker auto is already on. Set `maker_auto` to **no** when you want it to stop. Do not re-run an old red job.
+3. Open **Kalshi campaign → Run workflow** on the latest `main`. The book is **halted** by default until you set `halted` to **no**. Set `maker_auto` to **no** if you only want to stop last-3-min bids. Do not re-run an old red job.
 
 It stays in practice mode (DRY) until Kalshi secrets are under **Settings → Secrets and variables → Actions**: `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY` (the full .pem text), and `KALSHI_LIVE` set to `1`.
 

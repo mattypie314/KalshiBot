@@ -20,7 +20,7 @@ def _default_state(bankroll: float) -> dict[str, Any]:
         "fifteen_session_date": None,
         "fifteen_stopped_until": None,
         "fifteen_revenge_until": None,
-        "sizing": {"follow_kalshi_cash": True, "bankroll_cap": None, "maker_auto": True},
+        "sizing": {"follow_kalshi_cash": True, "bankroll_cap": None, "maker_auto": True, "halted": False},
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -83,6 +83,7 @@ class Tracker:
             sizing = {}
         sizing.setdefault("follow_kalshi_cash", True)
         sizing.setdefault("maker_auto", True)
+        sizing.setdefault("halted", False)
         self.state["sizing"] = sizing
         self.state.pop("pots", None)
         return self.state

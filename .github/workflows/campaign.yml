@@ -1,10 +1,11 @@
 name: Kalshi campaign
 
 on:
+  # Keep the clock running only so the next job can cancel leftover rests.
+  # New tickets stay off while HALTED defaults to yes. Resume later by running
+  # this workflow and setting halted=no (then we can put the old crons back).
   schedule:
     - cron: "*/5 * * * *"
-    - cron: "2,3,4,17,18,19,32,33,34,47,48,49 * * * *"
-    - cron: "12,13,14,27,28,29,42,43,44,57,58,59 * * * *"
   workflow_dispatch:
     inputs:
       loop:
@@ -16,6 +17,14 @@ on:
           - hourly
           - maker
         default: auto
+      halted:
+        description: "Shut the book down. yes = no new trades, cancel resting orders."
+        type: choice
+        options:
+          - keep
+          - "yes"
+          - "no"
+        default: "yes"
       bankroll:
         description: "Max dollars the bot may use. Leave blank to follow Kalshi cash / the saved book."
         type: string
@@ -89,6 +98,7 @@ jobs:
       - name: Fire loops
         env:
           LOOP: ${{ github.event.inputs.loop || 'auto' }}
+          HALTED: ${{ github.event.inputs.halted || 'yes' }}
           BANKROLL: ${{ github.event.inputs.bankroll || '' }}
           FOLLOW_KALSHI: ${{ github.event.inputs.follow_kalshi_cash || 'keep' }}
           MAKER_AUTO: ${{ github.event.inputs.maker_auto || 'keep' }}

@@ -100,6 +100,7 @@ class CampaignEngine:
             "kalshi_total_value": state.get("kalshi_total_value"),
             "follow_kalshi_cash": bool(sizing.get("follow_kalshi_cash", True)),
             "maker_auto": bool(sizing.get("maker_auto", True)),
+            "halted": bool(sizing.get("halted", False)),
             "fifteen_stopped": fifteen_stopped(state),
             "fifteen_revenge": in_fifteen_revenge(state),
             "fifteen_look": in_fifteen_entry_window(),
@@ -193,6 +194,9 @@ class CampaignEngine:
     def _maker_auto(self) -> bool:
         return bool((self.tracker.state.get("sizing") or {}).get("maker_auto", True))
 
+    def _halted(self) -> bool:
+        return bool((self.tracker.state.get("sizing") or {}).get("halted", False))
+
     async def fire(self, loop: str) -> dict[str, Any]:
         self.tracker.load()
         self._reload_playbook()
@@ -205,6 +209,16 @@ class CampaignEngine:
 
             if self.live:
                 actions.extend(self._drop_practice_tickets())
+
+            if self._halted():
+                quotes = await self._quotes_for_open_tickets()
+                actions.extend(await self._manage_open(quotes, loop))
+                actions.extend(await self._cancel_open_rests("halted"))
+                actions.append("Campaign halted until further notice. No new trades.")
+                if loop == "fifteen":
+                    tell = [self._tell_fifteen(a, expect_ticket=False) for a in actions]
+                    return self._finish(loop, actions, quiet=True, tell=tell)
+                return self._finish(loop, actions, quiet=False)
 
             quotes = await self._quotes_for_open_tickets()
             actions.extend(await self._manage_open(quotes, loop))
@@ -284,6 +298,8 @@ class CampaignEngine:
     def _tell_fifteen(self, action: str, *, expect_ticket: bool) -> bool:
         low = action.lower()
         if "three 15m losses" in low or "15m loop stopped" in low:
+            return True
+        if "halted until further notice" in low:
             return True
         if "flatten" in low and "pnl -" in low:
             return True
@@ -515,6 +531,13 @@ class CampaignEngine:
             idea = await self._rescore_held(rest, yes_bid, yes_ask)
             if idea is not None and self.playbook.edge_decayed(idea):
                 actions.append(await self._cancel_rest(rest, "edge_decay"))
+        return [a for a in actions if a]
+
+    async def _cancel_open_rests(self, reason: str) -> list[str]:
+        actions: list[str] = []
+        for rest in self.tracker.state.get("rests", []):
+            if rest.get("status") == "open":
+                actions.append(await self._cancel_rest(rest, reason))
         return [a for a in actions if a]
 
     async def _cancel_rest(self, rest: dict[str, Any], reason: str) -> str:

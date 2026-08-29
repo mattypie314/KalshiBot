@@ -20,6 +20,7 @@ async def main() -> None:
         maker_auto=os.environ.get("MAKER_AUTO"),
         risk_percent=os.environ.get("RISK_PERCENT"),
         risk_cap_percent=os.environ.get("RISK_CAP_PERCENT"),
+        halted=os.environ.get("HALTED"),
     )
     engine.playbook = playbook_from_sizing(engine.cfg, engine.tracker.state.get("sizing") or {})
     for note in notes:
