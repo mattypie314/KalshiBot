@@ -513,30 +513,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T06:05:52.777833+00:00",
-      "loop": "hourly",
-      "message": "DRY rest 99\u00a2 post-only on KXBNBD-26AUG2803-T519.99 (never rest under the bid)",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T06:05:52.777835+00:00",
-      "loop": "hourly",
-      "message": "DRY IOC fat yes KXBNBD-26AUG2803-T524.99 4.70@ 1.00 \u00b7 spot 712.7050 vs target 525.0000; book yes 0.99/1.00",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T06:05:52.777837+00:00",
-      "loop": "hourly",
-      "message": "DRY rest 99\u00a2 post-only on KXBNBD-26AUG2803-T524.99 (never rest under the bid)",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T07:10:20.590442+00:00",
-      "loop": "fifteen",
-      "message": "Nothing new.",
-      "tell_matt": false
-    },
-    {
       "ts": "2026-08-28T07:10:21.511751+00:00",
       "loop": "hourly",
       "message": "Loop error (still practice mode): Client error '404 Not Found' for url 'https://api.elections.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
@@ -1711,6 +1687,30 @@
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T18:36:30.436866+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T18:36:30.438832+00:00",
+      "loop": "fifteen",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T18:36:30.441607+00:00",
+      "loop": "hourly",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T18:36:30.444728+00:00",
+      "loop": "maker",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1727,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": true
   },
-  "updated_at": "2026-08-29T17:14:09.405864+00:00"
+  "updated_at": "2026-08-29T18:36:30.444758+00:00"
 }
