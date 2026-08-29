@@ -513,30 +513,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T10:10:28.066044+00:00",
-      "loop": "hourly",
-      "message": "LIVE flatten KXBTCD-26AUG2817-T75999.99 yes wrong_universe_daily pnl -0.05",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:10:28.066056+00:00",
-      "loop": "hourly",
-      "message": "LIVE flatten KXBTCD-26AUG2817-T75999.99 yes wrong_universe_daily pnl -0.05",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:10:28.066060+00:00",
-      "loop": "hourly",
-      "message": "LIVE IOC KXBTC-26AUG2807-B79450 no no fill",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:10:28.066063+00:00",
-      "loop": "hourly",
-      "message": "LIVE IOC KXBTC-26AUG2807-B79350 no no fill",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T10:10:28.066065+00:00",
       "loop": "hourly",
       "message": "LIVE IOC KXBTC-26AUG2807-B79250 no no fill",
@@ -1711,6 +1687,30 @@
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T23:25:05.028675+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T23:25:05.030103+00:00",
+      "loop": "fifteen",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T23:25:05.032221+00:00",
+      "loop": "hourly",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T23:25:05.034230+00:00",
+      "loop": "maker",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1727,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": true
   },
-  "updated_at": "2026-08-29T21:57:38.351602+00:00"
+  "updated_at": "2026-08-29T23:25:05.034251+00:00"
 }
