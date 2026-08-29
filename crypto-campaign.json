@@ -513,30 +513,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T10:10:28.066065+00:00",
-      "loop": "hourly",
-      "message": "LIVE IOC KXBTC-26AUG2807-B79250 no no fill",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:10:28.066068+00:00",
-      "loop": "hourly",
-      "message": "LIVE IOC KXSOLE-26AUG2807-B105.625 no no fill",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:10:28.066070+00:00",
-      "loop": "hourly",
-      "message": "LIVE IOC KXETH-26AUG2807-B2497 no no fill",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:10:28.066074+00:00",
-      "loop": "hourly",
-      "message": "LIVE IOC KXBTC-26AUG2807-B79150 no no fill",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T10:10:28.066077+00:00",
       "loop": "hourly",
       "message": "LIVE IOC KXSOLE-26AUG2807-B105.375 no no fill",
@@ -1711,6 +1687,30 @@
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T23:28:43.929821+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T23:28:43.931317+00:00",
+      "loop": "fifteen",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T23:28:43.933430+00:00",
+      "loop": "hourly",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T23:28:43.935473+00:00",
+      "loop": "maker",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1727,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": true
   },
-  "updated_at": "2026-08-29T23:25:05.034251+00:00"
+  "updated_at": "2026-08-29T23:28:43.935496+00:00"
 }
