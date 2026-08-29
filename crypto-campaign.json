@@ -513,30 +513,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T08:33:11.073334+00:00",
-      "loop": "fifteen",
-      "message": "Nothing new.",
-      "tell_matt": false
-    },
-    {
-      "ts": "2026-08-28T08:33:11.971018+00:00",
-      "loop": "hourly",
-      "message": "Loop error (still practice mode): Client error '404 Not Found' for url 'https://api.elections.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T08:49:16.644662+00:00",
-      "loop": "fifteen",
-      "message": "Nothing new.",
-      "tell_matt": false
-    },
-    {
-      "ts": "2026-08-28T08:49:17.547059+00:00",
-      "loop": "hourly",
-      "message": "Loop error (still practice mode): Client error '404 Not Found' for url 'https://api.elections.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T09:31:34.914864+00:00",
       "loop": "fifteen",
       "message": "Tell Matt: fifteen pot stopped (realized -1.72 hit stop -0.50).",
@@ -1711,6 +1687,30 @@
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T21:16:34.842315+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T21:16:34.844233+00:00",
+      "loop": "fifteen",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T21:16:34.846892+00:00",
+      "loop": "hourly",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T21:16:34.849583+00:00",
+      "loop": "maker",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1727,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": true
   },
-  "updated_at": "2026-08-29T19:44:20.001092+00:00"
+  "updated_at": "2026-08-29T21:16:34.849612+00:00"
 }
