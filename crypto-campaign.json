@@ -1680,6 +1680,12 @@
       "loop": "maker",
       "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-29T03:36:00.231350+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1693,7 +1699,8 @@
     "follow_kalshi_cash": false,
     "bankroll_cap": null,
     "maker_auto": false,
-    "risk_percent": 8.0
+    "risk_percent": 8.0,
+    "halted": true
   },
-  "updated_at": "2026-08-29T03:25:48.927140+00:00"
+  "updated_at": "2026-08-29T03:36:00.231350+00:00"
 }
