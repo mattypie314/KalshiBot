@@ -513,24 +513,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T12:06:00.813267+00:00",
-      "loop": "hourly",
-      "message": "Already in two ideas. Sitting out.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T12:06:02.308801+00:00",
-      "loop": "maker",
-      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T12:06:02.308811+00:00",
-      "loop": "maker",
-      "message": "LIVE cancel failed KXGOLD15M-26AUG280700-00: Client error '404 Not Found' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders/01a047fb-5200-7bea-ae7e-ebf3bb5a6180'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404 Kalshi said: {\"error\":{\"code\":\"not_found\",\"message\":\"not found\"}}",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T12:06:02.308816+00:00",
       "loop": "maker",
       "message": "LIVE cancel failed KXXRP-26AUG2807-B1.4099500: Client error '404 Not Found' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders/01a047fb-7528-7b8d-96ed-6ca7c0744de1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404 Kalshi said: {\"error\":{\"code\":\"not_found\",\"message\":\"not found\"}}",
@@ -1711,6 +1693,24 @@
       "loop": "maker",
       "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T22:08:12.611797+00:00",
+      "loop": "fifteen",
+      "message": "Nothing new.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-30T22:08:21.343209+00:00",
+      "loop": "hourly",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T22:08:21.346051+00:00",
+      "loop": "maker",
+      "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1727,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-08-30T21:22:51.513898+00:00"
+  "updated_at": "2026-08-30T22:08:21.346081+00:00"
 }
