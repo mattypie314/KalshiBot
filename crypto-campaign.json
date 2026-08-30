@@ -536,24 +536,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T12:32:13.164838+00:00",
-      "loop": "fifteen",
-      "message": "LIVE cancel failed KXXRP-26AUG2807-B1.4099500: Client error '404 Not Found' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders/01a047fb-7528-7b8d-96ed-6ca7c0744de1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404 Kalshi said: {\"error\":{\"code\":\"not_found\",\"message\":\"not found\"}}",
-      "tell_matt": false
-    },
-    {
-      "ts": "2026-08-28T12:59:24.420418+00:00",
-      "loop": "sizing",
-      "message": "Follow Kalshi cash: yes.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T12:59:24.420439+00:00",
-      "loop": "sizing",
-      "message": "Maker auto is ON. It will rest 74\u201393\u00a2 bids every 15-minute window until you set this to no.",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T12:59:25.144127+00:00",
       "loop": "fifteen",
       "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
@@ -1734,6 +1716,24 @@
       "loop": "maker",
       "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T22:43:36.016212+00:00",
+      "loop": "fifteen",
+      "message": "Nothing new.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-30T22:43:44.811621+00:00",
+      "loop": "hourly",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T22:43:44.814562+00:00",
+      "loop": "maker",
+      "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1750,5 +1750,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-08-30T22:37:15.154651+00:00"
+  "updated_at": "2026-08-30T22:43:44.814624+00:00"
 }
