@@ -513,30 +513,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T11:02:48.841445+00:00",
-      "loop": "hourly",
-      "message": "LIVE cancel failed KXXRP-26AUG2807-B1.4099500: Client error '404 Not Found' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders/01a047fb-7528-7b8d-96ed-6ca7c0744de1'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404 Kalshi said: {\"error\":{\"code\":\"not_found\",\"message\":\"not found\"}}",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T11:02:48.841448+00:00",
-      "loop": "hourly",
-      "message": "Already in two ideas. Sitting out.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T11:37:39.439411+00:00",
-      "loop": "sizing",
-      "message": "Follow Kalshi cash: yes.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T11:37:39.439425+00:00",
-      "loop": "sizing",
-      "message": "Maker auto is ON. It will rest 74\u201393\u00a2 bids every 15-minute window until you set this to no.",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T11:37:40.718717+00:00",
       "loop": "fifteen",
       "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
@@ -1711,6 +1687,30 @@
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T07:24:27.249683+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T07:24:27.253363+00:00",
+      "loop": "fifteen",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T07:24:27.257420+00:00",
+      "loop": "hourly",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T07:24:27.260299+00:00",
+      "loop": "maker",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1727,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": true
   },
-  "updated_at": "2026-08-30T07:18:17.666166+00:00"
+  "updated_at": "2026-08-30T07:24:27.260329+00:00"
 }
