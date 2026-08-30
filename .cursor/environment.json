@@ -1,0 +1,11 @@
+{
+  "name": "KalshiBot",
+  "install": "pip3 install --break-system-packages -r requirements.txt",
+  "start": "python3 -m kalshibot serve --host 0.0.0.0 --port 8000",
+  "ports": [
+    {
+      "name": "research dashboard",
+      "port": 8000
+    }
+  ]
+}
