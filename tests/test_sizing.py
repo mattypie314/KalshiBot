@@ -55,6 +55,20 @@ def test_phone_override_saves_on_tracker(tmp_path):
     assert any("HALTED" in n for n in notes)
 
 
+def test_phone_override_resume_and_keep_halt(tmp_path):
+    from kalshibot.campaign.tracker import Tracker
+
+    path = tmp_path / "crypto-campaign.json"
+    tracker = Tracker(path, 15.0)
+    apply_phone_overrides(tracker, halted="yes")
+    notes = apply_phone_overrides(tracker, halted="no")
+    state = tracker.load()
+    assert state["sizing"]["halted"] is False
+    assert any("live again" in n for n in notes)
+    apply_phone_overrides(tracker, halted="keep")
+    assert tracker.load()["sizing"]["halted"] is False
+
+
 def test_playbook_risk_percent_becomes_the_cap():
     book = playbook_from_sizing(Settings(), {"risk_percent": 5})
     assert book.typical_risk_max == 0.05
