@@ -51,27 +51,34 @@ function render() {
 
   board.innerHTML = rows
     .map((row) => {
-      const edgeClass = row.edge >= 0.02 ? "pos" : row.edge < 0 ? "neg" : "";
+      const edgeClass = row.edge >= 0.02 ? "pos" : row.edge < 0 ? "neg" : "flat";
+      const sideClass = row.side === "YES" ? "yes" : row.side === "NO" ? "no" : "";
       return `
         <article class="card">
-          <div>
+          <div class="card-head">
             <div class="event">${escapeHtml(row.event_title)}</div>
-            <div class="sub">${escapeHtml(row.subtitle || row.market_title)} · ${escapeHtml(row.market_ticker)}</div>
-            <div class="muted">Closes ${closeLabel(row.close_time)}${row.spot != null ? ` · spot ${formatSpot(row.spot)}` : ""}</div>
+            <div class="edge-pill ${edgeClass}">
+              <span class="edge-val">${cents(row.edge)}</span>
+              <span class="side ${sideClass}">${escapeHtml(row.side)}</span>
+            </div>
           </div>
-          <div>
-            <div class="label">Market</div>
-            <div class="num">${pct(row.market_prob)}</div>
+          <div class="sub">${escapeHtml(row.subtitle || row.market_title)}</div>
+          <div class="stat-strip">
+            <div class="stat">
+              <span class="label">Market</span>
+              <span class="num">${pct(row.market_prob)}</span>
+            </div>
+            <div class="stat">
+              <span class="label">Model</span>
+              <span class="num">${pct(row.model_prob)}</span>
+            </div>
+            <div class="stat">
+              <span class="label">Closes</span>
+              <span class="num">${closeLabel(row.close_time)}</span>
+            </div>
+            ${row.spot != null ? `<div class="stat"><span class="label">Spot</span><span class="num">${formatSpot(row.spot)}</span></div>` : ""}
           </div>
-          <div>
-            <div class="label">Bot</div>
-            <div class="num">${pct(row.model_prob)}</div>
-          </div>
-          <div>
-            <div class="label">Edge</div>
-            <div class="num ${edgeClass}">${cents(row.edge)}<span class="side">${escapeHtml(row.side)}</span></div>
-          </div>
-          <div class="why">${escapeHtml(row.rationale)} · vol24 ${Number(row.volume_24h).toLocaleString()}</div>
+          <div class="why">${escapeHtml(row.rationale)}</div>
         </article>`;
     })
     .join("");
