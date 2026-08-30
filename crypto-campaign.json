@@ -513,30 +513,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T10:45:11.524434+00:00",
-      "loop": "fifteen",
-      "message": "Kalshi cash $32.78 \u00b7 campaign equity $32.78.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:45:11.524441+00:00",
-      "loop": "fifteen",
-      "message": "No idea passed the filters. Sitting out is a valid trade.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:47:28.544527+00:00",
-      "loop": "fifteen",
-      "message": "Kalshi cash $32.78 \u00b7 campaign equity $32.78.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T10:47:28.544542+00:00",
-      "loop": "fifteen",
-      "message": "LIVE post-only yes KXGOLD15M-26AUG280700-00 8.19@ 0.32 \u00b7 fair 0.99 vs mid 0.33 \u00b7 net +65.0% after fees \u00b7 13.18\u03c3 \u00b7 spread 0.01",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T10:47:37.913867+00:00",
       "loop": "hourly",
       "message": "Kalshi cash $32.78 \u00b7 campaign equity $32.78.",
@@ -1711,6 +1687,30 @@
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T01:35:38.365535+00:00",
+      "loop": "sizing",
+      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T01:35:38.367414+00:00",
+      "loop": "fifteen",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T01:35:38.370110+00:00",
+      "loop": "hourly",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-30T01:35:38.372748+00:00",
+      "loop": "maker",
+      "message": "Campaign halted until further notice. No new trades.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1727,5 +1727,5 @@
     "risk_percent": 8.0,
     "halted": true
   },
-  "updated_at": "2026-08-30T01:31:05.431612+00:00"
+  "updated_at": "2026-08-30T01:35:38.372777+00:00"
 }
