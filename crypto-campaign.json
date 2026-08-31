@@ -563,7 +563,7 @@
       "side": "no",
       "price": 0.6,
       "count": 6.32,
-      "status": "open",
+      "status": "canceled",
       "order_id": "01a0554f-4308-76b7-9ae1-48686c8c0578",
       "kind": "limit_join",
       "model_prob": 0.7234093473566816,
@@ -576,28 +576,11 @@
       "asset_key": "ETH",
       "close_at": "2026-08-31T01:00:00+00:00",
       "hourly_vol": 0.009336663472802017,
-      "paper": false
+      "paper": false,
+      "exit_reason": "expired"
     }
   ],
   "log": [
-    {
-      "ts": "2026-08-28T15:05:12.254763+00:00",
-      "loop": "maker",
-      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T15:05:12.254770+00:00",
-      "loop": "maker",
-      "message": "Maker window closed; stay quiet.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T17:28:37.169704+00:00",
-      "loop": "fifteen",
-      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
-      "tell_matt": false
-    },
     {
       "ts": "2026-08-28T17:28:45.547594+00:00",
       "loop": "hourly",
@@ -1779,6 +1762,24 @@
       "loop": "maker",
       "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T05:53:49.703308+00:00",
+      "loop": "fifteen",
+      "message": "LIVE cancel rest KXETH-26AUG3021-B2432 (expired)",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-31T05:53:58.062862+00:00",
+      "loop": "hourly",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T05:53:58.065828+00:00",
+      "loop": "maker",
+      "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1795,5 +1796,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-08-31T00:54:13.482729+00:00"
+  "updated_at": "2026-08-31T05:53:58.065859+00:00"
 }
