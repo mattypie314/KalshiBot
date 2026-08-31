@@ -532,33 +532,31 @@
       "hourly_vol": 0.0069860322816758256,
       "paper": false,
       "exit_reason": "edge_decay"
+    },
+    {
+      "id": "a02b2d2a-83de-4464-9484-b8bf6db9a457",
+      "loop": "hourly",
+      "ticker": "KXBTC-26AUG3021-B78150",
+      "side": "yes",
+      "price": 0.05,
+      "count": 19.2,
+      "status": "open",
+      "order_id": "01a0554e-1640-7a19-9001-f4c50d234571",
+      "kind": "limit_join",
+      "model_prob": 0.13717907447421535,
+      "model_yes": 0.13717907447421535,
+      "sigma": -0.8142413098099167,
+      "spot": 77976.515,
+      "strike": 78100.0,
+      "spec_kind": "range",
+      "cap": 78199.99,
+      "asset_key": "BTC",
+      "close_at": "2026-08-31T01:00:00+00:00",
+      "hourly_vol": 0.005660184843677436,
+      "paper": false
     }
   ],
   "log": [
-    {
-      "ts": "2026-08-28T12:59:34.240798+00:00",
-      "loop": "hourly",
-      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T12:59:34.240806+00:00",
-      "loop": "hourly",
-      "message": "Nothing in range. Sitting out is a valid trade.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T12:59:44.504221+00:00",
-      "loop": "maker",
-      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T12:59:44.504240+00:00",
-      "loop": "maker",
-      "message": "No 74\u201393\u00a2 favorite in the last 3 minutes. Sitting out is a valid trade.",
-      "tell_matt": true
-    },
     {
       "ts": "2026-08-28T15:05:03.602291+00:00",
       "loop": "fifteen",
@@ -1734,6 +1732,30 @@
       "loop": "maker",
       "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T00:52:47.903520+00:00",
+      "loop": "fifteen",
+      "message": "Nothing new.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-31T00:52:56.157835+00:00",
+      "loop": "hourly",
+      "message": "LIVE limit failed KXBTC-26AUG3021-B77950: Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"invalid_order\",\"message\":\"invalid order\",\"details\":\"post only cross\"}}",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T00:52:56.157850+00:00",
+      "loop": "hourly",
+      "message": "LIVE post-only yes KXBTC-26AUG3021-B78150 19.20@ 0.05 \u00b7 fair 0.14 vs mid 0.06 \u00b7 net +7.9% after fees \u00b7 -0.81\u03c3 \u00b7 spread 0.01",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T00:52:56.566210+00:00",
+      "loop": "maker",
+      "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1750,5 +1772,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-08-31T00:29:16.923648+00:00"
+  "updated_at": "2026-08-31T00:52:56.566261+00:00"
 }
