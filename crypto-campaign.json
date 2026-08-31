@@ -676,24 +676,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-28T18:57:07.130422+00:00",
-      "loop": "fifteen",
-      "message": "LIVE cancel rest KXETH-26AUG2814-B2442 (expired)",
-      "tell_matt": false
-    },
-    {
-      "ts": "2026-08-28T18:57:15.818468+00:00",
-      "loop": "hourly",
-      "message": "Kalshi cash $32.56 \u00b7 campaign equity $32.56.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T18:57:15.818478+00:00",
-      "loop": "hourly",
-      "message": "Nothing in range. Sitting out is a valid trade.",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-28T18:57:15.849036+00:00",
       "loop": "maker",
       "message": "Kalshi cash $32.56 \u00b7 campaign equity $32.56.",
@@ -1874,6 +1856,24 @@
       "loop": "maker",
       "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T14:29:23.872000+00:00",
+      "loop": "fifteen",
+      "message": "Nothing new.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-31T14:29:31.796264+00:00",
+      "loop": "hourly",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T14:29:31.799374+00:00",
+      "loop": "maker",
+      "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1890,5 +1890,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-08-31T14:27:07.999444+00:00"
+  "updated_at": "2026-08-31T14:29:31.799405+00:00"
 }
