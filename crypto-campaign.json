@@ -540,7 +540,7 @@
       "side": "yes",
       "price": 0.05,
       "count": 19.2,
-      "status": "open",
+      "status": "canceled",
       "order_id": "01a0554e-1640-7a19-9001-f4c50d234571",
       "kind": "limit_join",
       "model_prob": 0.13717907447421535,
@@ -553,28 +553,33 @@
       "asset_key": "BTC",
       "close_at": "2026-08-31T01:00:00+00:00",
       "hourly_vol": 0.005660184843677436,
+      "paper": false,
+      "exit_reason": "edge_decay"
+    },
+    {
+      "id": "8bdf94e6-78bf-4cba-93c5-9bc5e2a14401",
+      "loop": "hourly",
+      "ticker": "KXETH-26AUG3021-B2432",
+      "side": "no",
+      "price": 0.6,
+      "count": 6.32,
+      "status": "open",
+      "order_id": "01a0554f-4308-76b7-9ae1-48686c8c0578",
+      "kind": "limit_join",
+      "model_prob": 0.7234093473566816,
+      "model_yes": 0.2765906526433184,
+      "sigma": 0.3597647643643553,
+      "spot": 2432.535,
+      "strike": 2430.0,
+      "spec_kind": "range",
+      "cap": 2434.99,
+      "asset_key": "ETH",
+      "close_at": "2026-08-31T01:00:00+00:00",
+      "hourly_vol": 0.009336663472802017,
       "paper": false
     }
   ],
   "log": [
-    {
-      "ts": "2026-08-28T15:05:03.602291+00:00",
-      "loop": "fifteen",
-      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
-      "tell_matt": false
-    },
-    {
-      "ts": "2026-08-28T15:05:12.224968+00:00",
-      "loop": "hourly",
-      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T15:05:12.224978+00:00",
-      "loop": "hourly",
-      "message": "No idea passed the filters. Sitting out is a valid trade.",
-      "tell_matt": true
-    },
     {
       "ts": "2026-08-28T15:05:12.254763+00:00",
       "loop": "maker",
@@ -1756,6 +1761,24 @@
       "loop": "maker",
       "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T00:54:04.732454+00:00",
+      "loop": "fifteen",
+      "message": "LIVE cancel rest KXBTC-26AUG3021-B78150 (edge_decay)",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-31T00:54:13.147822+00:00",
+      "loop": "hourly",
+      "message": "LIVE post-only no KXETH-26AUG3021-B2432 6.32@ 0.60 \u00b7 fair 0.72 vs mid 0.41 \u00b7 net +29.6% after fees \u00b7 0.36\u03c3 \u00b7 spread 0.04",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T00:54:13.482680+00:00",
+      "loop": "maker",
+      "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1772,5 +1795,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-08-31T00:52:56.566261+00:00"
+  "updated_at": "2026-08-31T00:54:13.482729+00:00"
 }
