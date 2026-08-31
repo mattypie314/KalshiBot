@@ -578,27 +578,31 @@
       "hourly_vol": 0.009336663472802017,
       "paper": false,
       "exit_reason": "expired"
+    },
+    {
+      "id": "725b2888-7541-4840-8902-23618cc3cab8",
+      "loop": "hourly",
+      "ticker": "KXBNB-26AUG3103-B687",
+      "side": "no",
+      "price": 0.89,
+      "count": 6.82,
+      "status": "open",
+      "order_id": "01a0568c-62a0-783f-a30b-b7c3df1863fc",
+      "kind": "limit_join",
+      "model_prob": 0.17428018452621108,
+      "model_yes": 0.8257198154737889,
+      "sigma": 1.0189200242457672,
+      "spot": 686.65,
+      "strike": 685.0,
+      "spec_kind": "range",
+      "cap": 689.99,
+      "asset_key": "BNB",
+      "close_at": "2026-08-31T07:00:00+00:00",
+      "hourly_vol": 0.004152957378598374,
+      "paper": false
     }
   ],
   "log": [
-    {
-      "ts": "2026-08-28T17:28:45.547594+00:00",
-      "loop": "hourly",
-      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T17:28:45.547608+00:00",
-      "loop": "hourly",
-      "message": "LIVE post-only no KXXRP-26AUG2814-B1.3899500 11.77@ 0.74 \u00b7 fair 0.46 vs mid 0.27 \u00b7 net +18.1% after fees \u00b7 0.84\u03c3 \u00b7 spread 0.03",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T17:28:48.323889+00:00",
-      "loop": "maker",
-      "message": "Kalshi cash $38.27 \u00b7 campaign equity $38.27.",
-      "tell_matt": true
-    },
     {
       "ts": "2026-08-28T17:28:48.323898+00:00",
       "loop": "maker",
@@ -1780,6 +1784,24 @@
       "loop": "maker",
       "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T06:40:28.521705+00:00",
+      "loop": "fifteen",
+      "message": "Nothing new.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-31T06:40:36.491156+00:00",
+      "loop": "hourly",
+      "message": "LIVE post-only no KXBNB-26AUG3103-B687 6.82@ 0.89 \u00b7 fair 0.17 vs mid 0.11 \u00b7 net +5.2% after fees \u00b7 1.02\u03c3 \u00b7 spread 0.01",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T06:40:36.815844+00:00",
+      "loop": "maker",
+      "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1796,5 +1818,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-08-31T05:53:58.065859+00:00"
+  "updated_at": "2026-08-31T06:40:36.815897+00:00"
 }
