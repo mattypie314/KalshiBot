@@ -657,7 +657,7 @@
       "side": "no",
       "price": 0.55,
       "count": 5.62,
-      "status": "open",
+      "status": "canceled",
       "order_id": "01a057aa-6560-7603-860a-c68c6c8b7951",
       "kind": "limit_join",
       "model_prob": 0.6312471995121098,
@@ -670,28 +670,11 @@
       "asset_key": "BTC",
       "close_at": "2026-08-31T12:00:00+00:00",
       "hourly_vol": 0.003796365374308842,
-      "paper": false
+      "paper": false,
+      "exit_reason": "expired"
     }
   ],
   "log": [
-    {
-      "ts": "2026-08-28T18:57:06.494577+00:00",
-      "loop": "sizing",
-      "message": "Maker auto is OFF. No new last-3-min bids until you set maker_auto to yes.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-28T18:57:07.130398+00:00",
-      "loop": "fifteen",
-      "message": "Kalshi cash $32.56 \u00b7 campaign equity $32.56.",
-      "tell_matt": false
-    },
-    {
-      "ts": "2026-08-28T18:57:07.130414+00:00",
-      "loop": "fifteen",
-      "message": "LIVE cancel rest KXXRP-26AUG2814-B1.3899500 (expired)",
-      "tell_matt": false
-    },
     {
       "ts": "2026-08-28T18:57:07.130422+00:00",
       "loop": "fifteen",
@@ -1873,6 +1856,24 @@
       "loop": "maker",
       "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T14:26:59.526125+00:00",
+      "loop": "fifteen",
+      "message": "LIVE cancel rest KXBTC-26AUG3108-B78350 (expired)",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-08-31T14:27:07.996093+00:00",
+      "loop": "hourly",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-08-31T14:27:07.999408+00:00",
+      "loop": "maker",
+      "message": "Maker auto is off. Run workflow and set maker_auto to yes to start.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1889,5 +1890,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-08-31T11:53:01.171922+00:00"
+  "updated_at": "2026-08-31T14:27:07.999444+00:00"
 }
