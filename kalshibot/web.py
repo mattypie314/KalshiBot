@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import mimetypes
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -10,9 +11,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from kalshibot.assets import SECTIONS
-from kalshibot.campaign.engine import CampaignEngine
+from kalshibot.campaign.engine import CampaignEngine, run_scheduler
 from kalshibot.campaign.sizing import apply_phone_overrides
 from kalshibot.charts import market_chart
+from kalshibot.config import settings
 from kalshibot.scanner import Scanner
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -49,9 +51,16 @@ async def lifespan(app: FastAPI):
     campaign = CampaignEngine()
     app.state.scanner = scanner
     app.state.campaign = campaign
+    scheduler = None
+    if settings.kalshi_auto:
+        scheduler = asyncio.create_task(run_scheduler(campaign), name="kalshibot-scheduler")
     try:
         yield
     finally:
+        if scheduler is not None:
+            scheduler.cancel()
+            with suppress(asyncio.CancelledError):
+                await scheduler
         await scanner.aclose()
         await campaign.aclose()
 

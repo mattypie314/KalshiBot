@@ -194,6 +194,7 @@ function renderCampaign() {
   pill.setAttribute("aria-pressed", campaign.live ? "true" : "false");
 
   const chips = [];
+  chips.push(`<span class="chip ${campaign.auto ? "on" : ""}">${campaign.auto ? "Auto" : "Manual"}</span>`);
   chips.push(`<span class="chip ${campaign.maker_auto === false ? "" : "on"}">Maker ${campaign.maker_auto === false ? "off" : "on"}</span>`);
   chips.push(`<span class="chip ${campaign.follow_kalshi_cash ? "on" : ""}">${campaign.follow_kalshi_cash ? "Follows cash" : "Fixed book"}</span>`);
   if (campaign.fifteen_look) chips.push(`<span class="chip on">15m look</span>`);
@@ -207,8 +208,11 @@ function renderCampaign() {
   haltBtn.classList.toggle("resume", Boolean(campaign.halted));
 
   const follow = campaign.follow_kalshi_cash ? "follows Kalshi cash" : "fixed book";
+  const cadence = campaign.auto
+    ? "auto · 15m at :02–:04 · maker last 3 min · hourly every 5 min"
+    : "manual fire";
   document.getElementById("book-meta").textContent =
-    `${follow} · ${campaign.open_tickets?.length || 0} open · ${campaign.rests?.length || 0} resting`;
+    `${follow} · ${cadence} · ${campaign.open_tickets?.length || 0} open · ${campaign.rests?.length || 0} resting`;
 
   renderBlotter();
 }
