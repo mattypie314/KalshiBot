@@ -799,7 +799,7 @@
       "side": "no",
       "price": 0.54,
       "count": 7.26,
-      "status": "open",
+      "status": "canceled",
       "order_id": "01a05b51-1e70-7fcd-8116-ae030fe265aa",
       "kind": "limit_join",
       "model_prob": 0.5804660222796565,
@@ -812,52 +812,11 @@
       "asset_key": "BTC",
       "close_at": "2026-09-01T05:00:00+00:00",
       "hourly_vol": 0.003147423199198668,
-      "paper": false
+      "paper": false,
+      "exit_reason": "expired"
     }
   ],
   "log": [
-    {
-      "ts": "2026-08-29T18:43:56.021951+00:00",
-      "loop": "fifteen",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T18:43:56.024498+00:00",
-      "loop": "hourly",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T18:43:56.026973+00:00",
-      "loop": "maker",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T19:44:19.993742+00:00",
-      "loop": "sizing",
-      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T19:44:19.995657+00:00",
-      "loop": "fifteen",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T19:44:19.998422+00:00",
-      "loop": "hourly",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T19:44:20.001064+00:00",
-      "loop": "maker",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
     {
       "ts": "2026-08-29T21:16:34.842315+00:00",
       "loop": "sizing",
@@ -2015,11 +1974,53 @@
       "loop": "maker",
       "message": "Maker window closed; stay quiet.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T06:18:32.163920+00:00",
+      "loop": "fifteen",
+      "message": "Kalshi cash $55.07 \u00b7 campaign equity $55.07.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-09-01T06:18:32.163937+00:00",
+      "loop": "fifteen",
+      "message": "LIVE cancel rest KXBTC-26SEP0101-B78750 (expired)",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-09-01T06:18:32.163943+00:00",
+      "loop": "fifteen",
+      "message": "LIVE limit failed KXSILVER15M-26SEP010230-30: Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"invalid_order\",\"message\":\"invalid order\",\"details\":\"post only cross\"}}",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-09-01T06:18:41.348222+00:00",
+      "loop": "hourly",
+      "message": "Kalshi cash $55.07 \u00b7 campaign equity $55.07.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T06:18:41.348235+00:00",
+      "loop": "hourly",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T06:18:41.426551+00:00",
+      "loop": "maker",
+      "message": "Kalshi cash $55.07 \u00b7 campaign equity $55.07.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T06:18:41.426565+00:00",
+      "loop": "maker",
+      "message": "Maker window closed; stay quiet.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
-  "kalshi_cash": 45.4371,
-  "kalshi_total_value": 45.4371,
+  "kalshi_cash": 55.0675,
+  "kalshi_total_value": 55.0675,
   "fifteen_loss_streak": 0,
   "fifteen_session_date": null,
   "fifteen_stopped_until": null,
@@ -2031,5 +2032,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-09-01T04:53:59.547783+00:00"
+  "updated_at": "2026-09-01T06:18:41.426610+00:00"
 }
