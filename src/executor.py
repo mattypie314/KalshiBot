@@ -25,7 +25,7 @@ def _order_payload(idea: Idea, run_id: str) -> dict[str, Any]:
         yes_price = max(0.0, min(1.0, 1.0 - idea.limit_price))
     return {
         "ticker": idea.market.ticker,
-        "client_order_id": f"hourly-{run_id}-{idea.market.ticker}-{side}"[:64],
+        "client_order_id": str(uuid.uuid4()),
         "side": book_side,
         "count": f"{int(idea.contracts):.2f}",
         "price": f"{yes_price:.4f}",
@@ -106,7 +106,7 @@ def execute_ideas(
             except Exception as exc:  # noqa: BLE001
                 logger.warning("fetch open orders failed: %s", exc)
         except Exception as exc:  # noqa: BLE001
-            logger.error("create_order failed: %s", exc)
+            logger.error("create_order failed: %s payload=%s", exc, json.dumps(payload))
             result["errors"].append(str(exc))
 
     (dest / "last_run.json").write_text(json.dumps(result, indent=2, default=str))

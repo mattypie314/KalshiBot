@@ -72,6 +72,7 @@ def test_dry_run_never_calls_create_order(tmp_path: Path):
     assert isinstance(out["orders"][0]["count"], str)
     assert out["orders"][0]["side"] == "bid"
     assert out["orders"][0]["price"] == "0.5100"
+    assert len(out["orders"][0]["client_order_id"]) == 36
 
 
 def test_live_without_confirm_stays_dry(tmp_path: Path):
