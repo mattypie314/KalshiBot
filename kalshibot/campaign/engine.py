@@ -24,7 +24,15 @@ from kalshibot.campaign.fifteen import (
     pass_fail,
     record_fifteen_result,
 )
-from kalshibot.campaign.playbook import playbook_from_settings
+from kalshibot.campaign.hourly import (
+    HOURLY_INTERVAL_SECONDS,
+    HOURLY_SERIES,
+    NO_EDGE,
+    format_hourly,
+    grade_tape,
+    hourly_stake,
+    pick_atm,
+)
 from kalshibot.campaign.sizing import cash_from_balance, playbook_from_sizing, total_value_from_balance
 from kalshibot.campaign.rules import (
     classify_favorite,
@@ -313,18 +321,10 @@ class CampaignEngine:
             if loop == "fifteen":
                 expect_ticket = in_fifteen_entry_window()
                 actions.extend(await self._fifteen_gate_and_enter(expect_ticket=expect_ticket))
-            elif self._revenge_active() and loop in {"hourly", "maker"}:
+            elif self._revenge_active() and loop == "maker":
                 actions.append("Sit out: no revenge betting after a loss.")
             elif loop == "hourly":
-                series = await self._hourly_series()
-                actions.extend(
-                    await self._enter_limit(
-                        series,
-                        loop,
-                        skip_last=self.cfg.skip_last_seconds,
-                        max_secs=self.cfg.hourly_max_seconds,
-                    )
-                )
+                actions.extend(await self._enter_hourly())
             elif loop == "maker":
                 if not self._maker_auto():
                     actions.append("Maker auto is off. Run workflow and set maker_auto to yes to start.")
@@ -337,6 +337,11 @@ class CampaignEngine:
                 if not actions:
                     actions.append("Nothing new.")
                 tell = [self._tell_fifteen(a, expect_ticket=expect_ticket) for a in actions]
+                return self._finish(loop, actions, quiet=True, tell=tell)
+            if loop == "hourly":
+                if not actions:
+                    actions.append(NO_EDGE)
+                tell = [self._tell_hourly(a) for a in actions]
                 return self._finish(loop, actions, quiet=True, tell=tell)
             if not actions:
                 actions.append("Nothing new.")
@@ -401,6 +406,19 @@ class CampaignEngine:
         if "working this window" in low:
             return True
         if "post-only" in low:
+            return True
+        return False
+
+    def _tell_hourly(self, action: str) -> bool:
+        """Hourly is the KXBTC15M tape card. App notification on for Pass or sit-out."""
+        if action == NO_EDGE or action.startswith("Market:"):
+            return True
+        low = action.lower()
+        if "halted until further notice" in low:
+            return True
+        if "flatten" in low and "pnl -" in low:
+            return True
+        if " filled " in low:
             return True
         return False
 
@@ -800,6 +818,97 @@ class CampaignEngine:
         if not enough_room(room, total):
             return [f"Room ${room:.2f} below 3% of bankroll ${total:.2f}. 15m skipped."]
         return await self._enter_fifteen(news=news_blackout())
+
+    async def _enter_hourly(self) -> list[str]:
+        """Current KXBTC15M only. 6%+ net edge after taker fee, 3–5% limit."""
+        from types import SimpleNamespace
+
+        scored: list[dict[str, Any]] = []
+        for row in await self._load_candidates([HOURLY_SERIES]):
+            item = await self._score_market(row)
+            if item:
+                scored.append(item)
+        pick = pick_atm(scored)
+        if not pick:
+            return [NO_EDGE]
+        ticker = str(pick["market"]["ticker"])
+        tape = grade_tape(
+            ticker=ticker,
+            model_yes=float(pick["model_yes"]),
+            yes_bid=float(pick["yes_bid"]),
+            yes_ask=float(pick["yes_ask"]),
+            secs_left=float(pick["secs"]),
+            strike=float(pick["strike"]),
+            spot=float(pick["spot"]),
+        )
+        if not tape.passed:
+            return [NO_EDGE]
+        if self._already_in(ticker):
+            return [NO_EDGE]
+        join = tape.join_price
+        cost_px = self._yes_to_cost(tape.side, join)
+        budget = hourly_stake(self._total_value(), self._room())
+        count = contracts_for_budget(budget, cost_px)
+        cost = count * cost_px
+        if count <= 0 or cost < self.playbook.min_stake:
+            return [NO_EDGE]
+        book_side = "bid" if tape.side == "yes" else "ask"
+        payload = {
+            "ticker": ticker,
+            "side": book_side,
+            "count": f"{count:.2f}",
+            "price": f"{join:.4f}",
+            "time_in_force": "good_till_canceled",
+            "self_trade_prevention_type": "maker",
+            "post_only": True,
+            "client_order_id": str(uuid.uuid4()),
+            "exchange_index": -1,
+        }
+        fill_count = 0.0
+        avg_yes = join
+        order_id = None
+        if self.live:
+            try:
+                resp = await self.kalshi.create_order_v2(payload)
+            except httpx.HTTPStatusError as exc:
+                logger.exception("Hourly KXBTC15M limit failed %s: %s", ticker, exc)
+                return [NO_EDGE]
+            fill_count = float(resp.get("fill_count") or 0)
+            avg_yes = float(resp.get("average_fill_price") or join)
+            order_id = resp.get("order_id")
+        fill_cost = self._yes_to_cost(tape.side, avg_yes)
+        idea = SimpleNamespace(side=tape.side, model_prob=tape.fair if tape.side == "yes" else 1.0 - tape.fair)
+        card = format_hourly(tape)
+        rest = {
+            "id": str(uuid.uuid4()),
+            "loop": "hourly",
+            "kind": "btc15m_tape",
+            "ticker": ticker,
+            "side": tape.side,
+            "price": join,
+            "count": count,
+            "status": "open",
+            "order_id": order_id,
+            "model_prob": idea.model_prob,
+            "model_yes": pick["model_yes"],
+            "sigma": pick["sigma"],
+            "spot": pick["spot"],
+            "strike": pick["strike"],
+            "spec_kind": pick["spec_kind"],
+            "cap": pick.get("cap"),
+            "asset_key": pick["asset"].key,
+            "close_at": pick.get("close"),
+            "hourly_vol": pick.get("hourly_vol"),
+            "paper": not self.live,
+        }
+        pick["loop"] = "hourly"
+        pick["kind"] = "btc15m_tape"
+        if fill_count > 0:
+            ticket = self._ticket_fields(pick, idea, fill_count, fill_cost, order_id)
+            self.tracker.state["tickets"].append(ticket)
+            return [card]
+        self.tracker.state.setdefault("rests", []).append(rest)
+        return [card]
 
     async def _enter_fifteen(self, *, news: str | None) -> list[str]:
         """One post-only limit after a Pass. Never market, never IOC pay-through."""
@@ -1202,7 +1311,7 @@ async def run_scheduler(engine: CampaignEngine) -> None:
         elif now.minute % 5 == 0 and minute_key != last_fifteen_minute:
             await engine.fire("fifteen")
             last_fifteen_minute = minute_key
-        if loop_time - last_hourly >= 300:
+        if loop_time - last_hourly >= HOURLY_INTERVAL_SECONDS:
             await engine.fire("hourly")
             last_hourly = loop_time
         if in_maker_window(now) and minute_key != last_maker_minute:

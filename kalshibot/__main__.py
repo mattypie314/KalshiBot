@@ -26,7 +26,7 @@ def main() -> None:
     camp_sub.add_parser("status", help="Show campaign book, tickets, and recent log")
     fire = camp_sub.add_parser("fire", help="Run one loop once (dry-run unless KALSHI_LIVE=1)")
     fire.add_argument("loop", choices=["fifteen", "hourly", "maker"])
-    camp_sub.add_parser("run", help="Scheduler: 15m every 3 min, hourly every 5 min, maker last 3 min")
+    camp_sub.add_parser("run", help="Scheduler: 15m at :02–:04, hourly KXBTC15M tape, maker last 3 min")
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")

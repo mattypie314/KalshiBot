@@ -93,7 +93,7 @@ class SpotService:
 
     async def _coinbase_realized(self, product: str) -> float | None:
         end = int(time.time())
-        start = end - 4 * 3600
+        start = end - 2 * 3600
         url = f"https://api.exchange.coinbase.com/products/{product}/candles"
         try:
             response = await self._client.get(
@@ -126,7 +126,7 @@ class SpotService:
                 return None
             quote = ((result[0].get("indicators") or {}).get("quote") or [{}])[0]
             raw = [c for c in (quote.get("close") or []) if c]
-            closes = [float(c) for c in raw[-240:]]
+            closes = [float(c) for c in raw[-120:]]
             return hourly_vol_from_closes(closes, 60)
         except Exception as exc:  # noqa: BLE001
             logger.debug("Yahoo realized vol failed for %s: %s", symbol, exc)
