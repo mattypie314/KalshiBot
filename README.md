@@ -15,13 +15,21 @@ Bankroll default **$46.36**. Risk per idea **3–5%** ($1.40–$2.30), preferred
 ```bash
 pip install -r requirements.txt
 cp .env.example .env   # fill keys locally — never commit them
-
-python -m src.main scan
-python -m src.main scan --asset BTC
-python -m src.main once          # scan + print dry-run limit payloads
-python -m src.main auth          # test key + PEM (no orders)
-python -m src.main live          # refused unless LIVE_TRADING=true AND CONFIRM_LIVE=YES
+chmod +x kb
 ```
+
+Pick a mode from a menu, or pass it on the command line:
+
+```bash
+./kb                 # menu: 1 scan / 2 once / 3 auth / 4 live
+./kb scan            # also: s  or  1
+./kb scan --asset BTC
+./kb once            # also: o  or  2   dry-run limit payloads
+./kb auth            # also: a  or  3   test key + PEM
+./kb live            # also: l  or  4   refused unless LIVE_TRADING=true AND CONFIRM_LIVE=YES
+```
+
+`python -m src.main …` and (after `pip install -e .`) `kalshibot` / `kb` do the same thing. No args on a TTY opens the menu; no args in a script defaults to `scan`.
 
 Exit codes: `0` success or `NO_ACTIONABLE_EDGE`, `2` config/auth, `3` rate limited.
 
@@ -73,8 +81,9 @@ cd /home/KalshiBot
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+chmod +x kb
 cp -n .env.example .env   # edit keys; never commit .env
-python -m src.main auth
+./kb auth
 ```
 
 systemd units in `scripts/` use `WorkingDirectory=/home/KalshiBot`:

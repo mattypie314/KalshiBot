@@ -17,6 +17,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0"]
 
+[project.scripts]
+kalshibot = "src.main:cli"
+kb = "src.main:cli"
+
 [tool.setuptools.packages.find]
 include = ["src*"]
 
