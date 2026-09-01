@@ -747,36 +747,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-29T07:48:30.843482+00:00",
-      "loop": "hourly",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T07:48:30.846241+00:00",
-      "loop": "maker",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T10:28:47.670873+00:00",
-      "loop": "sizing",
-      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T10:28:47.672786+00:00",
-      "loop": "fifteen",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T10:28:47.675599+00:00",
-      "loop": "hourly",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-29T10:28:47.678271+00:00",
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
@@ -1945,11 +1915,41 @@
       "loop": "maker",
       "message": "No 74\u201393\u00a2 favorite in the last 3 minutes. Sitting out is a valid trade.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T01:24:55.468744+00:00",
+      "loop": "fifteen",
+      "message": "Kalshi cash $48.47 \u00b7 campaign equity $48.47.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-09-01T01:25:04.846421+00:00",
+      "loop": "hourly",
+      "message": "Kalshi cash $48.47 \u00b7 campaign equity $48.47.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T01:25:04.846432+00:00",
+      "loop": "hourly",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T01:25:04.929070+00:00",
+      "loop": "maker",
+      "message": "Kalshi cash $48.47 \u00b7 campaign equity $48.47.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T01:25:04.929081+00:00",
+      "loop": "maker",
+      "message": "Maker window closed; stay quiet.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
-  "kalshi_cash": 47.475,
-  "kalshi_total_value": 47.475,
+  "kalshi_cash": 48.465,
+  "kalshi_total_value": 48.465,
   "fifteen_loss_streak": 0,
   "fifteen_session_date": null,
   "fifteen_stopped_until": null,
@@ -1961,5 +1961,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-09-01T00:43:32.550791+00:00"
+  "updated_at": "2026-09-01T01:25:04.929115+00:00"
 }
