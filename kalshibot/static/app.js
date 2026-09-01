@@ -350,6 +350,7 @@ document.querySelectorAll("[data-fire]").forEach((btn) => {
 });
 
 document.getElementById("live-pill").addEventListener("click", async () => {
+  if (!campaign) await loadCampaign();
   if (!campaign) return;
   const next = !campaign.live;
   if (next) {
