@@ -272,7 +272,7 @@ def run_auth(settings: HourlySettings) -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"AUTH FAILED: {exc}")
             print("Use the same key id + private PEM + host as the campaign dashboard.")
-            print("Live Kalshi key + USE_DEMO=false + KALSHI_BASE_URL=https://api.elections.kalshi.com/trade-api/v2")
+            print("Live Kalshi key + USE_DEMO=false + KALSHI_BASE_URL=https://external-api.kalshi.com/trade-api/v2")
             return EXIT_CONFIG
         cash = bal.get("balance_dollars") or bal.get("balance")
         print(f"AUTH OK. Kalshi balance field: {cash}")
