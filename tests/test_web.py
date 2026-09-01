@@ -34,6 +34,8 @@ def test_index_serves_live_ui():
         js = client.get("/static/app.js")
         assert js.status_code == 200
         assert "javascript" in js.headers["content-type"]
+        assert b"kalshi_total_value" in js.content
+        assert b"campaign.pnl" in js.content
         assert client.get("/manifest.webmanifest").status_code == 200
         assert client.get("/portfolio").status_code == 200
         assert b"color-scheme: dark" in client.get("/portfolio").content
@@ -106,11 +108,19 @@ def test_campaign_status_shows_kalshi_positions(tmp_path):
                     "ticker": "KXBNB-26SEP0118-B687",
                     "position_fp": "-25.00",
                     "market_exposure_dollars": "22.25",
+                    "realized_pnl_dollars": "1.10",
                 }
             ]
         )
+        engine.kalshi.get_balance = AsyncMock(
+            return_value={"balance_dollars": "32.00", "portfolio_value": 5500}
+        )
         status = client.get("/api/campaign").json()
         assert status["positions_source"] == "kalshi"
+        assert status["kalshi_cash"] == 32.0
+        assert status["kalshi_total_value"] == 55.0
+        assert status["equity"] == 55.0
+        assert status["pnl"] == 1.85
         assert status["open_tickets"][0]["ticker"] == "KXBNB-26SEP0118-B687"
         assert status["open_tickets"][0]["side"] == "no"
         assert status["open_tickets"][0]["count"] == 25.0

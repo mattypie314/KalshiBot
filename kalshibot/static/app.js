@@ -166,14 +166,14 @@ function setView(next) {
 function renderCampaign() {
   if (!campaign) return;
   const cash = campaign.kalshi_cash;
-  const equity = campaign.equity ?? campaign.bankroll;
-  const pnl = Number(campaign.realized || 0);
+  const equity = campaign.kalshi_total_value ?? campaign.equity ?? campaign.bankroll;
+  const pnl = Number(campaign.pnl ?? campaign.realized ?? 0);
   document.getElementById("folio-cash").textContent = money(cash);
   document.getElementById("folio-equity").textContent = money(equity);
   const pnlEl = document.getElementById("folio-pnl");
-  pnlEl.textContent = `${pnl >= 0 ? "+" : ""}${money(pnl).slice(1)}`;
-  if (pnl > 0) pnlEl.className = "num pos";
-  else if (pnl < 0) pnlEl.className = "num neg";
+  pnlEl.textContent = `${pnl >= 0 ? "+" : "−"}${money(Math.abs(pnl)).slice(1)}`;
+  if (pnl > 0.004) pnlEl.className = "num pos";
+  else if (pnl < -0.004) pnlEl.className = "num neg";
   else pnlEl.className = "num";
   document.getElementById("folio-room").textContent = money(campaign.room);
   document.getElementById("folio-idea").textContent = money(campaign.typical_idea);
@@ -209,7 +209,7 @@ function renderCampaign() {
 
   const follow = campaign.follow_kalshi_cash ? "follows Kalshi cash" : "fixed book";
   const cadence = campaign.auto
-    ? "auto · 15m at :02–:04 · maker last 3 min · hourly every 5 min"
+    ? "auto · 15m at :02–:04 · maker last 3 min · hourly KXBTC15M tape"
     : "manual fire";
   const book = campaign.rests_source === "kalshi" || campaign.positions_source === "kalshi"
     ? "Kalshi book"
@@ -260,10 +260,16 @@ function renderBlotter() {
     blotter.innerHTML = `<div class="empty">${emptyBlotter(blot)}</div>`;
     return;
   }
+  const showPnl = blot !== "orders";
   const body = rows
     .map((row) => {
       const side = String(row.side || "").toLowerCase();
       const px = row.fill ?? row.price;
+      const pnl = row.pnl;
+      const pnlClass = pnl > 0.004 ? "num pos" : pnl < -0.004 ? "num neg" : "num";
+      const last = showPnl
+        ? `<div class="${pnlClass}">${pnl == null ? "—" : `${pnl >= 0 ? "+" : "−"}${money(Math.abs(pnl)).slice(1)}`}</div>`
+        : `<div class="num">${money(row.cost ?? (px != null && row.count != null ? px * row.count : null))}</div>`;
       return `<div class="row">
         <div>
           <div>${escapeHtml(row.title || row.ticker || "—")}</div>
@@ -272,7 +278,7 @@ function renderBlotter() {
         <div><span class="side-tag ${side}">${escapeHtml(side.toUpperCase() || "—")}</span></div>
         <div class="num hide-sm">${cents(px)}</div>
         <div class="num hide-sm">${row.count != null ? Number(row.count).toFixed(2) : "—"}</div>
-        <div class="num">${money(row.cost ?? (px != null && row.count != null ? px * row.count : null))}</div>
+        ${last}
       </div>`;
     })
     .join("");
@@ -282,7 +288,7 @@ function renderBlotter() {
       <div>Side</div>
       <div class="hide-sm">Price</div>
       <div class="hide-sm">Qty</div>
-      <div>Cost</div>
+      <div>${showPnl ? "P&L" : "Cost"}</div>
     </div>
     ${body}`;
 }

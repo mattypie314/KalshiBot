@@ -28,12 +28,16 @@ def test_cash_from_balance_prefers_dollars():
 
 
 def test_total_value_from_balance():
-    from kalshibot.campaign.sizing import total_value_from_balance
+    from kalshibot.campaign.sizing import account_nav, portfolio_value_from_balance, total_value_from_balance
 
     assert total_value_from_balance({"portfolio_value": 4250, "balance": 1800}) == 42.5
     assert total_value_from_balance({"portfolio_value_dollars": "48.00"}) == 48.0
     assert total_value_from_balance({"balance_dollars": "12.00"}) == 12.0
-    assert total_value_from_balance({"balance_dollars": "38.27", "portfolio_value": 546}) == 38.27
+    assert portfolio_value_from_balance({"portfolio_value": 546}) == 5.46
+    # Wire field is the position mark ($5.46), not NAV — add cash.
+    assert total_value_from_balance({"balance_dollars": "38.27", "portfolio_value": 546}, 5.46) == 43.73
+    assert account_nav(48.25, 61.25, 13.0) == 61.25
+    assert account_nav(48.25, 13.0, 13.0) == 61.25
 
 
 def test_phone_override_saves_on_tracker(tmp_path):

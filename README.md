@@ -79,7 +79,7 @@ Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 | Loop | Schedule | Universe |
 | --- | --- | --- |
 | 15m edge | first 2–4 minutes of each window (`:02–:04`, `:17–:19`, `:32–:34`, `:47–:49` ET) | BTC/ETH/SOL + gold/silver 15m. Pass/Fail vs mid. One post-only limit. 3–5% of Kalshi `total_value`. |
-| Hourly | every 5 minutes | hourly crypto/commodities ending in the next 75 minutes (no daily `…D` books) |
+| Hourly | once an hour (notify) | live ATM **KXBTC15M** only. Zero-drift lognormal vs 1–2h realized vol. 6%+ net after taker fee or sit out. 3–5% limit only. |
 | Maker | last 3 min of each 15m (`:12–:14`, `:27–:29`, `:42–:44`, `:57–:59`) | Rest post-only bids on **74–93¢** confirmed favorites. Edge is the spread (taker is at break-even). |
 
 **15m edge (not a scan-all-day scalp)**
@@ -90,15 +90,26 @@ Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 - Hard skips: under ~8 minutes left unless the strike is decided; spread wider than the edge; news candle (CPI/FOMC); fair and mid within 4¢; revenge (skip the next 15m window after a losing 15m ticket); three 15m losses in a row this ET day (stop 15m and tell Matt); book not live; 15m already stopped; room below 3% of bankroll.
 - Manage: flatten if down ~$0.50 or ~10% from fill, held-side bid ≥ fill + 2¢, half-sigma says the edge died/flipped, or bid is 99¢. Never rest a sell under the bid. Flat is allowed.
 
-**Small-account rules (hourly / shared book)**
+**Hourly KXBTC15M tape (notify)**
+
+Not the 1-hour BNB/ETH books. Maker still uses those last-3-min 74–93¢ favorites.
+
+- Live BTC spot and last 1–2 hours of realized vol. Quiet BTC 1-hour vol is often about 0.3–0.6%.
+- Current open KXBTC15M: ATM strike vs spot, minutes left, Yes/No bid-ask.
+- Fair: zero-drift lognormal (required move vs vol × sqrt(hours left)).
+- Net edge after estimated taker fee. Need about **6%+** or sit out.
+- Pass → 3–5% of bankroll, **limit only**. Fail / nothing clears → the whole message is `No actionable edge.`
+- Output is only the Pass card (ticker, minutes/strike/spot, Yes mid vs fair, edge after fees, size). Notification on.
+
+**Small-account rules (shared book)**
 
 - Risk about 3–5% of bankroll per idea. Cap 5–8%. Never more than 10% on one trade.
-- Fractional Kelly (default 0.33×). On a $35 book that is about $1.50–$2.80 per idea.
-- If the book is under $20, max risk is 3% and the bot demands a bigger edge.
+- Fractional Kelly (default 0.33×) on the 15m loop. Hourly tape is a flat 3–5%.
+- If the book is under $20, max risk is 3% and the 15m bot demands a bigger edge.
 - Prefer **post-only limit orders** inside the spread. No IOC take, no rest-99 after a take. Taker fees wipe a small edge.
-- Filter first, size second. Sitting out is a valid trade. No revenge bet for 15 minutes after a loss.
-- Hard filters: net edge after fees ≥ 4% (6% if the book is thin or the account is under $20); model must also clear fees + a 2–3% buffer; the spread cannot eat most of the edge; at least 3 minutes left.
-- Price 15-minute crypto from live spot, time left, and recent 1-minute realized vol (not daily vol). Quiet starting points: BTC ~0.3–0.6%/hour, ETH jumpy-er.
+- Filter first, size second. Sitting out is a valid trade. 15m skips the next window after a 15m loss. Maker sits 15 minutes after any non-15m loss. Hourly tape does not revenge-sit.
+- 15m filters: net edge after fees ≥ 4% (6% if thin / under $20); spread cannot eat most of the edge; at least 8 minutes left unless the strike is decided.
+- Price 15-minute crypto from live spot, time left, and recent 1-minute realized vol (not daily vol).
 - Exit: take profit (+2¢ or 99¢ bid), flatten if the statistical edge decays, or hold to settlement. You can lose the full amount on a contract.
 
 **Last-3-minute maker (spread capture)**
@@ -157,7 +168,7 @@ pip install -r requirements.txt
 python -m kalshibot serve
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The campaign book sits above the Crypto / Commodities / Sports Bets tabs. **Serve also runs the loops by itself** while that process is up: 15m at `:02–:04` ET each window, maker in the last 3 minutes, hourly about every 5 minutes. Halt / DRY-LIVE on the phone still apply. The small 15m / Hourly / Maker buttons are “run now,” not the schedule.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The campaign book sits above the Crypto / Commodities / Sports Bets tabs. **Serve also runs the loops by itself** while that process is up: 15m at `:02–:04` ET each window, maker in the last 3 minutes, hourly KXBTC15M tape once an hour. Halt / DRY-LIVE on the phone still apply. The small 15m / Hourly / Maker buttons are “run now,” not the schedule.
 
 ```bash
 python -m kalshibot scan --section crypto

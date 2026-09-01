@@ -98,6 +98,16 @@ def map_kalshi_order(order: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _pnl_dollars(pos: dict[str, Any]) -> float | None:
+    raw = pos.get("realized_pnl_dollars")
+    if raw not in (None, ""):
+        return parse_dollars(raw)
+    cents = pos.get("realized_pnl")
+    if isinstance(cents, bool) or not isinstance(cents, (int, float)):
+        return None
+    return float(cents) / 100.0
+
+
 def map_kalshi_position(pos: dict[str, Any]) -> dict[str, Any] | None:
     ticker = str(pos.get("ticker") or pos.get("market_ticker") or pos.get("event_ticker") or "").strip()
     if not ticker:
@@ -109,6 +119,7 @@ def map_kalshi_position(pos: dict[str, Any]) -> dict[str, Any] | None:
     count = abs(qty)
     cost = _exposure_dollars(pos)
     fill = round(cost / count, 4) if cost is not None and count else None
+    pnl = _pnl_dollars(pos)
     return {
         "id": ticker,
         "loop": "kalshi",
@@ -122,7 +133,7 @@ def map_kalshi_position(pos: dict[str, Any]) -> dict[str, Any] | None:
         "status": "open",
         "source": "kalshi",
         "paper": False,
-        "pnl": first_number(pos.get("realized_pnl_dollars"), pos.get("realized_pnl")),
+        "pnl": round(pnl, 4) if pnl is not None else None,
     }
 
 

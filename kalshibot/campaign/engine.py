@@ -24,8 +24,22 @@ from kalshibot.campaign.fifteen import (
     pass_fail,
     record_fifteen_result,
 )
+from kalshibot.campaign.hourly import (
+    HOURLY_INTERVAL_SECONDS,
+    HOURLY_SERIES,
+    NO_EDGE,
+    format_hourly,
+    grade_tape,
+    hourly_stake,
+    pick_atm,
+)
 from kalshibot.campaign.playbook import playbook_from_settings
-from kalshibot.campaign.sizing import cash_from_balance, playbook_from_sizing, total_value_from_balance
+from kalshibot.campaign.sizing import (
+    account_nav,
+    cash_from_balance,
+    playbook_from_sizing,
+    portfolio_value_from_balance,
+)
 from kalshibot.campaign.rules import (
     classify_favorite,
     contracts_for_budget,
@@ -77,6 +91,7 @@ class CampaignEngine:
         self._live_override: bool | None = None
         self._fire_lock = asyncio.Lock()
         self._book_cache: tuple[float, list[dict[str, Any]], list[dict[str, Any]]] | None = None
+        self._balance_cache: tuple[float, dict[str, float | None]] | None = None
 
     async def aclose(self) -> None:
         if self._owns_http:
@@ -123,14 +138,16 @@ class CampaignEngine:
         }
 
     async def public_status(self) -> dict[str, Any]:
-        """Phone blotter. Positions come from Kalshi when keys are loaded, not the local tracker."""
+        """Phone blotter. Cash, portfolio, positions, and P&L come from Kalshi when keys are loaded."""
         payload = self.status()
         if not self.kalshi.can_trade:
             return payload
-        orders, positions, errors = await self._exchange_book()
+        book, balance = await asyncio.gather(self._exchange_book(), self._kalshi_balance())
+        orders, positions, errors = book
         paper_rests = [row for row in payload["rests"] if row.get("paper")]
+        mapped: list[dict[str, Any]] = []
         if "orders" not in errors:
-            payload["rests"] = [mapped for order in orders if (mapped := map_kalshi_order(order))] + paper_rests
+            payload["rests"] = [mapped_order for order in orders if (mapped_order := map_kalshi_order(order))] + paper_rests
             payload["rests_source"] = "kalshi"
         if "positions" not in errors:
             mapped = [row for pos in positions if (row := map_kalshi_position(pos))]
@@ -144,7 +161,62 @@ class CampaignEngine:
             payload["positions_source"] = "kalshi"
         if errors:
             payload["blotter_error"] = ",".join(sorted(errors))
+        self._apply_live_book(payload, mapped if "positions" not in errors else payload.get("open_tickets") or [], balance)
         return payload
+
+    def _apply_live_book(
+        self,
+        payload: dict[str, Any],
+        tickets: list[dict[str, Any]],
+        balance: dict[str, float | None],
+    ) -> None:
+        cost = sum(float(row.get("cost") or 0) for row in tickets)
+        locked = sum(float(row.get("pnl") or 0) for row in tickets)
+        cash = balance.get("cash")
+        mark = balance.get("mark")
+        nav = account_nav(cash, mark, cost)
+        if cash is not None:
+            payload["kalshi_cash"] = round(cash, 4)
+        if nav is not None:
+            payload["kalshi_total_value"] = round(nav, 4)
+            payload["equity"] = round(nav, 4)
+            payload["typical_idea"] = round(float(self.playbook.typical_risk_max) * nav, 2)
+        payload["open_cost"] = round(cost, 4)
+        if cash is not None:
+            payload["room"] = round(max(0.0, cash), 4)
+        mtm = 0.0
+        if nav is not None and cash is not None:
+            mtm = max(0.0, nav - cash)
+        elif nav is not None:
+            mtm = nav
+        unrealized = mtm - cost
+        pnl = unrealized + locked
+        payload["pnl"] = round(pnl, 4)
+        payload["realized"] = round(pnl, 4)
+        payload["unrealized"] = round(unrealized, 4)
+
+    async def _kalshi_balance(self) -> dict[str, float | None]:
+        now = time.monotonic()
+        cached = self._balance_cache
+        if cached and now - cached[0] < 15.0:
+            return cached[1]
+        empty = {"cash": None, "mark": None}
+        try:
+            raw = await self.kalshi.get_balance()
+        except Exception as exc:  # noqa: BLE001 — dashboard must still render
+            logger.warning("Kalshi balance failed: %s", exc)
+            return cached[1] if cached else empty
+        data = {
+            "cash": cash_from_balance(raw),
+            "mark": portfolio_value_from_balance(raw),
+        }
+        self._balance_cache = (now, data)
+        if data["cash"] is not None:
+            self.tracker.state["kalshi_cash"] = round(float(data["cash"]), 4)
+        nav = account_nav(data["cash"], data["mark"])
+        if nav is not None:
+            self.tracker.state["kalshi_total_value"] = round(nav, 4)
+        return data
 
     async def _exchange_book(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], set[str]]:
         now = time.monotonic()
@@ -232,21 +304,17 @@ class CampaignEngine:
         return max(0.0, budget)
 
     async def _sync_kalshi_cash(self) -> str | None:
-        if not (self.live and self.kalshi.can_trade and self._follow_kalshi()):
+        if not (self.kalshi.can_trade and self._follow_kalshi()):
             return None
-        try:
-            payload = await self.kalshi.get_balance()
-        except Exception as exc:  # noqa: BLE001 — keep last cash rather than crash the job
-            logger.warning("Kalshi balance failed: %s", exc)
-            return f"Could not refresh Kalshi cash ({exc}); using the saved book."
-        cash = cash_from_balance(payload)
-        total = total_value_from_balance(payload)
-        if cash is not None:
-            self.tracker.state["kalshi_cash"] = round(cash, 4)
-        if total is not None:
-            self.tracker.state["kalshi_total_value"] = round(total, 4)
+        self._balance_cache = None
+        bal = await self._kalshi_balance()
+        cash = bal.get("cash")
         if cash is None:
             return None
+        cost = open_cost(self.tracker.state.get("tickets") or [])
+        nav = account_nav(cash, bal.get("mark"), cost)
+        if nav is not None:
+            self.tracker.state["kalshi_total_value"] = round(nav, 4)
         return f"Kalshi cash ${cash:.2f} · campaign equity ${self._equity():.2f}."
 
     def _open_idea_count(self) -> int:
@@ -313,18 +381,10 @@ class CampaignEngine:
             if loop == "fifteen":
                 expect_ticket = in_fifteen_entry_window()
                 actions.extend(await self._fifteen_gate_and_enter(expect_ticket=expect_ticket))
-            elif self._revenge_active() and loop in {"hourly", "maker"}:
+            elif self._revenge_active() and loop == "maker":
                 actions.append("Sit out: no revenge betting after a loss.")
             elif loop == "hourly":
-                series = await self._hourly_series()
-                actions.extend(
-                    await self._enter_limit(
-                        series,
-                        loop,
-                        skip_last=self.cfg.skip_last_seconds,
-                        max_secs=self.cfg.hourly_max_seconds,
-                    )
-                )
+                actions.extend(await self._enter_hourly())
             elif loop == "maker":
                 if not self._maker_auto():
                     actions.append("Maker auto is off. Run workflow and set maker_auto to yes to start.")
@@ -337,6 +397,11 @@ class CampaignEngine:
                 if not actions:
                     actions.append("Nothing new.")
                 tell = [self._tell_fifteen(a, expect_ticket=expect_ticket) for a in actions]
+                return self._finish(loop, actions, quiet=True, tell=tell)
+            if loop == "hourly":
+                if not actions:
+                    actions.append(NO_EDGE)
+                tell = [self._tell_hourly(a) for a in actions]
                 return self._finish(loop, actions, quiet=True, tell=tell)
             if not actions:
                 actions.append("Nothing new.")
@@ -401,6 +466,19 @@ class CampaignEngine:
         if "working this window" in low:
             return True
         if "post-only" in low:
+            return True
+        return False
+
+    def _tell_hourly(self, action: str) -> bool:
+        """Hourly is the KXBTC15M tape card. App notification on for Pass or sit-out."""
+        if action == NO_EDGE or action.startswith("Market:"):
+            return True
+        low = action.lower()
+        if "halted until further notice" in low:
+            return True
+        if "flatten" in low and "pnl -" in low:
+            return True
+        if " filled " in low:
             return True
         return False
 
@@ -801,6 +879,97 @@ class CampaignEngine:
             return [f"Room ${room:.2f} below 3% of bankroll ${total:.2f}. 15m skipped."]
         return await self._enter_fifteen(news=news_blackout())
 
+    async def _enter_hourly(self) -> list[str]:
+        """Current KXBTC15M only. 6%+ net edge after taker fee, 3–5% limit."""
+        from types import SimpleNamespace
+
+        scored: list[dict[str, Any]] = []
+        for row in await self._load_candidates([HOURLY_SERIES]):
+            item = await self._score_market(row)
+            if item:
+                scored.append(item)
+        pick = pick_atm(scored)
+        if not pick:
+            return [NO_EDGE]
+        ticker = str(pick["market"]["ticker"])
+        tape = grade_tape(
+            ticker=ticker,
+            model_yes=float(pick["model_yes"]),
+            yes_bid=float(pick["yes_bid"]),
+            yes_ask=float(pick["yes_ask"]),
+            secs_left=float(pick["secs"]),
+            strike=float(pick["strike"]),
+            spot=float(pick["spot"]),
+        )
+        if not tape.passed:
+            return [NO_EDGE]
+        if self._already_in(ticker):
+            return [NO_EDGE]
+        join = tape.join_price
+        cost_px = self._yes_to_cost(tape.side, join)
+        budget = hourly_stake(self._total_value(), self._room())
+        count = contracts_for_budget(budget, cost_px)
+        cost = count * cost_px
+        if count <= 0 or cost < self.playbook.min_stake:
+            return [NO_EDGE]
+        book_side = "bid" if tape.side == "yes" else "ask"
+        payload = {
+            "ticker": ticker,
+            "side": book_side,
+            "count": f"{count:.2f}",
+            "price": f"{join:.4f}",
+            "time_in_force": "good_till_canceled",
+            "self_trade_prevention_type": "maker",
+            "post_only": True,
+            "client_order_id": str(uuid.uuid4()),
+            "exchange_index": -1,
+        }
+        fill_count = 0.0
+        avg_yes = join
+        order_id = None
+        if self.live:
+            try:
+                resp = await self.kalshi.create_order_v2(payload)
+            except httpx.HTTPStatusError as exc:
+                logger.exception("Hourly KXBTC15M limit failed %s: %s", ticker, exc)
+                return [NO_EDGE]
+            fill_count = float(resp.get("fill_count") or 0)
+            avg_yes = float(resp.get("average_fill_price") or join)
+            order_id = resp.get("order_id")
+        fill_cost = self._yes_to_cost(tape.side, avg_yes)
+        idea = SimpleNamespace(side=tape.side, model_prob=tape.fair if tape.side == "yes" else 1.0 - tape.fair)
+        card = format_hourly(tape)
+        rest = {
+            "id": str(uuid.uuid4()),
+            "loop": "hourly",
+            "kind": "btc15m_tape",
+            "ticker": ticker,
+            "side": tape.side,
+            "price": join,
+            "count": count,
+            "status": "open",
+            "order_id": order_id,
+            "model_prob": idea.model_prob,
+            "model_yes": pick["model_yes"],
+            "sigma": pick["sigma"],
+            "spot": pick["spot"],
+            "strike": pick["strike"],
+            "spec_kind": pick["spec_kind"],
+            "cap": pick.get("cap"),
+            "asset_key": pick["asset"].key,
+            "close_at": pick.get("close"),
+            "hourly_vol": pick.get("hourly_vol"),
+            "paper": not self.live,
+        }
+        pick["loop"] = "hourly"
+        pick["kind"] = "btc15m_tape"
+        if fill_count > 0:
+            ticket = self._ticket_fields(pick, idea, fill_count, fill_cost, order_id)
+            self.tracker.state["tickets"].append(ticket)
+            return [card]
+        self.tracker.state.setdefault("rests", []).append(rest)
+        return [card]
+
     async def _enter_fifteen(self, *, news: str | None) -> list[str]:
         """One post-only limit after a Pass. Never market, never IOC pay-through."""
         from types import SimpleNamespace
@@ -956,6 +1125,8 @@ class CampaignEngine:
                 continue
             join = idea.join_price
             cost_px = self._yes_to_cost(idea.side, join)
+            if loop == "hourly" and cost_px >= book.maker_join_min:
+                continue
             equity = self._equity()
             budget = min(book.kelly_stake(equity, idea.model_prob, cost_px), available)
             if budget < book.min_stake:
@@ -1025,7 +1196,7 @@ class CampaignEngine:
             else:
                 self.tracker.state.setdefault("rests", []).append(rest)
                 actions.append(
-                    f"{mode} post-only {idea.side} {ticker} {count:.2f}@ {join:.2f} · {idea.rationale}"
+                    f"{mode} post-only {idea.side} {ticker} {count:.2f} @ {cost_px:.2f} (${cost:.2f}) · yes {join:.2f} · {idea.rationale}"
                 )
             placed += 1
         if placed == 0:
@@ -1200,7 +1371,7 @@ async def run_scheduler(engine: CampaignEngine) -> None:
         elif now.minute % 5 == 0 and minute_key != last_fifteen_minute:
             await engine.fire("fifteen")
             last_fifteen_minute = minute_key
-        if loop_time - last_hourly >= 300:
+        if loop_time - last_hourly >= HOURLY_INTERVAL_SECONDS:
             await engine.fire("hourly")
             last_hourly = loop_time
         if in_maker_window(now) and minute_key != last_maker_minute:
