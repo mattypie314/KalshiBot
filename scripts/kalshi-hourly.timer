@@ -1,0 +1,9 @@
+[Unit]
+Description=Run KalshiBot hourly scan at minute 3
+
+[Timer]
+OnCalendar=*-*-* *:03:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
