@@ -92,6 +92,7 @@ def run_scan(
     asset: str | None,
     place: bool,
     force_live: bool,
+    armed: bool = False,
 ) -> int:
     assets = [asset.upper()] if asset else settings.asset_list
     for name in assets:
@@ -206,14 +207,14 @@ def run_scan(
             return EXIT_OK
 
         if place or force_live:
-            if force_live and not settings.live_enabled:
+            live = bool(force_live and (armed or settings.live_enabled))
+            if force_live and not live:
                 print(
-                    "LIVE refused: set LIVE_TRADING=true and CONFIRM_LIVE=YES. Staying dry-run.",
+                    "LIVE refused: type YES at the prompt, pass --confirm YES, "
+                    "or set LIVE_TRADING=true and CONFIRM_LIVE=YES.",
                     file=sys.stderr,
                 )
-                if force_live:
-                    return EXIT_CONFIG
-            live = bool(force_live and settings.live_enabled)
+                return EXIT_CONFIG
             if live and not client.can_trade:
                 print("LIVE refused: missing API key / private key.", file=sys.stderr)
                 return EXIT_CONFIG
@@ -223,7 +224,7 @@ def run_scan(
                     client=client,
                     artifacts_dir=artifacts,
                     live=live,
-                    confirm_live=settings.confirm_live == "YES",
+                    confirm_live=live,
                 )
             except RateLimitedError as exc:
                 print(f"rate limited: {exc}", file=sys.stderr)
@@ -302,7 +303,7 @@ KalshiBot — pick a mode
   1  scan   report only (default)
   2  once   dry-run limit payloads
   3  auth   test key + PEM
-  4  live   real limits (needs LIVE_TRADING + CONFIRM_LIVE)
+  4  live   real limits (type YES — no .env edit)
 
 Mode [scan]: """
 
@@ -333,6 +334,27 @@ def normalize_argv(
     return raw
 
 
+def live_is_armed(
+    settings: HourlySettings,
+    *,
+    confirm: str = "",
+    isatty: bool | None = None,
+    prompt: Callable[[str], str] | None = None,
+) -> bool:
+    """Arm live for this run only. Env flags, --confirm YES, or a TTY YES prompt."""
+    if settings.live_enabled:
+        return True
+    if str(confirm or "").strip().upper() == "YES":
+        return True
+    if isatty is None:
+        isatty = sys.stdin.isatty()
+    if not isatty:
+        return False
+    where = " on DEMO" if settings.use_demo else " on PROD"
+    reply = (prompt or input)(f"Type YES to place LIVE limits{where} (anything else aborts): ")
+    return reply.strip().upper() == "YES"
+
+
 def cli() -> None:
     raise SystemExit(main())
 
@@ -349,8 +371,16 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("once", help="Scan and print dry-run limit order payloads")
     sub.add_parser("auth", help="Test Kalshi API key + PEM (no orders)")
-    live = sub.add_parser("live", help="Place limits only if LIVE_TRADING=true and CONFIRM_LIVE=YES")
-    live.add_argument("--yes-i-mean-it", action="store_true", help=argparse.SUPPRESS)
+    live = sub.add_parser(
+        "live",
+        help="Place limits after typing YES (or --confirm YES). .env can stay dry.",
+    )
+    live.add_argument(
+        "--confirm",
+        default="",
+        metavar="YES",
+        help="Pass YES to arm live without a prompt. Leaves .env unchanged.",
+    )
 
     args = parser.parse_args(normalize_argv(argv))
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -368,13 +398,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "once":
         return run_scan(settings, asset=None, place=True, force_live=False)
     if args.command == "live":
-        if not settings.live_enabled:
+        if not live_is_armed(settings, confirm=args.confirm):
             print(
-                "LIVE refused: set LIVE_TRADING=true and CONFIRM_LIVE=YES.",
+                "LIVE refused: type YES at the prompt, pass --confirm YES, "
+                "or set LIVE_TRADING=true and CONFIRM_LIVE=YES.",
                 file=sys.stderr,
             )
             return EXIT_CONFIG
-        return run_scan(settings, asset=None, place=True, force_live=True)
+        return run_scan(settings, asset=None, place=True, force_live=True, armed=True)
     return EXIT_CONFIG
 
 
