@@ -2,9 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0c0c0e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="KalshiBot" />
     <title>KalshiBot · Live</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/static/icon-192.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -21,8 +27,8 @@
           <span class="word">Kalshi<span>Bot</span></span>
         </a>
         <nav class="nav-links" aria-label="Primary">
-          <button class="nav-link active" data-view="markets" type="button">Markets</button>
-          <button class="nav-link" data-view="portfolio" type="button">Portfolio</button>
+          <a class="nav-link active" href="/" data-view="markets">Markets</a>
+          <a class="nav-link" href="/portfolio" data-view="portfolio">Portfolio</a>
         </nav>
       </div>
       <div class="nav-right">
@@ -95,6 +101,39 @@
         <section id="board" class="board" aria-live="polite"></section>
       </section>
 
+      <section class="trade-view hidden" id="view-trade" aria-label="Live market">
+        <button class="back" id="trade-back" type="button">← Markets</button>
+        <div class="trade-head">
+          <div>
+            <h2 id="trade-title">Market</h2>
+            <p class="sub" id="trade-sub"></p>
+          </div>
+          <div class="trade-last">
+            <div class="num" id="trade-last">—</div>
+            <div class="edge" id="trade-change"></div>
+          </div>
+        </div>
+        <div class="pair trade-pair" id="trade-pair"></div>
+        <div class="chart-card">
+          <div class="chart-toolbar">
+            <span class="label">Yes price</span>
+            <div class="ranges" id="chart-ranges">
+              <button type="button" data-hours="1">1H</button>
+              <button type="button" data-hours="4" class="on">4H</button>
+              <button type="button" data-hours="12">12H</button>
+              <button type="button" data-hours="24">1D</button>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <svg id="chart" viewBox="0 0 640 240" preserveAspectRatio="none" role="img" aria-label="Live Yes price"></svg>
+            <div class="chart-empty hidden" id="chart-empty">Waiting for prints…</div>
+          </div>
+          <div class="meta-row" id="chart-meta"></div>
+        </div>
+        <p class="why" id="trade-why"></p>
+        <a class="kalshi-link" id="trade-kalshi" href="#" target="_blank" rel="noreferrer">Open on Kalshi</a>
+      </section>
+
       <section class="portfolio-view hidden" id="view-portfolio">
         <div class="blotter-head">
           <h2>Portfolio</h2>
@@ -109,5 +148,10 @@
       </section>
     </main>
     <script src="/static/app.js"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      }
+    </script>
   </body>
 </html>
