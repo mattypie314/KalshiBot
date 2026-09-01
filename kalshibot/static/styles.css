@@ -351,17 +351,18 @@ button { cursor: pointer; }
   align-items: center;
   margin-bottom: 8px;
 }
-.ranges { display: flex; gap: 4px; }
+.ranges { display: flex; gap: 4px; position: relative; z-index: 2; }
 .ranges button {
   background: var(--bg);
-  border: 1px solid transparent;
+  border: 1px solid var(--line);
   color: var(--muted);
-  padding: 5px 9px;
+  padding: 8px 12px;
   border-radius: 8px;
   font-size: 12px;
   font-weight: 700;
+  min-width: 44px;
 }
-.ranges button.on { background: var(--ink); color: #fff; }
+.ranges button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
 .chart-wrap { position: relative; height: 240px; }
 .chart-wrap svg { width: 100%; height: 100%; display: block; }
 .chart-empty {

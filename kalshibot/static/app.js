@@ -303,12 +303,13 @@ document.getElementById("trade-back").addEventListener("click", () => {
   setView("markets");
 });
 
-document.querySelectorAll("#chart-ranges button").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    chartHours = Number(btn.dataset.hours);
-    document.querySelectorAll("#chart-ranges button").forEach((el) => el.classList.toggle("on", el === btn));
-    if (selected) loadChart();
-  });
+document.getElementById("chart-ranges").addEventListener("click", (event) => {
+  const btn = event.target.closest("button[data-hours]");
+  if (!btn) return;
+  event.preventDefault();
+  chartHours = Number(btn.dataset.hours);
+  document.querySelectorAll("#chart-ranges button").forEach((el) => el.classList.toggle("on", el === btn));
+  if (selected) loadChart();
 });
 
 window.addEventListener("popstate", route);
@@ -473,7 +474,7 @@ async function loadChart() {
     ch.textContent = `${change >= 0 ? "+" : ""}${(100 * change).toFixed(1)}¢`;
     ch.className = `edge ${change >= 0 ? "pos" : "neg"}`;
   }
-  document.getElementById("chart-meta").innerHTML = `<span>Live · ${chartData.points.length} prints · ${chartData.interval}m bars</span><span>${closeLabel(live.close_time || selected.close_time)}</span>`;
+  document.getElementById("chart-meta").innerHTML = `<span>Live · ${chartHours}H · ${chartData.points.length} prints · ${chartData.interval}m bars</span><span>${closeLabel(live.close_time || selected.close_time)}</span>`;
   drawChart(chartData.points || []);
 }
 
