@@ -62,6 +62,10 @@ GitHub Actions (`.github/workflows/hourly.yml`) runs `scan` at minute 3 of every
 
 Settlement on these books uses CF Benchmarks RTI (60-second average), not a single exchange last tick. The model uses Coinbase/Binance spot as a **proxy** and says so in every report.
 
+```bash
+pytest
+```
+
 ## Later
 
 Full campaign desk (15m / maker / dashboard / sports research):

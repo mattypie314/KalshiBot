@@ -11,7 +11,6 @@ EXIT_OK = 0
 EXIT_CONFIG = 2
 EXIT_RATE_LIMITED = 3
 
-# Same host the campaign bot already signs against.
 DEFAULT_BASE_URL = "https://external-api.kalshi.com/trade-api/v2"
 
 
@@ -20,9 +19,17 @@ def _strip_secret(value: object) -> str:
     return text.strip()
 
 
+def _env_files() -> tuple[str, ...]:
+    files = [".env"]
+    home_env = Path.home() / ".kalshi" / "env"
+    if home_env.is_file():
+        files.append(str(home_env))
+    return tuple(files)
+
+
 class HourlySettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env",),
+        env_file=_env_files(),
         extra="ignore",
         env_ignore_empty=True,
         case_sensitive=False,
