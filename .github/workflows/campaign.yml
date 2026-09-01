@@ -1,12 +1,8 @@
 name: Kalshi campaign
 
 on:
-  # Scheduled jobs keep the saved book (halted=keep). A one-off halt=yes
-  # would otherwise get overwritten by the next cron.
-  schedule:
-    - cron: "*/5 * * * *"
-    - cron: "2,3,4,17,18,19,32,33,34,47,48,49 * * * *"
-    - cron: "12,13,14,27,28,29,42,43,44,57,58,59 * * * *"
+  # Manual only. The Pi is the live host. A GitHub cron would trade the
+  # same Kalshi book (and a halted GitHub job would cancel Pi rests).
   workflow_dispatch:
     inputs:
       loop:
@@ -60,6 +56,7 @@ concurrency:
 
 jobs:
   fire:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout bot
