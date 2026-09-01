@@ -5,9 +5,9 @@ After=network-online.target
 [Service]
 Type=oneshot
 User=mkubit
-WorkingDirectory=/home/mkubit/KalshiBot
-Environment=PYTHONPATH=/home/mkubit/KalshiBot
-EnvironmentFile=-/home/mkubit/KalshiBot/.env
+WorkingDirectory=/home/KalshiBot
+Environment=PYTHONPATH=/home/KalshiBot
+EnvironmentFile=-/home/KalshiBot/.env
 EnvironmentFile=-/home/mkubit/.kalshi/env
 ExecStart=/usr/bin/python3 -m src.main once
 
