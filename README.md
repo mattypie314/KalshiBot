@@ -46,7 +46,44 @@ export KALSHI_API_KEY_ID=your-key-id
 export KALSHI_PRIVATE_KEY_PATH=~/.kalshi/kalshi_private_key.pem
 ```
 
-GitHub Actions (`.github/workflows/hourly.yml`) runs `scan` at minute 3 of every hour. It does **not** place live orders. Kalshi often 403s cloud IPs. For live limits use a VPS with a stable IP.
+GitHub Actions (`.github/workflows/hourly.yml`) runs `scan` at minute 3 of every hour. It does **not** place live orders. Kalshi often 403s cloud IPs. For live limits use a VPS or the Pi with a stable IP.
+
+## On the Pi (`/home/mkubit/KalshiBot`)
+
+The repo root **is** the project. Clone straight into that folder so you do not get `/home/mkubit/KalshiBot/KalshiBot`:
+
+```bash
+git clone https://github.com/mattypie314/KalshiBot.git /home/mkubit/KalshiBot
+```
+
+If you already have the extra nested folder, lift it up one level (keeps `.env` / `.venv` if they sit in the inner clone):
+
+```bash
+# stop anything using the nested path first
+mv /home/mkubit/KalshiBot /home/mkubit/KalshiBot-nested
+mv /home/mkubit/KalshiBot-nested/KalshiBot /home/mkubit/KalshiBot
+# if the outer folder had its own .env or venv, copy those into the new root
+rmdir /home/mkubit/KalshiBot-nested
+```
+
+Then:
+
+```bash
+cd /home/mkubit/KalshiBot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp -n .env.example .env   # edit keys; never commit .env
+python -m src.main auth
+```
+
+systemd units in `scripts/` use `WorkingDirectory=/home/mkubit/KalshiBot`:
+
+```bash
+sudo cp scripts/kalshi-hourly.service scripts/kalshi-hourly.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now kalshi-hourly.timer
+```
 
 ## Bankroll caps
 
