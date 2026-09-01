@@ -14,6 +14,8 @@ KNOWN_THRESHOLD_SERIES = ("KXBTCD", "KXETHD")
 KNOWN_RANGE_SERIES = ("KXBTC", "KXETH")
 FIFTEEN_SERIES = ("KXBTC15M", "KXETH15M")
 THRESHOLD_SERIES = KNOWN_THRESHOLD_SERIES
+THRESHOLD_BY_ASSET = {"BTC": ("KXBTCD",), "ETH": ("KXETHD",)}
+FIFTEEN_BY_ASSET = {"BTC": ("KXBTC15M",), "ETH": ("KXETH15M",)}
 
 _ASSET_FROM_SERIES = (
     (re.compile(r"ETH"), "ETH"),
@@ -277,10 +279,12 @@ class MarketDiscovery:
     ) -> list[HourlyMarket]:
         now = now or datetime.now(timezone.utc)
         wanted = {a.upper() for a in assets}
-        hourly = self._load_series(THRESHOLD_SERIES, now, used_15m=False)
+        series = tuple(s for a in wanted for s in THRESHOLD_BY_ASSET.get(a, ()))
+        hourly = self._load_series(series or THRESHOLD_SERIES, now, used_15m=False)
         if not hourly and allow_15m_fallback:
             logger.info("No hourly BTC/ETH threshold books in the current/next hour; falling back to 15m")
-            hourly = self._load_series(FIFTEEN_SERIES, now, used_15m=True, require_hour_window=False)
+            fifteen = tuple(s for a in wanted for s in FIFTEEN_BY_ASSET.get(a, ()))
+            hourly = self._load_series(fifteen or FIFTEEN_SERIES, now, used_15m=True, require_hour_window=False)
         out: list[HourlyMarket] = []
         spots = spots or {}
         for asset in wanted:

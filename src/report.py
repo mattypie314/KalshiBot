@@ -43,7 +43,7 @@ def format_report(
         "## Actionable",
     ]
     if not ideas:
-        lines.append("NO_ACTIONABLE_EDGE")
+        lines.append("(none this hour)")
     for idea in ideas:
         m = idea.market
         lines.extend(
@@ -73,12 +73,23 @@ def format_report(
 
     lines.append("")
     lines.append("## Avoid")
-    if not avoided:
-        lines.append("- (none)")
-    for row in avoided[:12]:
+    favorite_skips = 0
+    shown = 0
+    for row in avoided:
+        text = " ".join(row.avoid_reasons)
+        if "0.05-0.95" in text or "99¢" in text:
+            favorite_skips += 1
+            continue
+        if shown >= 8:
+            continue
         label = f"{row.market.yes_sub_title} " if row.market else ""
         reason = "; ".join(row.avoid_reasons[:2]) or "filtered"
         lines.append(f"- {label}{reason}")
+        shown += 1
+    if favorite_skips:
+        lines.append(f"- skipped {favorite_skips} deep 99¢/1¢ favorites (price outside 0.05–0.95)")
+    if not avoided:
+        lines.append("- (none)")
 
     if not ideas:
         lines.append("NO_ACTIONABLE_EDGE")

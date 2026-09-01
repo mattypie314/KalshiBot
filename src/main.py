@@ -168,6 +168,16 @@ def run_scan(
                 avoided.append(result)
 
         ideas.sort(key=lambda i: i.net_edge, reverse=True)
+        extra = ideas[settings.max_ideas_per_run :]
+        ideas = ideas[: settings.max_ideas_per_run]
+        for idea in extra:
+            nearby.append(
+                FilterResult(
+                    market=idea.market,
+                    nearby=True,
+                    watch_note=f"{idea.side} net {idea.net_edge:.1%} held back (max {settings.max_ideas_per_run} idea/run)",
+                )
+            )
         report = format_report(
             now=now,
             spots=spots,

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from src.fees import ev_per_contract, fee_on_size, taker_fee_dollars
+from src.fees import ev_per_contract, taker_fee_dollars
 from src.markets import HourlyMarket
 from src.model import fair_no, fair_prob, hours_left, model_z
 from src.sizer import size_idea
@@ -230,10 +230,10 @@ def evaluate_market(
 
         # Prefer maker: reprice fee at 0 if we rest inside / at bid.
         using_maker = bool(limit) and limit + 1e-9 < ask
-        live_price = limit if using_maker and limit else ask
-        fee_total, fee_each = fee_on_size(trial.contracts, live_price, maker=using_maker)
-        gross, net = ev_per_contract(p_hat, ask, taker_fee_dollars(trial.contracts, ask) / max(trial.contracts, 1))
-        # Keep filter net at executable ask; note maker improvement separately.
+        taker_total = taker_fee_dollars(trial.contracts, ask)
+        taker_each = taker_total / max(trial.contracts, 1)
+        gross, net = ev_per_contract(p_hat, ask, taker_each)
+        # Keep filter net at executable ask + taker fee; maker is a better fill, not the filter.
         rationale = [
             f"Executable {side} ask {ask:.2f}; model fair {p_hat:.1%}.",
             f"Net edge after taker fee on {trial.contracts} ct: {net:.1%}.",
@@ -253,13 +253,13 @@ def evaluate_market(
             fair=p_hat,
             gross_edge=gross,
             net_edge=net,
-            fee_per_contract=fee_each,
-            fee_total=fee_total,
+            fee_per_contract=taker_each,
+            fee_total=taker_total,
             z=z,
             hours_left=hrs,
             contracts=trial.contracts,
             risk_dollars=trial.risk_dollars,
-            max_loss=trial.risk_dollars + (0.0 if using_maker else fee_total),
+            max_loss=trial.risk_dollars + taker_total,
             rationale=rationale,
             post_maker=using_maker,
         )

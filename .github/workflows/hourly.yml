@@ -34,6 +34,7 @@ jobs:
           LIVE_TRADING: "false"
           CONFIRM_LIVE: "NO"
           USE_DEMO: "true"
+          SPOT_SOURCE: coinbase
           PYTHONPATH: ${{ github.workspace }}
           KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
           KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}

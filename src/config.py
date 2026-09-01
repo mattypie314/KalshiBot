@@ -39,6 +39,7 @@ class HourlySettings(BaseSettings):
 
     assets: str = "BTC,ETH"
     max_markets_per_asset: int = 12
+    max_ideas_per_run: int = 1
     min_minutes_left: float = 3
     max_spread: float = 0.06
     min_visible_depth_contracts: int = 5
