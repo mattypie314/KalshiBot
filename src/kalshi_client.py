@@ -75,8 +75,11 @@ class KalshiClient:
             timeout=timeout,
             headers={"User-Agent": "KalshiHourly/0.1 (+https://github.com/mattypie314/KalshiBot)"},
         )
-        self.api_key_id = api_key_id
-        self._private_key = load_private_key(private_key_path) if api_key_id and private_key_path else None
+        self.api_key_id = (api_key_id or "").strip().strip('"').strip("'")
+        self._private_key_path = private_key_path
+        self._private_key = (
+            load_private_key(private_key_path) if self.api_key_id and private_key_path else None
+        )
         self.read_only = False
 
     @property
@@ -145,7 +148,8 @@ class KalshiClient:
         raise last_error or RateLimitedError("request failed")
 
     def get_json(self, path: str, params: dict[str, Any] | None = None, *, auth: bool = False) -> dict[str, Any]:
-        return self._request("GET", path, params=params, auth=auth).json()
+        base = self.trading_base_url if auth else None
+        return self._request("GET", path, params=params, auth=auth, base_url=base).json()
 
     def post_json(self, path: str, payload: dict[str, Any], *, auth: bool = True) -> dict[str, Any]:
         if auth and not self.can_trade:
@@ -235,3 +239,21 @@ class KalshiClient:
             self.read_only = True
             return []
         return list(data.get("fills") or [])
+
+    def get_balance(self) -> dict[str, Any]:
+        return self.get_json("/portfolio/balance", auth=True)
+
+    def auth_status(self) -> dict[str, Any]:
+        pem = Path(self._private_key_path).expanduser() if self._private_key_path else None
+        head = ""
+        if pem and pem.is_file():
+            head = pem.read_text(errors="replace").splitlines()[0] if pem.stat().st_size else ""
+        return {
+            "can_trade": self.can_trade,
+            "key_id_set": bool(self.api_key_id),
+            "key_id_len": len(self.api_key_id),
+            "pem_path": str(pem) if pem else "",
+            "pem_exists": bool(pem and pem.is_file()),
+            "pem_looks_private": "PRIVATE KEY" in head,
+            "trading_host": self.trading_base_url,
+        }

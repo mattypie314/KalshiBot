@@ -217,7 +217,7 @@ def run_scan(
                 print("LIVE refused: missing API key / private key.", file=sys.stderr)
                 return EXIT_CONFIG
             try:
-                execute_ideas(
+                placed = execute_ideas(
                     ideas,
                     client=client,
                     artifacts_dir=artifacts,
@@ -233,6 +233,9 @@ def run_scan(
             except AuthConfigError as exc:
                 print(f"auth/config: {exc}", file=sys.stderr)
                 return EXIT_CONFIG
+            if live and any("401" in str(err) for err in placed.get("errors") or []):
+                print("LIVE order failed auth (401). Run: python -m src.main auth", file=sys.stderr)
+                return EXIT_CONFIG
             state["hour_key"] = _hour_key(now)
             state["last_contracts"] = ideas[0].contracts
             save_state(Path(settings.state_path), state)
@@ -240,6 +243,42 @@ def run_scan(
     finally:
         client.close()
         spots_svc.close()
+
+
+def run_auth(settings: HourlySettings) -> int:
+    """Check that signed Kalshi calls work. Prints no secret material."""
+    settings.ensure_private_key_file()
+    client = KalshiClient(
+        settings.kalshi_base_url,
+        timeout=settings.request_timeout_seconds,
+        api_key_id=settings.kalshi_api_key_id,
+        private_key_path=settings.kalshi_private_key_path,
+        trading_base_url=settings.trading_base_url,
+    )
+    try:
+        info = client.auth_status()
+        print(f"trading host: {info['trading_host']}")
+        print(f"USE_DEMO={settings.use_demo} LIVE_TRADING={settings.live_trading} CONFIRM_LIVE={settings.confirm_live}")
+        print(f"key id set: {info['key_id_set']} (len {info['key_id_len']})")
+        print(f"pem: {info['pem_path'] or '(none)'} exists={info['pem_exists']} private={info['pem_looks_private']}")
+        if not info["key_id_set"] or not info["pem_exists"]:
+            print("Missing key id or PEM. Copy the campaign bot's KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY_PATH.")
+            return EXIT_CONFIG
+        if not info["pem_looks_private"]:
+            print("PEM does not look like a PRIVATE key. Use kalshi_private_key.pem, not the public file.")
+            return EXIT_CONFIG
+        try:
+            bal = client.get_balance()
+        except Exception as exc:  # noqa: BLE001
+            print(f"AUTH FAILED: {exc}")
+            print("Use the same key id + private PEM + host as the campaign dashboard.")
+            print("Live Kalshi key + USE_DEMO=false + KALSHI_BASE_URL=https://api.elections.kalshi.com/trade-api/v2")
+            return EXIT_CONFIG
+        cash = bal.get("balance_dollars") or bal.get("balance")
+        print(f"AUTH OK. Kalshi balance field: {cash}")
+        return EXIT_OK
+    finally:
+        client.close()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -250,6 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     scan.add_argument("--asset", choices=["BTC", "ETH", "btc", "eth"], default=None)
 
     sub.add_parser("once", help="Scan and print dry-run limit order payloads")
+    sub.add_parser("auth", help="Test Kalshi API key + PEM (no orders)")
     live = sub.add_parser("live", help="Place limits only if LIVE_TRADING=true and CONFIRM_LIVE=YES")
     live.add_argument("--yes-i-mean-it", action="store_true", help=argparse.SUPPRESS)
 
@@ -262,6 +302,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"config error: {exc}", file=sys.stderr)
         return EXIT_CONFIG
 
+    if args.command == "auth":
+        return run_auth(settings)
     if args.command == "scan":
         return run_scan(settings, asset=args.asset, place=False, force_live=False)
     if args.command == "once":

@@ -12,3 +12,8 @@ def test_live_enabled_requires_both_flags():
     assert HourlySettings(live_trading=False, confirm_live="YES").live_enabled is False
     assert HourlySettings(live_trading=True, confirm_live="NO").live_enabled is False
     assert HourlySettings(live_trading=True, confirm_live="YES").live_enabled is True
+
+
+def test_key_id_strips_quotes():
+    settings = HourlySettings(kalshi_api_key_id='  "abc-123"  ')
+    assert settings.kalshi_api_key_id == "abc-123"

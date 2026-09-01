@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,10 +11,18 @@ EXIT_OK = 0
 EXIT_CONFIG = 2
 EXIT_RATE_LIMITED = 3
 
+# Same host the campaign bot already signs against.
+DEFAULT_BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
+
+
+def _strip_secret(value: object) -> str:
+    text = str(value or "").strip().strip('"').strip("'")
+    return text.strip()
+
 
 class HourlySettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env",),
+        env_file=(".env", str(Path.home() / ".kalshi" / "env")),
         extra="ignore",
         env_ignore_empty=True,
         case_sensitive=False,
@@ -23,7 +31,7 @@ class HourlySettings(BaseSettings):
     kalshi_api_key_id: str = ""
     kalshi_private_key_path: str = ""
     kalshi_private_key: str = ""  # raw PEM from Actions secret
-    kalshi_base_url: str = "https://external-api.kalshi.com/trade-api/v2"
+    kalshi_base_url: str = DEFAULT_BASE_URL
     kalshi_demo_url: str = "https://demo-api.kalshi.co/trade-api/v2"
     use_demo: bool = True
     live_trading: bool = False
@@ -56,6 +64,26 @@ class HourlySettings(BaseSettings):
     @classmethod
     def _upper_confirm(cls, value: object) -> str:
         return str(value or "NO").strip().upper()
+
+    @field_validator("kalshi_api_key_id", "kalshi_private_key_path", mode="before")
+    @classmethod
+    def _clean_key_fields(cls, value: object) -> str:
+        return _strip_secret(value)
+
+    @model_validator(mode="after")
+    def default_kalshi_key_files(self) -> HourlySettings:
+        home = Path.home() / ".kalshi"
+        if not self.kalshi_api_key_id:
+            for name in ("api_key_id", "key_id"):
+                path = home / name
+                if path.is_file():
+                    self.kalshi_api_key_id = path.read_text().strip()
+                    break
+        if self.kalshi_api_key_id and not self.kalshi_private_key_path:
+            pem = home / "kalshi_private_key.pem"
+            if pem.is_file():
+                self.kalshi_private_key_path = str(pem)
+        return self
 
     @property
     def asset_list(self) -> list[str]:
