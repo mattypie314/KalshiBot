@@ -262,7 +262,7 @@ def run_auth(settings: HourlySettings) -> int:
         print(f"key id set: {info['key_id_set']} (len {info['key_id_len']})")
         print(f"pem: {info['pem_path'] or '(none)'} exists={info['pem_exists']} private={info['pem_looks_private']}")
         if not info["key_id_set"] or not info["pem_exists"]:
-            print("Missing key id or PEM. Copy the campaign bot's KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY_PATH.")
+            print("Missing key id or PEM. Set KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY_PATH.")
             return EXIT_CONFIG
         if not info["pem_looks_private"]:
             print("PEM does not look like a PRIVATE key. Use kalshi_private_key.pem, not the public file.")
@@ -271,7 +271,7 @@ def run_auth(settings: HourlySettings) -> int:
             bal = client.get_balance()
         except Exception as exc:  # noqa: BLE001
             print(f"AUTH FAILED: {exc}")
-            print("Use the same key id + private PEM + host as the campaign dashboard.")
+            print("Use the same key id + private PEM + host as your Kalshi account.")
             print("Live Kalshi key + USE_DEMO=false + KALSHI_BASE_URL=https://external-api.kalshi.com/trade-api/v2")
             return EXIT_CONFIG
         cash = bal.get("balance_dollars") or bal.get("balance")

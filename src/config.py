@@ -11,7 +11,6 @@ EXIT_OK = 0
 EXIT_CONFIG = 2
 EXIT_RATE_LIMITED = 3
 
-# Same host the campaign bot already signs against.
 DEFAULT_BASE_URL = "https://external-api.kalshi.com/trade-api/v2"
 
 

@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 import logging
+import os
 import random
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
-
-from kalshibot.auth import expand_key_path, load_private_key, sign_path_from_url, signed_headers
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,35 @@ def unwrap_order(data: Any) -> dict[str, Any]:
 
 
 def _expand_path(path: str) -> Path:
-    return Path(expand_key_path(path)).resolve()
+    return Path(os.path.expandvars(os.path.expanduser(path or ""))).resolve()
+
+
+def load_private_key(path: str):
+    pem = _expand_path(path).read_bytes()
+    return serialization.load_pem_private_key(pem, password=None)
+
+
+def sign_path_from_url(base_url: str, path: str) -> str:
+    parsed = urlparse(base_url)
+    prefix = parsed.path.rstrip("/")
+    if not path.startswith("/"):
+        path = "/" + path
+    return f"{prefix}{path.split('?', 1)[0]}"
+
+
+def signed_headers(key_id: str, private_key, method: str, sign_path: str) -> dict[str, str]:
+    timestamp = str(int(time.time() * 1000))
+    message = f"{timestamp}{method.upper()}{sign_path}".encode()
+    signature = private_key.sign(
+        message,
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
+        hashes.SHA256(),
+    )
+    return {
+        "KALSHI-ACCESS-KEY": key_id,
+        "KALSHI-ACCESS-TIMESTAMP": timestamp,
+        "KALSHI-ACCESS-SIGNATURE": base64.b64encode(signature).decode("utf-8"),
+    }
 
 
 class KalshiClient:
