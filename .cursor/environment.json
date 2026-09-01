@@ -1,7 +1,13 @@
 {
   "name": "KalshiBot",
   "install": "pip3 install --break-system-packages -r requirements.txt",
-  "start": "python3 -m kalshibot serve --host 0.0.0.0 --port 8000",
+  "terminals": [
+    {
+      "name": "research dashboard",
+      "command": "python3 -m kalshibot serve --host 0.0.0.0 --port 8000",
+      "description": "KalshiBot FastAPI research dashboard on http://127.0.0.1:8000 (DRY/practice mode by default; also runs the 15m/hourly/maker loops while up)."
+    }
+  ],
   "ports": [
     {
       "name": "research dashboard",
