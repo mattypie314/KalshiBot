@@ -118,6 +118,18 @@ def _engine(tmp_path):
     return engine
 
 
+def test_map_kalshi_position_pnl_dollars():
+    row = map_kalshi_position(
+        {
+            "ticker": "KXBTC15M-1",
+            "position_fp": "4.00",
+            "market_exposure_dollars": "2.40",
+            "realized_pnl_dollars": "-0.18",
+        }
+    )
+    assert row["pnl"] == -0.18
+
+
 def test_public_status_uses_kalshi_positions(tmp_path):
     engine = _engine(tmp_path)
     engine.kalshi.get_orders = AsyncMock(return_value=[])
@@ -173,3 +185,30 @@ def test_public_status_uses_fills_when_positions_empty(tmp_path):
     assert payload["open_tickets"][0]["ticker"] == "KXBNB-26SEP0118-B687"
     assert payload["open_tickets"][0]["side"] == "no"
     assert payload["open_tickets"][0]["count"] == 25.0
+
+
+def test_public_status_splits_cash_portfolio_and_updates_pnl(tmp_path):
+    engine = _engine(tmp_path)
+    engine.kalshi.get_orders = AsyncMock(return_value=[])
+    engine.kalshi.get_positions = AsyncMock(
+        return_value=[
+            {
+                "ticker": "KXBTC15M-1",
+                "position_fp": "10.00",
+                "market_exposure_dollars": "6.00",
+                "realized_pnl_dollars": "0.40",
+            }
+        ]
+    )
+    engine.kalshi.get_balance = AsyncMock(
+        return_value={"balance_dollars": "40.00", "portfolio_value": 4800}
+    )
+    payload = asyncio.run(engine.public_status())
+    asyncio.run(engine.aclose())
+    assert payload["kalshi_cash"] == 40.0
+    assert payload["kalshi_total_value"] == 48.0
+    assert payload["equity"] == 48.0
+    assert payload["kalshi_cash"] != payload["equity"]
+    assert payload["pnl"] == 2.4
+    assert payload["realized"] == 2.4
+    assert payload["open_cost"] == 6.0

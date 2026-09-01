@@ -766,12 +766,12 @@ def test_sync_kalshi_cash_stores_total_value(tmp_path):
     assert "48.25" in (msg or "")
 
 
-def test_total_value_floors_at_cash_when_portfolio_is_smaller(tmp_path):
+def test_total_value_adds_position_mark_when_smaller_than_cash(tmp_path):
     engine = _engine(tmp_path, 15)
     engine.tracker.state["kalshi_cash"] = 38.27
-    engine.tracker.state["kalshi_total_value"] = 5.46
+    engine.tracker.state["kalshi_total_value"] = 43.73
     engine.tracker.state["sizing"] = {"follow_kalshi_cash": True, "bankroll_cap": None}
-    assert engine._total_value() == 38.27
+    assert engine._total_value() == 43.73
     asyncio.run(engine.aclose())
 
 

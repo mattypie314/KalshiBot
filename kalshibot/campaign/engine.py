@@ -34,7 +34,12 @@ from kalshibot.campaign.hourly import (
     pick_atm,
 )
 from kalshibot.campaign.playbook import playbook_from_settings
-from kalshibot.campaign.sizing import cash_from_balance, playbook_from_sizing, total_value_from_balance
+from kalshibot.campaign.sizing import (
+    account_nav,
+    cash_from_balance,
+    playbook_from_sizing,
+    portfolio_value_from_balance,
+)
 from kalshibot.campaign.rules import (
     classify_favorite,
     contracts_for_budget,
@@ -86,6 +91,7 @@ class CampaignEngine:
         self._live_override: bool | None = None
         self._fire_lock = asyncio.Lock()
         self._book_cache: tuple[float, list[dict[str, Any]], list[dict[str, Any]]] | None = None
+        self._balance_cache: tuple[float, dict[str, float | None]] | None = None
 
     async def aclose(self) -> None:
         if self._owns_http:
@@ -132,14 +138,16 @@ class CampaignEngine:
         }
 
     async def public_status(self) -> dict[str, Any]:
-        """Phone blotter. Positions come from Kalshi when keys are loaded, not the local tracker."""
+        """Phone blotter. Cash, portfolio, positions, and P&L come from Kalshi when keys are loaded."""
         payload = self.status()
         if not self.kalshi.can_trade:
             return payload
-        orders, positions, errors = await self._exchange_book()
+        book, balance = await asyncio.gather(self._exchange_book(), self._kalshi_balance())
+        orders, positions, errors = book
         paper_rests = [row for row in payload["rests"] if row.get("paper")]
+        mapped: list[dict[str, Any]] = []
         if "orders" not in errors:
-            payload["rests"] = [mapped for order in orders if (mapped := map_kalshi_order(order))] + paper_rests
+            payload["rests"] = [mapped_order for order in orders if (mapped_order := map_kalshi_order(order))] + paper_rests
             payload["rests_source"] = "kalshi"
         if "positions" not in errors:
             mapped = [row for pos in positions if (row := map_kalshi_position(pos))]
@@ -153,7 +161,62 @@ class CampaignEngine:
             payload["positions_source"] = "kalshi"
         if errors:
             payload["blotter_error"] = ",".join(sorted(errors))
+        self._apply_live_book(payload, mapped if "positions" not in errors else payload.get("open_tickets") or [], balance)
         return payload
+
+    def _apply_live_book(
+        self,
+        payload: dict[str, Any],
+        tickets: list[dict[str, Any]],
+        balance: dict[str, float | None],
+    ) -> None:
+        cost = sum(float(row.get("cost") or 0) for row in tickets)
+        locked = sum(float(row.get("pnl") or 0) for row in tickets)
+        cash = balance.get("cash")
+        mark = balance.get("mark")
+        nav = account_nav(cash, mark, cost)
+        if cash is not None:
+            payload["kalshi_cash"] = round(cash, 4)
+        if nav is not None:
+            payload["kalshi_total_value"] = round(nav, 4)
+            payload["equity"] = round(nav, 4)
+            payload["typical_idea"] = round(float(self.playbook.typical_risk_max) * nav, 2)
+        payload["open_cost"] = round(cost, 4)
+        if cash is not None:
+            payload["room"] = round(max(0.0, cash), 4)
+        mtm = 0.0
+        if nav is not None and cash is not None:
+            mtm = max(0.0, nav - cash)
+        elif nav is not None:
+            mtm = nav
+        unrealized = mtm - cost
+        pnl = unrealized + locked
+        payload["pnl"] = round(pnl, 4)
+        payload["realized"] = round(pnl, 4)
+        payload["unrealized"] = round(unrealized, 4)
+
+    async def _kalshi_balance(self) -> dict[str, float | None]:
+        now = time.monotonic()
+        cached = self._balance_cache
+        if cached and now - cached[0] < 15.0:
+            return cached[1]
+        empty = {"cash": None, "mark": None}
+        try:
+            raw = await self.kalshi.get_balance()
+        except Exception as exc:  # noqa: BLE001 — dashboard must still render
+            logger.warning("Kalshi balance failed: %s", exc)
+            return cached[1] if cached else empty
+        data = {
+            "cash": cash_from_balance(raw),
+            "mark": portfolio_value_from_balance(raw),
+        }
+        self._balance_cache = (now, data)
+        if data["cash"] is not None:
+            self.tracker.state["kalshi_cash"] = round(float(data["cash"]), 4)
+        nav = account_nav(data["cash"], data["mark"])
+        if nav is not None:
+            self.tracker.state["kalshi_total_value"] = round(nav, 4)
+        return data
 
     async def _exchange_book(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], set[str]]:
         now = time.monotonic()
@@ -241,21 +304,17 @@ class CampaignEngine:
         return max(0.0, budget)
 
     async def _sync_kalshi_cash(self) -> str | None:
-        if not (self.live and self.kalshi.can_trade and self._follow_kalshi()):
+        if not (self.kalshi.can_trade and self._follow_kalshi()):
             return None
-        try:
-            payload = await self.kalshi.get_balance()
-        except Exception as exc:  # noqa: BLE001 — keep last cash rather than crash the job
-            logger.warning("Kalshi balance failed: %s", exc)
-            return f"Could not refresh Kalshi cash ({exc}); using the saved book."
-        cash = cash_from_balance(payload)
-        total = total_value_from_balance(payload)
-        if cash is not None:
-            self.tracker.state["kalshi_cash"] = round(cash, 4)
-        if total is not None:
-            self.tracker.state["kalshi_total_value"] = round(total, 4)
+        self._balance_cache = None
+        bal = await self._kalshi_balance()
+        cash = bal.get("cash")
         if cash is None:
             return None
+        cost = open_cost(self.tracker.state.get("tickets") or [])
+        nav = account_nav(cash, bal.get("mark"), cost)
+        if nav is not None:
+            self.tracker.state["kalshi_total_value"] = round(nav, 4)
         return f"Kalshi cash ${cash:.2f} · campaign equity ${self._equity():.2f}."
 
     def _open_idea_count(self) -> int:
