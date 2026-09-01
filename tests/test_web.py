@@ -69,6 +69,7 @@ def test_campaign_control_live_toggle(tmp_path):
         engine.kalshi._private_key = object()
         engine.kalshi.get_orders = AsyncMock(return_value=[])
         engine.kalshi.get_positions = AsyncMock(return_value=[])
+        engine.kalshi.get_fills = AsyncMock(return_value=[])
         on = client.post("/api/campaign/control", json={"live": True})
         assert on.status_code == 200
         assert on.json()["status"]["live"] is True

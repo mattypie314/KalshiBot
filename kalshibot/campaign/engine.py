@@ -37,7 +37,7 @@ from kalshibot.campaign.rules import (
     maker_spread_ok,
     open_cost,
 )
-from kalshibot.campaign.blotter import map_kalshi_order, map_kalshi_position
+from kalshibot.campaign.blotter import map_kalshi_order, map_kalshi_position, positions_from_fills
 from kalshibot.campaign.tracker import Tracker
 from kalshibot.campaign.universe import FIFTEEN_SERIES, is_campaign_hourly_universe, is_daily_ticker, shard_for_series
 from kalshibot.config import Settings, settings
@@ -129,14 +129,18 @@ class CampaignEngine:
             return payload
         orders, positions, errors = await self._exchange_book()
         paper_rests = [row for row in payload["rests"] if row.get("paper")]
-        paper_tickets = [row for row in payload["open_tickets"] if row.get("paper")]
         if "orders" not in errors:
             payload["rests"] = [mapped for order in orders if (mapped := map_kalshi_order(order))] + paper_rests
             payload["rests_source"] = "kalshi"
         if "positions" not in errors:
-            payload["open_tickets"] = [
-                mapped for pos in positions if (mapped := map_kalshi_position(pos))
-            ] + paper_tickets
+            mapped = [row for pos in positions if (row := map_kalshi_position(pos))]
+            if not mapped:
+                try:
+                    fills = await self.kalshi.get_fills(limit=500)
+                    mapped = positions_from_fills(fills)
+                except Exception:
+                    logger.exception("Kalshi fills fallback failed")
+            payload["open_tickets"] = mapped
             payload["positions_source"] = "kalshi"
         if errors:
             payload["blotter_error"] = ",".join(sorted(errors))

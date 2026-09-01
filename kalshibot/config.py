@@ -1,8 +1,21 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _kalshi_env_files() -> tuple[str, ...]:
+    files = [".env"]
+    home_env = Path.home() / ".kalshi" / "env"
+    if home_env.is_file():
+        files.append(str(home_env))
+    return tuple(files)
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
+    model_config = SettingsConfigDict(env_file=_kalshi_env_files(), extra="ignore", env_ignore_empty=True)
 
     kalshi_base_url: str = "https://external-api.kalshi.com/trade-api/v2"
     series_per_section: int = 12
@@ -49,6 +62,21 @@ class Settings(BaseSettings):
     maker_max_new: int = 2
     maker_risk_cap: float = 0.03
     maker_taker_net_min: float = -0.02
+
+    @model_validator(mode="after")
+    def default_kalshi_key_files(self) -> Settings:
+        home = Path.home() / ".kalshi"
+        if not self.kalshi_api_key_id:
+            for name in ("api_key_id", "key_id"):
+                path = home / name
+                if path.is_file():
+                    self.kalshi_api_key_id = path.read_text().strip()
+                    break
+        if self.kalshi_api_key_id and not self.kalshi_private_key_path:
+            pem = home / "kalshi_private_key.pem"
+            if pem.is_file():
+                self.kalshi_private_key_path = str(pem)
+        return self
 
 
 settings = Settings()
