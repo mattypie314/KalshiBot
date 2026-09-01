@@ -9,6 +9,18 @@ import httpx
 from kalshibot.auth import load_private_key, sign_path_from_url, signed_headers
 
 
+def _position_qty(row: dict[str, Any]) -> float:
+    for key in ("position_fp", "position", "position_count"):
+        value = row.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
 class KalshiClient:
     def __init__(
         self,
@@ -149,3 +161,109 @@ class KalshiClient:
 
     async def get_balance(self) -> dict[str, Any]:
         return await self.get_json("/portfolio/balance")
+
+    async def _paged(
+        self,
+        path: str,
+        list_key: str,
+        params: dict[str, Any],
+        *,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while len(rows) < limit:
+            page = dict(params)
+            page["limit"] = min(200, limit - len(rows))
+            if cursor:
+                page["cursor"] = cursor
+            data = await self.get_json(path, params=page)
+            batch = list(data.get(list_key) or [])
+            if not batch and list_key == "market_positions":
+                batch = list(data.get("positions") or [])
+            rows.extend(batch)
+            cursor = data.get("cursor") or None
+            if not batch or not cursor:
+                break
+        return rows[:limit]
+
+    async def get_orders(self, *, status: str = "resting", limit: int = 200) -> list[dict[str, Any]]:
+        """List portfolio orders. Resting orders always come from GET /portfolio/orders."""
+        params: dict[str, Any] = {}
+        if status:
+            params["status"] = status
+        found: dict[str, dict[str, Any]] = {}
+        for extra in ({}, {"exchange_index": 2}, {"exchange_index": 0}, {"exchange_index": 1}):
+            try:
+                rows = await self._paged("/portfolio/orders", "orders", {**params, **extra}, limit=limit)
+            except httpx.HTTPStatusError:
+                continue
+            for row in rows:
+                key = str(row.get("order_id") or row.get("ticker") or "")
+                if key:
+                    found[key] = row
+            if extra == {} and found:
+                break
+        return list(found.values())[:limit]
+
+    async def get_positions(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        """List open market positions across shards.
+
+        Do not use count_filter=position. That keys off the legacy `position`
+        int, and crypto event contracts often only send `position_fp`, which
+        made the Positions tab look empty.
+        """
+        found: dict[str, dict[str, Any]] = {}
+
+        async def collect(params: dict[str, Any]) -> None:
+            cursor: str | None = None
+            scanned = 0
+            while scanned < 1000 and len(found) < limit:
+                page = dict(params)
+                page["limit"] = min(200, limit)
+                if cursor:
+                    page["cursor"] = cursor
+                data = await self.get_json("/portfolio/positions", params=page)
+                batch = list(data.get("market_positions") or data.get("positions") or [])
+                scanned += len(batch)
+                for row in batch:
+                    ticker = str(row.get("ticker") or row.get("market_ticker") or "")
+                    if ticker and _position_qty(row) != 0:
+                        found[ticker] = row
+                cursor = (data.get("cursor") or "").strip() or None
+                if not batch or not cursor:
+                    break
+
+        try:
+            await collect({"count_filter": "total_traded"})
+        except httpx.HTTPStatusError:
+            pass
+        if not found:
+            try:
+                await collect({})
+            except httpx.HTTPStatusError:
+                pass
+        if not found:
+            for shard in (2, 0, 1):
+                try:
+                    await collect({"exchange_index": shard})
+                except httpx.HTTPStatusError:
+                    continue
+                if found:
+                    break
+        return list(found.values())[:limit]
+
+    async def get_fills(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        found: dict[str, dict[str, Any]] = {}
+        for extra in ({}, {"exchange_index": 2}, {"exchange_index": 0}, {"exchange_index": 1}):
+            try:
+                rows = await self._paged("/portfolio/fills", "fills", extra, limit=limit)
+            except httpx.HTTPStatusError:
+                continue
+            for row in rows:
+                key = str(row.get("fill_id") or row.get("trade_id") or "")
+                if key:
+                    found[key] = row
+            if extra == {} and found:
+                break
+        return list(found.values())[:limit]
