@@ -2,6 +2,25 @@ from src.config import EXIT_CONFIG, HourlySettings
 from src.main import main
 
 
+def test_kalshibot_hourly_alias_refuses_live(monkeypatch):
+    monkeypatch.setenv("LIVE_TRADING", "false")
+    monkeypatch.setenv("CONFIRM_LIVE", "NO")
+    from kalshibot.__main__ import main as kalshi_main
+    import sys
+
+    previous = sys.argv
+    sys.argv = ["kalshibot", "hourly", "live"]
+    try:
+        try:
+            kalshi_main()
+        except SystemExit as exc:
+            assert exc.code == EXIT_CONFIG
+        else:
+            raise AssertionError("hourly live should SystemExit")
+    finally:
+        sys.argv = previous
+
+
 def test_live_refused_without_flags(monkeypatch):
     monkeypatch.setenv("LIVE_TRADING", "false")
     monkeypatch.setenv("CONFIRM_LIVE", "NO")

@@ -2,32 +2,19 @@
 
 from __future__ import annotations
 
-import math
+from kalshibot.fees import TAKER_K, fee_points, quadratic_fee
 
-
-TAKER_K = 0.07
-
-
-def fee_per_contract_raw(price: float, k: float = TAKER_K) -> float:
-    """Unrounded taker fee per contract. At 50¢ this is 0.0175."""
-    if price <= 0 or price >= 1:
-        return 0.0
-    return k * price * (1.0 - price)
-
-
-def taker_fee_per_contract(price: float, k: float = TAKER_K) -> float:
-    return fee_per_contract_raw(price, k)
-
-
-def taker_fee_cents_ceil(contracts: float, price: float, k: float = TAKER_K) -> int:
-    if contracts <= 0 or price <= 0 or price >= 1:
-        return 0
-    raw = k * contracts * price * (1.0 - price)
-    return int(math.ceil(raw * 100.0 - 1e-12))
+# Same quadratic as the campaign desk — one formula, two CLIs.
+fee_per_contract_raw = fee_points
+taker_fee_per_contract = fee_points
 
 
 def taker_fee_dollars(contracts: float, price: float, k: float = TAKER_K) -> float:
-    return taker_fee_cents_ceil(contracts, price, k) / 100.0
+    return quadratic_fee(contracts, price, k)
+
+
+def taker_fee_cents_ceil(contracts: float, price: float, k: float = TAKER_K) -> int:
+    return int(round(taker_fee_dollars(contracts, price, k) * 100))
 
 
 def ev_per_contract(p_hat: float, price: float, fee_per_contract: float) -> tuple[float, float]:

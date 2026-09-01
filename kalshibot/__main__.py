@@ -9,7 +9,7 @@ from kalshibot.assets import SECTION_LABELS, SECTIONS
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="KalshiBot — small-account campaign + prediction desk")
+    parser = argparse.ArgumentParser(description="KalshiBot — research desk, campaign, hourly scanner")
     sub = parser.add_subparsers(dest="command", required=True)
 
     serve = sub.add_parser("serve", help="Run the dashboard")
@@ -28,8 +28,20 @@ def main() -> None:
     fire.add_argument("loop", choices=["fifteen", "hourly", "maker"])
     camp_sub.add_parser("run", help="Scheduler: 15m at :02–:04, hourly KXBTC15M tape, maker last 3 min")
 
+    hourly = sub.add_parser("hourly", help="KXBTCD / KXETHD threshold scanner")
+    hourly.add_argument("hourly_cmd", nargs="?", default="scan", choices=["scan", "once", "auth", "live"])
+    hourly.add_argument("--asset", choices=["BTC", "ETH", "btc", "eth"], default=None)
+
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+    if args.command == "hourly":
+        from src.main import main as hourly_main
+
+        argv = [args.hourly_cmd]
+        if args.hourly_cmd == "scan" and args.asset:
+            argv.extend(["--asset", args.asset])
+        raise SystemExit(hourly_main(argv))
 
     if args.command == "serve":
         import uvicorn
