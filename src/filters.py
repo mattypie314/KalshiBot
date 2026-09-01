@@ -56,7 +56,7 @@ class FilterConfig:
     fat_tail_z: float = 2.5
     fat_tail_edge: float = 0.08
     news_blackout: bool = False
-    bankroll: float = 46.36
+    bankroll: float = 40.00
     kelly_mult: float = 0.25
     max_risk_pct: float = 0.05
     max_risk_dollars: float = 3.00

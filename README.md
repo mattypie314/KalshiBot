@@ -10,7 +10,7 @@ The 15-minute campaign, maker loop, dashboard, and research desk are parked on t
 
 Scans the live hourly above/below books for Bitcoin and Ethereum. Fair probability comes from spot plus recent realized vol. It only prints or places a **limit** order when net edge after estimated fees clears the filter.
 
-Bankroll default **$46.36**. Risk per idea **3–5%** ($1.40–$2.30), preferred **$2.00**, hard cap **$3.00**. Maker / limit only. Skip if the spread eats the edge. Net edge after estimated taker fees must be ≥ 6% (4% only if the spread is tight and the book can fill the tiny size).
+Bankroll default **$40**. Risk per idea **3–5%** ($1.20–$2.00), preferred **$2.00**, hard cap **$3.00**. Maker / limit only. Skip if the spread eats the edge. Net edge after estimated taker fees must be ≥ 6% (4% only if the spread is tight and the book can fill the tiny size). Full rules: `RULES.md`.
 
 ```bash
 pip install -r requirements.txt
@@ -101,7 +101,7 @@ sudo systemctl enable --now kalshi-hourly.timer
 
 | Knob | Default | Env |
 | --- | --- | --- |
-| Bankroll | $46.36 | `BANKROLL` |
+| Bankroll | $40 | `BANKROLL` |
 | Min net edge | 6% | `MIN_NET_EDGE` |
 | Soft edge (tight book) | 4% | `SOFT_NET_EDGE` |
 | Risk % cap | 5% | `MAX_RISK_PCT` |
