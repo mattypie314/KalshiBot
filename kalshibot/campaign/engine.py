@@ -956,6 +956,8 @@ class CampaignEngine:
                 continue
             join = idea.join_price
             cost_px = self._yes_to_cost(idea.side, join)
+            if loop == "hourly" and cost_px >= book.maker_join_min:
+                continue
             equity = self._equity()
             budget = min(book.kelly_stake(equity, idea.model_prob, cost_px), available)
             if budget < book.min_stake:
@@ -1025,7 +1027,7 @@ class CampaignEngine:
             else:
                 self.tracker.state.setdefault("rests", []).append(rest)
                 actions.append(
-                    f"{mode} post-only {idea.side} {ticker} {count:.2f}@ {join:.2f} · {idea.rationale}"
+                    f"{mode} post-only {idea.side} {ticker} {count:.2f} @ {cost_px:.2f} (${cost:.2f}) · yes {join:.2f} · {idea.rationale}"
                 )
             placed += 1
         if placed == 0:
