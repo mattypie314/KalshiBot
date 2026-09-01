@@ -1,5 +1,27 @@
+import pytest
+
 from src.config import EXIT_CONFIG, HourlySettings
-from src.main import main
+from src.main import main, normalize_argv
+
+
+def test_normalize_expands_shortcuts():
+    assert normalize_argv(["s"]) == ["scan"]
+    assert normalize_argv(["o"]) == ["once"]
+    assert normalize_argv(["a"]) == ["auth"]
+    assert normalize_argv(["l"]) == ["live"]
+    assert normalize_argv(["1", "--asset", "BTC"]) == ["scan", "--asset", "BTC"]
+    assert normalize_argv(["scan", "--asset", "ETH"]) == ["scan", "--asset", "ETH"]
+
+
+def test_normalize_menu_pick_on_tty():
+    assert normalize_argv([], isatty=True, prompt=lambda _: "2") == ["once"]
+    assert normalize_argv([], isatty=True, prompt=lambda _: "") == ["scan"]
+    with pytest.raises(SystemExit):
+        normalize_argv([], isatty=True, prompt=lambda _: "nope")
+
+
+def test_normalize_defaults_to_scan_when_not_a_tty():
+    assert normalize_argv([], isatty=False) == ["scan"]
 
 
 def test_live_refused_without_flags(monkeypatch):

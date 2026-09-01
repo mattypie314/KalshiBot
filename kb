@@ -1,0 +1,10 @@
+#!/bin/sh
+# Short switcher: ./kb          → menu
+#                 ./kb scan     (s / 1)
+#                 ./kb once     (o / 2)
+#                 ./kb auth     (a / 3)
+#                 ./kb live     (l / 4)
+root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+export PYTHONPATH="${PYTHONPATH:-$root}"
+cd "$root" || exit 1
+exec python3 -m src.main "$@"
