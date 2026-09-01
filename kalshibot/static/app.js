@@ -439,11 +439,11 @@ function drawChart(points) {
   const last = points[points.length - 1];
   const first = points[0];
   const up = last.yes >= first.yes;
-  const stroke = up ? "#00a35c" : "#e11d48";
-  const fill = up ? "rgba(0,163,92,0.12)" : "rgba(225,29,72,0.10)";
+  const stroke = up ? "#1ecb73" : "#ff4d6d";
+  const fill = up ? "rgba(30,203,115,0.16)" : "rgba(255,77,109,0.16)";
   svg.innerHTML = `
-    <polyline points="${pad.l},${y(min).toFixed(1)} ${w - pad.r},${y(min).toFixed(1)}" fill="none" stroke="#e6e6e1" />
-    <polyline points="${pad.l},${y((min + max) / 2).toFixed(1)} ${w - pad.r},${y((min + max) / 2).toFixed(1)}" fill="none" stroke="#eee" />
+    <polyline points="${pad.l},${y(min).toFixed(1)} ${w - pad.r},${y(min).toFixed(1)}" fill="none" stroke="#2a2a2e" />
+    <polyline points="${pad.l},${y((min + max) / 2).toFixed(1)} ${w - pad.r},${y((min + max) / 2).toFixed(1)}" fill="none" stroke="#222226" />
     <polygon points="${area}" fill="${fill}" />
     <polyline points="${line}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
     <circle cx="${x(last.ts).toFixed(1)}" cy="${y(last.yes).toFixed(1)}" r="4" fill="${stroke}" />
