@@ -26,6 +26,7 @@ def test_index_serves_live_ui():
         assert css.status_code == 200
         assert "text/css" in css.headers["content-type"]
         assert b"--yes:" in css.content
+        assert b"safe-area-inset-top" in css.content
         js = client.get("/static/app.js")
         assert js.status_code == 200
         assert "javascript" in js.headers["content-type"]
