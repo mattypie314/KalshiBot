@@ -776,7 +776,7 @@
       "side": "no",
       "price": 0.31,
       "count": 5.71,
-      "status": "open",
+      "status": "canceled",
       "order_id": "01a05b2e-c578-729f-91e9-5d0f165788bc",
       "kind": "limit_join",
       "model_prob": 0.7649819238253353,
@@ -789,46 +789,33 @@
       "asset_key": "ETH",
       "close_at": "2026-09-01T05:00:00+00:00",
       "hourly_vol": 0.003886594999606657,
+      "paper": false,
+      "exit_reason": "edge_decay"
+    },
+    {
+      "id": "a771f63a-f934-4976-89aa-651f6eadc98b",
+      "loop": "hourly",
+      "ticker": "KXBTC-26SEP0101-B78750",
+      "side": "no",
+      "price": 0.54,
+      "count": 7.26,
+      "status": "open",
+      "order_id": "01a05b51-1e70-7fcd-8116-ae030fe265aa",
+      "kind": "limit_join",
+      "model_prob": 0.5804660222796565,
+      "model_yes": 0.41953397772034345,
+      "sigma": 0.10143240873953609,
+      "spot": 78707.965,
+      "strike": 78700.0,
+      "spec_kind": "range",
+      "cap": 78799.99,
+      "asset_key": "BTC",
+      "close_at": "2026-09-01T05:00:00+00:00",
+      "hourly_vol": 0.003147423199198668,
       "paper": false
     }
   ],
   "log": [
-    {
-      "ts": "2026-08-29T17:14:09.405836+00:00",
-      "loop": "maker",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T18:36:30.436866+00:00",
-      "loop": "sizing",
-      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T18:36:30.438832+00:00",
-      "loop": "fifteen",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T18:36:30.441607+00:00",
-      "loop": "hourly",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T18:36:30.444728+00:00",
-      "loop": "maker",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T18:43:56.020093+00:00",
-      "loop": "sizing",
-      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
-      "tell_matt": true
-    },
     {
       "ts": "2026-08-29T18:43:56.021951+00:00",
       "loop": "fifteen",
@@ -1992,11 +1979,47 @@
       "loop": "maker",
       "message": "Maker window closed; stay quiet.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T04:53:49.756925+00:00",
+      "loop": "fifteen",
+      "message": "Kalshi cash $45.44 \u00b7 campaign equity $45.44.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-09-01T04:53:58.281358+00:00",
+      "loop": "hourly",
+      "message": "Kalshi cash $45.44 \u00b7 campaign equity $45.44.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T04:53:58.281376+00:00",
+      "loop": "hourly",
+      "message": "LIVE post-only no KXBTC-26SEP0101-B78750 7.26@ 0.54 \u00b7 fair 0.58 vs mid 0.47 \u00b7 net +8.8% after fees \u00b7 0.10\u03c3 \u00b7 spread 0.05",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T04:53:59.547724+00:00",
+      "loop": "maker",
+      "message": "Kalshi cash $45.44 \u00b7 campaign equity $45.44.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T04:53:59.547736+00:00",
+      "loop": "maker",
+      "message": "LIVE cancel rest KXETH-26SEP0101-B2472 (edge_decay)",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T04:53:59.547740+00:00",
+      "loop": "maker",
+      "message": "Maker window closed; stay quiet.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
-  "kalshi_cash": 49.377,
-  "kalshi_total_value": 49.377,
+  "kalshi_cash": 45.4371,
+  "kalshi_total_value": 45.4371,
   "fifteen_loss_streak": 0,
   "fifteen_session_date": null,
   "fifteen_stopped_until": null,
@@ -2008,5 +2031,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-09-01T04:16:27.826172+00:00"
+  "updated_at": "2026-09-01T04:53:59.547783+00:00"
 }
