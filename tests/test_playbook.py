@@ -118,3 +118,30 @@ def test_hourly_vol_from_one_minute_closes():
 
 def test_annual_vol_scales_from_hourly():
     assert annual_vol_from_hourly(0.0045) > 0.3
+
+
+def test_lock_check_uses_contract_cost_not_yes_join():
+    almost_lock = evaluate_idea(
+        yes_bid=0.02,
+        yes_ask=0.03,
+        model_yes=0.01,
+        sigma=3.0,
+        secs_left=3600,
+        equity=55.0,
+    )
+    assert almost_lock.side == "no"
+    assert almost_lock.sit_out == "lock / lottery book"
+
+
+def test_expensive_no_is_not_a_lottery_just_because_yes_is_cheap():
+    idea = evaluate_idea(
+        yes_bid=0.10,
+        yes_ask=0.12,
+        model_yes=0.02,
+        sigma=2.0,
+        secs_left=3600,
+        equity=55.0,
+    )
+    assert idea.sit_out is None
+    assert idea.side == "no"
+    assert 1.0 - idea.join_price >= 0.74
