@@ -1,0 +1,78 @@
+name: Hourly BTC/ETH scan
+
+# Scan + notify only. Do not place live orders from GitHub Actions
+# (cloud IPs are often 403'd; there is no static IP). Use a $5 VPS
+# plus systemd/cron for execution.
+
+on:
+  schedule:
+    - cron: "3 * * * *" # minute 3 of every hour
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Scan (dry-run, no live orders)
+        id: scan
+        env:
+          LIVE_TRADING: "false"
+          CONFIRM_LIVE: "NO"
+          USE_DEMO: "true"
+          PYTHONPATH: ${{ github.workspace }}
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: |
+          set +e
+          python -m src.main scan | tee scan_report.md
+          code=${PIPESTATUS[0]}
+          set -e
+          if grep -q "SCAN_FAILED_403" scan_report.md; then
+            echo "Kalshi 403 on this runner. Expected for many cloud IPs. Not retrying."
+            exit 0
+          fi
+          exit $code
+
+      - name: Upload last_run.json
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hourly-last-run
+          path: |
+            artifacts/last_run.json
+            scan_report.md
+          if-no-files-found: ignore
+
+      - name: Open issue when actionable
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f scan_report.md ]; then
+            exit 0
+          fi
+          if grep -q "NO_ACTIONABLE_EDGE" scan_report.md; then
+            echo "No edge this hour."
+            exit 0
+          fi
+          if ! grep -Fq "**Market:**" scan_report.md; then
+            echo "No actionable block."
+            exit 0
+          fi
+          title="Hourly actionable $(date -u +%Y-%m-%dT%H:%MZ)"
+          gh issue create --title "$title" --body-file scan_report.md || true

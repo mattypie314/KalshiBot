@@ -11,3 +11,6 @@ htmlcov/
 .DS_Store
 dist/
 build/
+artifacts/last_run.json
+artifacts/hourly_state.json
+
