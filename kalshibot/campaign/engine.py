@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -36,6 +37,7 @@ from kalshibot.campaign.rules import (
     maker_spread_ok,
     open_cost,
 )
+from kalshibot.campaign.blotter import map_kalshi_order, map_kalshi_position, positions_from_fills
 from kalshibot.campaign.tracker import Tracker
 from kalshibot.campaign.universe import FIFTEEN_SERIES, is_campaign_hourly_universe, is_daily_ticker, shard_for_series
 from kalshibot.config import Settings, settings
@@ -74,6 +76,7 @@ class CampaignEngine:
         self.playbook = playbook_from_settings(self.cfg)
         self._live_override: bool | None = None
         self._fire_lock = asyncio.Lock()
+        self._book_cache: tuple[float, list[dict[str, Any]], list[dict[str, Any]]] | None = None
 
     async def aclose(self) -> None:
         if self._owns_http:
@@ -111,11 +114,68 @@ class CampaignEngine:
             "typical_idea": round(typical, 2),
             "open_tickets": tickets,
             "rests": [r for r in state.get("rests", []) if r.get("status") == "open"],
+            "rests_source": "local",
+            "positions_source": "local",
             "log": list(reversed(state.get("log", [])[-20:])),
             "updated_at": state.get("updated_at"),
             "playbook": self.playbook.as_status(),
             "sizing": sizing,
         }
+
+    async def public_status(self) -> dict[str, Any]:
+        """Phone blotter. Positions come from Kalshi when keys are loaded, not the local tracker."""
+        payload = self.status()
+        if not self.kalshi.can_trade:
+            return payload
+        orders, positions, errors = await self._exchange_book()
+        paper_rests = [row for row in payload["rests"] if row.get("paper")]
+        if "orders" not in errors:
+            payload["rests"] = [mapped for order in orders if (mapped := map_kalshi_order(order))] + paper_rests
+            payload["rests_source"] = "kalshi"
+        if "positions" not in errors:
+            mapped = [row for pos in positions if (row := map_kalshi_position(pos))]
+            if not mapped:
+                try:
+                    fills = await self.kalshi.get_fills(limit=500)
+                    mapped = positions_from_fills(fills)
+                except Exception:
+                    logger.exception("Kalshi fills fallback failed")
+            payload["open_tickets"] = mapped
+            payload["positions_source"] = "kalshi"
+        if errors:
+            payload["blotter_error"] = ",".join(sorted(errors))
+        return payload
+
+    async def _exchange_book(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], set[str]]:
+        now = time.monotonic()
+        cached = self._book_cache
+        if cached and now - cached[0] < 15.0:
+            return cached[1], cached[2], set()
+
+        orders: list[dict[str, Any]] = []
+        positions: list[dict[str, Any]] = []
+        errors: set[str] = set()
+
+        async def _orders() -> list[dict[str, Any]]:
+            return await self.kalshi.get_orders(status="resting", limit=200)
+
+        async def _positions() -> list[dict[str, Any]]:
+            return await self.kalshi.get_positions(limit=200)
+
+        fetched_orders, fetched_positions = await asyncio.gather(_orders(), _positions(), return_exceptions=True)
+        if isinstance(fetched_orders, BaseException):
+            logger.exception("Kalshi orders refresh failed", exc_info=fetched_orders)
+            errors.add("orders")
+        else:
+            orders = fetched_orders
+        if isinstance(fetched_positions, BaseException):
+            logger.exception("Kalshi positions refresh failed", exc_info=fetched_positions)
+            errors.add("positions")
+        else:
+            positions = fetched_positions
+        if not errors:
+            self._book_cache = (now, orders, positions)
+        return orders, positions, errors
 
     def _reload_playbook(self) -> None:
         self.playbook = playbook_from_sizing(self.cfg, self.tracker.state.get("sizing") or {})

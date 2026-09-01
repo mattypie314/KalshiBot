@@ -82,7 +82,7 @@ async def _campaign(args: argparse.Namespace) -> None:
     engine = CampaignEngine()
     try:
         if args.campaign_cmd == "status":
-            print(json.dumps(engine.status(), indent=2))
+            print(json.dumps(await engine.public_status(), indent=2))
             return
         if args.campaign_cmd == "fire":
             result = await engine.fire(args.loop)
