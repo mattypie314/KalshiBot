@@ -15,25 +15,25 @@ logger = logging.getLogger(__name__)
 
 
 def _order_payload(idea: Idea, run_id: str) -> dict[str, Any]:
-    price_cents = int(round(idea.limit_price * 100))
+    """Kalshi V2 CreateOrder: count and price are strings. Side is bid/ask on the Yes book."""
     side = idea.side.lower()
-    body: dict[str, Any] = {
+    if side == "yes":
+        book_side = "bid"
+        yes_price = idea.limit_price
+    else:
+        book_side = "ask"
+        yes_price = max(0.0, min(1.0, 1.0 - idea.limit_price))
+    return {
         "ticker": idea.market.ticker,
         "client_order_id": f"hourly-{run_id}-{idea.market.ticker}-{side}"[:64],
-        "side": side,
-        "action": "buy",
-        "count": idea.contracts,
-        "type": "limit",
+        "side": book_side,
+        "count": f"{int(idea.contracts):.2f}",
+        "price": f"{yes_price:.4f}",
         "time_in_force": "good_till_canceled",
+        "self_trade_prevention_type": "maker",
         "post_only": bool(idea.post_maker),
+        "exchange_index": -1,
     }
-    if side == "yes":
-        body["yes_price"] = price_cents
-    else:
-        body["no_price"] = price_cents
-    if idea.market.exchange_index is not None:
-        body["exchange_index"] = idea.market.exchange_index
-    return body
 
 
 def execute_ideas(

@@ -68,6 +68,10 @@ def test_dry_run_never_calls_create_order(tmp_path: Path):
     assert out["mode"] == "dry_run"
     assert (tmp_path / "last_run.json").is_file()
     assert out["orders"][0]["ticker"] == "KXBTCD-FAKE-T78099.99"
+    assert out["orders"][0]["count"] == "4.00"
+    assert isinstance(out["orders"][0]["count"], str)
+    assert out["orders"][0]["side"] == "bid"
+    assert out["orders"][0]["price"] == "0.5100"
 
 
 def test_live_without_confirm_stays_dry(tmp_path: Path):
