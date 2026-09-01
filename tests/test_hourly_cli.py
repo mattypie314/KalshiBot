@@ -1,0 +1,14 @@
+from src.config import EXIT_CONFIG, HourlySettings
+from src.main import main
+
+
+def test_live_refused_without_flags(monkeypatch):
+    monkeypatch.setenv("LIVE_TRADING", "false")
+    monkeypatch.setenv("CONFIRM_LIVE", "NO")
+    assert main(["live"]) == EXIT_CONFIG
+
+
+def test_live_enabled_requires_both_flags():
+    assert HourlySettings(live_trading=False, confirm_live="YES").live_enabled is False
+    assert HourlySettings(live_trading=True, confirm_live="NO").live_enabled is False
+    assert HourlySettings(live_trading=True, confirm_live="YES").live_enabled is True

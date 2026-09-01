@@ -2,6 +2,74 @@
 
 Matt's small-account Kalshi campaign plus a research desk for **Crypto**, **Commodities**, and **Sports Bets**.
 
+This is **not financial advice**. You can lose the full amount you put on a contract. Demo first. Live trading is off unless you set both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES`.
+
+## Hourly BTC/ETH scanner
+
+Standalone dry-run scanner for Kalshi **BTC and ETH hourly threshold** books (`KXBTCD`, `KXETHD` — above/below). Not sports. Not perps. Not SOL/XRP. Not 15-minute up/down unless those hourly books are missing this hour.
+
+Bankroll default **$46.36**. Risk per idea **3–5%** ($1.40–$2.30), preferred **$2.00**, hard cap **$3.00**. Maker / limit orders only. Skip if the spread eats the edge. Net edge after estimated taker fees must be ≥ 6% (4% only if the spread is tight and the book can fill the tiny size).
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env   # then fill keys locally — never commit them
+
+python -m src.main scan
+python -m src.main scan --asset BTC
+python -m src.main once          # scan + print dry-run limit payloads
+python -m src.main live          # refused unless LIVE_TRADING=true AND CONFIRM_LIVE=YES
+```
+
+Exit codes: `0` success or `NO_ACTIONABLE_EDGE`, `2` config/auth, `3` rate limited.
+
+If nothing passes filters the process prints `NO_ACTIONABLE_EDGE` and exits 0. It never uses mid as a fill — Yes is bought at `yes_ask`, No at `no_ask`. Model vs market uses those executable prices.
+
+### Demo first, then a VPS — not GitHub Actions for live orders
+
+1. Create a Kalshi account and open the **demo** environment first (`USE_DEMO=true`).
+2. Generate an API key + RSA keypair (do this on your machine, not in git):
+
+```bash
+mkdir -p ~/.kalshi
+openssl genrsa -out ~/.kalshi/kalshi_private_key.pem 2048
+openssl rsa -in ~/.kalshi/kalshi_private_key.pem -pubout -out ~/.kalshi/kalshi_public_key.pem
+```
+
+3. In Kalshi → Account Settings → API Keys, upload the **public** PEM. Save the key id.
+4. Point the bot at the private PEM (never commit it):
+
+```bash
+export KALSHI_API_KEY_ID=your-key-id
+export KALSHI_PRIVATE_KEY_PATH=~/.kalshi/kalshi_private_key.pem
+```
+
+On GitHub Actions you can store the PEM text as secret `KALSHI_PRIVATE_KEY` (the workflow writes it to a file at runtime). Still: **Actions is scan + notify only**. Kalshi often **403s cloud IPs**. That is expected. Do not retry-storm. For live limits use a cheap VPS with a stable IP and systemd/cron, not Actions.
+
+```ini
+# /etc/systemd/system/kalshi-hourly.service  (VPS)
+# ExecStart=/usr/bin/python3 -m src.main once
+# plus a timer at minute 3 if you want the same cadence
+```
+
+The workflow `.github/workflows/hourly.yml` runs `scan` at minute 3 of every hour, uploads `artifacts/last_run.json`, and can open a GitHub issue when something is actionable. It will not place live orders.
+
+### Bankroll caps
+
+| Knob | Default | Env |
+| --- | --- | --- |
+| Bankroll | $46.36 | `BANKROLL` |
+| Min net edge | 6% | `MIN_NET_EDGE` |
+| Soft edge (tight book) | 4% | `SOFT_NET_EDGE` |
+| Risk % cap | 5% | `MAX_RISK_PCT` |
+| Preferred risk | $2.00 | `PREFERRED_RISK_DOLLARS` |
+| Hard dollar cap | $3.00 | `MAX_RISK_DOLLARS` |
+| Fractional Kelly | 0.25× | `KELLY_MULT` |
+
+Settlement is **not** Binance last tick. Official rules on these books use CF Benchmarks RTI (60-second average). The model still uses Coinbase/Binance spot as a **proxy** and says so in every report.
+
+---
+
+
 ## Campaign playbook
 
 One book. No $5 / $10 pots. 15-minute, hourly, and maker loops share it.
