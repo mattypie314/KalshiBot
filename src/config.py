@@ -44,7 +44,7 @@ class HourlySettings(BaseSettings):
     live_trading: bool = False
     confirm_live: str = "NO"
 
-    bankroll: float = 46.36
+    bankroll: float = 40.00
     min_net_edge: float = 0.06
     soft_net_edge: float = 0.04
     max_risk_pct: float = 0.05

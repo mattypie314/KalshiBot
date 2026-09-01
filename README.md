@@ -2,7 +2,7 @@
 
 Hourly BTC and ETH threshold scanner for Kalshi (`KXBTCD`, `KXETHD`).
 
-Not financial advice. You can lose the full amount you put on a contract. Demo first. Live trading stays off unless both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES` are set.
+Not financial advice. You can lose the full amount you put on a contract. Demo first. `.env` can stay dry. Live is a one-run confirm: type `LIVE` at the prompt, or pass `--confirm LIVE`.
 
 The 15-minute campaign, maker loop, dashboard, and research desk are parked on the `archive/campaign-desk` branch for later.
 
@@ -10,18 +10,29 @@ The 15-minute campaign, maker loop, dashboard, and research desk are parked on t
 
 Scans the live hourly above/below books for Bitcoin and Ethereum. Fair probability comes from spot plus recent realized vol. It only prints or places a **limit** order when net edge after estimated fees clears the filter.
 
-Bankroll default **$46.36**. Risk per idea **3–5%** ($1.40–$2.30), preferred **$2.00**, hard cap **$3.00**. Maker / limit only. Skip if the spread eats the edge. Net edge after estimated taker fees must be ≥ 6% (4% only if the spread is tight and the book can fill the tiny size).
+Bankroll default **$40**. Risk per idea **3–5%** ($1.20–$2.00), preferred **$2.00**, hard cap **$3.00**. Maker / limit only. Skip if the spread eats the edge. Net edge after estimated taker fees must be ≥ 6% (4% only if the spread is tight and the book can fill the tiny size). Full rules: `RULES.md`.
 
 ```bash
 pip install -r requirements.txt
 cp .env.example .env   # fill keys locally — never commit them
-
-python -m src.main scan
-python -m src.main scan --asset BTC
-python -m src.main once          # scan + print dry-run limit payloads
-python -m src.main auth          # test key + PEM (no orders)
-python -m src.main live          # refused unless LIVE_TRADING=true AND CONFIRM_LIVE=YES
+chmod +x kb
 ```
+
+Pick a mode from a menu, or pass it on the command line:
+
+```bash
+./kb                 # menu: 1 scan / 2 once / 3 auth / 4 live
+./kb scan            # also: s  or  1
+./kb scan --asset BTC
+./kb once            # also: o  or  2   dry-run limit payloads
+./kb auth            # also: a  or  3   test key + PEM
+./kb live            # also: l  or  4   type LIVE (or --confirm LIVE). .env can stay dry
+./kb live --confirm LIVE
+```
+
+`python -m src.main …` and (after `pip install -e .`) `kalshibot` / `kb` do the same thing. No args on a TTY opens the menu; no args in a script defaults to `scan`.
+
+Live does **not** require editing `.env`. On a terminal, `./kb live` asks you to type `LIVE`. Scripts can use `./kb live --confirm LIVE`. The old `LIVE_TRADING=true` + `CONFIRM_LIVE=YES` pair still works if you want unattended live. GitHub Actions stays dry.
 
 Exit codes: `0` success or `NO_ACTIONABLE_EDGE`, `2` config/auth, `3` rate limited.
 
@@ -73,8 +84,9 @@ cd /home/KalshiBot
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+chmod +x kb
 cp -n .env.example .env   # edit keys; never commit .env
-python -m src.main auth
+./kb auth
 ```
 
 systemd units in `scripts/` use `WorkingDirectory=/home/KalshiBot`:
@@ -89,7 +101,7 @@ sudo systemctl enable --now kalshi-hourly.timer
 
 | Knob | Default | Env |
 | --- | --- | --- |
-| Bankroll | $46.36 | `BANKROLL` |
+| Bankroll | $40 | `BANKROLL` |
 | Min net edge | 6% | `MIN_NET_EDGE` |
 | Soft edge (tight book) | 4% | `SOFT_NET_EDGE` |
 | Risk % cap | 5% | `MAX_RISK_PCT` |

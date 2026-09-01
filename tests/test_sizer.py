@@ -1,9 +1,9 @@
-"""Fractional Kelly sizer never breaches the $3 hard cap on a $46.36 book."""
+"""Fractional Kelly sizer never breaches the $3 hard cap on a $40 book."""
 
 from src.sizer import SizeDecision, size_idea
 
 
-BANKROLL = 46.36
+BANKROLL = 40.00
 MAX_RISK = 3.00
 
 
@@ -23,7 +23,7 @@ def _size(**kwargs) -> SizeDecision:
     return size_idea(**defaults)
 
 
-def test_sizer_never_exceeds_three_dollars_on_46_bankroll():
+def test_sizer_never_exceeds_three_dollars_on_40_bankroll():
     for price in (0.15, 0.40, 0.50, 0.60, 0.80, 0.94):
         for p_hat in (0.55, 0.70, 0.90, 0.99):
             decision = _size(entry_price=price, p_hat=p_hat)
@@ -45,7 +45,7 @@ def test_sizer_skips_when_one_contract_exceeds_cap():
     # entry_price is a probability; use a synthetic high dollar risk via price~1
     # A $4 contract cannot exist (max $1). Simulate via tiny bankroll + high floor:
     decision = size_idea(
-        bankroll=46.36,
+        bankroll=40.00,
         entry_price=0.99,
         p_hat=0.999,
         kelly_mult=0.25,

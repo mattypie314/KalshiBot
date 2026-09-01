@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import sys
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -91,6 +92,7 @@ def run_scan(
     asset: str | None,
     place: bool,
     force_live: bool,
+    armed: bool = False,
 ) -> int:
     assets = [asset.upper()] if asset else settings.asset_list
     for name in assets:
@@ -205,14 +207,14 @@ def run_scan(
             return EXIT_OK
 
         if place or force_live:
-            if force_live and not settings.live_enabled:
+            live = bool(force_live and (armed or settings.live_enabled))
+            if force_live and not live:
                 print(
-                    "LIVE refused: set LIVE_TRADING=true and CONFIRM_LIVE=YES. Staying dry-run.",
+                    "LIVE refused: type LIVE at the prompt, pass --confirm LIVE, "
+                    "or set LIVE_TRADING=true and CONFIRM_LIVE=YES.",
                     file=sys.stderr,
                 )
-                if force_live:
-                    return EXIT_CONFIG
-            live = bool(force_live and settings.live_enabled)
+                return EXIT_CONFIG
             if live and not client.can_trade:
                 print("LIVE refused: missing API key / private key.", file=sys.stderr)
                 return EXIT_CONFIG
@@ -222,7 +224,7 @@ def run_scan(
                     client=client,
                     artifacts_dir=artifacts,
                     live=live,
-                    confirm_live=settings.confirm_live == "YES",
+                    confirm_live=live,
                 )
             except RateLimitedError as exc:
                 print(f"rate limited: {exc}", file=sys.stderr)
@@ -281,8 +283,94 @@ def run_auth(settings: HourlySettings) -> int:
         client.close()
 
 
+MODE_ALIASES = {
+    "1": "scan",
+    "s": "scan",
+    "scan": "scan",
+    "2": "once",
+    "o": "once",
+    "once": "once",
+    "3": "auth",
+    "a": "auth",
+    "auth": "auth",
+    "4": "live",
+    "l": "live",
+    "live": "live",
+}
+
+MODE_MENU = """\
+KalshiBot — pick a mode
+  1  scan   report only (default)
+  2  once   dry-run limit payloads
+  3  auth   test key + PEM
+  4  live   real limits (type LIVE — no .env edit)
+
+Mode [scan]: """
+
+
+def normalize_argv(
+    argv: list[str] | None,
+    *,
+    isatty: bool | None = None,
+    prompt: Callable[[str], str] | None = None,
+) -> list[str]:
+    """Map shortcuts / a menu pick onto scan|once|auth|live."""
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw and raw[0] in {"-h", "--help"}:
+        return raw
+    if not raw:
+        if isatty is None:
+            isatty = sys.stdin.isatty()
+        if not isatty:
+            return ["scan"]
+        reply = (prompt or input)(MODE_MENU).strip() or "scan"
+        mapped = MODE_ALIASES.get(reply.lower())
+        if mapped is None:
+            raise SystemExit(f"unknown mode: {reply}")
+        return [mapped]
+    mapped = MODE_ALIASES.get(raw[0].lower())
+    if mapped is not None:
+        return [mapped, *raw[1:]]
+    return raw
+
+
+LIVE_CONFIRM = "LIVE"
+
+
+def _typed_live(value: str) -> bool:
+    return str(value or "").strip().upper() == LIVE_CONFIRM
+
+
+def live_is_armed(
+    settings: HourlySettings,
+    *,
+    confirm: str = "",
+    isatty: bool | None = None,
+    prompt: Callable[[str], str] | None = None,
+) -> bool:
+    """Arm live for this run only. Env flags, --confirm LIVE, or a TTY LIVE prompt."""
+    if settings.live_enabled:
+        return True
+    if _typed_live(confirm):
+        return True
+    if isatty is None:
+        isatty = sys.stdin.isatty()
+    if not isatty:
+        return False
+    where = " on DEMO" if settings.use_demo else " on PROD"
+    reply = (prompt or input)(f"Type LIVE to place live limits{where} (anything else aborts): ")
+    return _typed_live(reply)
+
+
+def cli() -> None:
+    raise SystemExit(main())
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Kalshi hourly BTC/ETH threshold scanner")
+    parser = argparse.ArgumentParser(
+        description="Kalshi hourly BTC/ETH threshold scanner. "
+        "Run with no args for a mode menu. Shortcuts: s/o/a/l or 1-4."
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     scan = sub.add_parser("scan", help="Scan books and print the report (no orders)")
@@ -290,10 +378,18 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("once", help="Scan and print dry-run limit order payloads")
     sub.add_parser("auth", help="Test Kalshi API key + PEM (no orders)")
-    live = sub.add_parser("live", help="Place limits only if LIVE_TRADING=true and CONFIRM_LIVE=YES")
-    live.add_argument("--yes-i-mean-it", action="store_true", help=argparse.SUPPRESS)
+    live = sub.add_parser(
+        "live",
+        help="Place limits after typing LIVE (or --confirm LIVE). .env can stay dry.",
+    )
+    live.add_argument(
+        "--confirm",
+        default="",
+        metavar="LIVE",
+        help="Pass LIVE to arm live without a prompt. Leaves .env unchanged.",
+    )
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(normalize_argv(argv))
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     try:
@@ -309,13 +405,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "once":
         return run_scan(settings, asset=None, place=True, force_live=False)
     if args.command == "live":
-        if not settings.live_enabled:
+        if not live_is_armed(settings, confirm=args.confirm):
             print(
-                "LIVE refused: set LIVE_TRADING=true and CONFIRM_LIVE=YES.",
+                "LIVE refused: type LIVE at the prompt, pass --confirm LIVE, "
+                "or set LIVE_TRADING=true and CONFIRM_LIVE=YES.",
                 file=sys.stderr,
             )
             return EXIT_CONFIG
-        return run_scan(settings, asset=None, place=True, force_live=True)
+        return run_scan(settings, asset=None, place=True, force_live=True, armed=True)
     return EXIT_CONFIG
 
 
