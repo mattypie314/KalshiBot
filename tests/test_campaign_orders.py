@@ -320,6 +320,52 @@ def test_hourly_sits_out_when_net_edge_is_thin(tmp_path):
     assert engine.kalshi.create_order_v2.await_count == 0
 
 
+def test_hourly_skips_maker_priced_favorites(tmp_path):
+    from kalshibot.assets import asset_by_key
+    from kalshibot.campaign.playbook import evaluate_idea
+
+    engine = _engine(tmp_path, 55)
+    idea = evaluate_idea(
+        yes_bid=0.10,
+        yes_ask=0.12,
+        model_yes=0.02,
+        sigma=2.0,
+        secs_left=3600,
+        equity=55.0,
+    )
+    assert idea.side == "no"
+    cost = 1.0 - idea.join_price
+    assert cost >= 0.74
+    pick = {
+        "series": "KXBNB",
+        "event": {"title": "BNB hourly"},
+        "market": {"ticker": "KXBNB-26SEP0118-B687", "title": "BNB above"},
+        "asset": asset_by_key("BTC"),
+        "spot": 100.0,
+        "strike": 120.0,
+        "spec_kind": "greater",
+        "cap": None,
+        "secs": 3600,
+        "close": None,
+        "hourly_vol": 0.0045,
+        "model_yes": 0.02,
+        "sigma": 2.0,
+        "idea": idea,
+        "yes_bid": 0.10,
+        "yes_ask": 0.12,
+        "exchange_index": 2,
+        "loop": "hourly",
+    }
+    engine._load_candidates = AsyncMock(return_value=[{"row": True}])
+    engine._score_market = AsyncMock(return_value=pick)
+    engine.live = True
+    engine.kalshi.create_order_v2 = AsyncMock(side_effect=AssertionError("hourly must not rest 74–93¢"))
+    actions = asyncio.run(engine._enter_limit(["KXBNB"], "hourly", skip_last=180, max_secs=75 * 60))
+    asyncio.run(engine.aclose())
+    assert engine.kalshi.create_order_v2.await_count == 0
+    assert any("Sitting out" in a for a in actions)
+
+
 def test_set_bankroll_keeps_realized(tmp_path):
     from kalshibot.campaign.tracker import Tracker
 
