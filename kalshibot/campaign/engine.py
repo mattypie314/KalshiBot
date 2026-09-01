@@ -71,7 +71,7 @@ class CampaignEngine:
         self.spots = SpotService(self._http)
         self.tracker = Tracker(self.cfg.tracker_path, self.cfg.campaign_bankroll)
         self.playbook = playbook_from_settings(self.cfg)
-        self.live = bool(self.cfg.kalshi_live and self.kalshi.can_trade)
+        self._live_override: bool | None = None
 
     async def aclose(self) -> None:
         if self._owns_http:
@@ -196,6 +196,24 @@ class CampaignEngine:
 
     def _halted(self) -> bool:
         return bool((self.tracker.state.get("sizing") or {}).get("halted", False))
+
+    def _live_from_book(self) -> bool:
+        if not self.kalshi.can_trade:
+            return False
+        sizing = self.tracker.state.get("sizing") or {}
+        if "live" in sizing:
+            return bool(sizing["live"])
+        return bool(self.cfg.kalshi_live)
+
+    @property
+    def live(self) -> bool:
+        if self._live_override is not None:
+            return bool(self._live_override)
+        return self._live_from_book()
+
+    @live.setter
+    def live(self, value: bool) -> None:
+        self._live_override = bool(value)
 
     async def fire(self, loop: str) -> dict[str, Any]:
         self.tracker.load()

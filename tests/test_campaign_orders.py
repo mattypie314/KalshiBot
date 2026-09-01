@@ -95,6 +95,22 @@ def test_live_fire_drops_practice_tickets_without_ordering(tmp_path):
     assert all(t.get("status") != "open" for t in engine.tracker.state["tickets"])
 
 
+def test_tracker_live_flag_requires_keys(tmp_path):
+    engine = _engine(tmp_path)
+    engine.tracker.state.setdefault("sizing", {})["live"] = True
+    engine.tracker.save()
+    engine.tracker.load()
+    assert engine.live is False
+    engine.kalshi.api_key_id = "test-key"
+    engine.kalshi._private_key = object()
+    assert engine.live is True
+    engine.tracker.state["sizing"]["live"] = False
+    engine.tracker.save()
+    engine.tracker.load()
+    assert engine.live is False
+    asyncio.run(engine.aclose())
+
+
 def _engine(tmp_path, bankroll=35.0):
     path = tmp_path / "crypto-campaign.json"
     http = httpx.AsyncClient()

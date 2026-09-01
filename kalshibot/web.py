@@ -100,6 +100,7 @@ async def campaign_status() -> dict:
 
 class CampaignControl(BaseModel):
     halted: bool | None = None
+    live: bool | None = None
     maker_auto: bool | None = None
     follow_kalshi_cash: bool | None = None
 
@@ -121,9 +122,15 @@ async def campaign_fire(loop: str) -> dict:
 @app.post("/api/campaign/control")
 async def campaign_control(payload: CampaignControl) -> dict:
     engine: CampaignEngine = app.state.campaign
+    if payload.live is True and not engine.kalshi.can_trade:
+        raise HTTPException(
+            status_code=400,
+            detail="Need Kalshi API key and private key on this host before going LIVE.",
+        )
     notes = apply_phone_overrides(
         engine.tracker,
         halted=_flag(payload.halted),
+        live=_flag(payload.live),
         maker_auto=_flag(payload.maker_auto),
         follow=_flag(payload.follow_kalshi_cash),
     )
