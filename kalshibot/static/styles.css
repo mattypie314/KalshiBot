@@ -311,6 +311,22 @@ button { cursor: pointer; }
   white-space: nowrap;
 }
 
+.scan-head h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+.scan-head .muted { margin-bottom: 16px; max-width: 42rem; }
+
+.quote-caption {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0 0 8px;
+}
+
 .disclaimer {
   color: var(--muted);
   font-size: 13px;
@@ -318,9 +334,65 @@ button { cursor: pointer; }
 }
 
 .board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scan-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: 52px 1fr auto;
   gap: 12px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+.scan-row:hover { border-color: var(--line-strong); }
+
+.scan-lean {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: var(--bg);
+  color: var(--muted);
+}
+.scan-lean.yes { background: var(--yes-bg); color: var(--yes-ink); }
+.scan-lean.no { background: var(--no-bg); color: var(--no-ink); }
+
+.scan-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.scan-title {
+  font-weight: 650;
+  font-size: 15px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+.scan-sub { color: var(--muted); font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+.scan-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.scan-go {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .card {
@@ -363,6 +435,8 @@ button { cursor: pointer; }
 .trade-last { text-align: right; }
 .trade-last .num { font-size: 32px; }
 .trade-pair { margin-bottom: 14px; }
+.trade-pair .leg { min-height: 56px; padding: 10px 12px; }
+.trade-pair .leg .leg-px { font-size: 22px; }
 .chart-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -561,6 +635,8 @@ button { cursor: pointer; }
   .folio-stats { grid-template-columns: repeat(3, 1fr); }
   .folio .num { font-size: 18px; }
   .board { grid-template-columns: 1fr; }
+  .scan-row { grid-template-columns: 44px 1fr auto; padding: 10px 12px; }
+  .scan-lean { width: 44px; height: 44px; font-size: 11px; }
   .search input { min-width: 0; }
   .row { grid-template-columns: 1fr 60px 70px; }
   .row .hide-sm { display: none; }

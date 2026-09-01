@@ -91,7 +91,7 @@ function renderMarkets() {
   if (!snapshot) return;
   const block = snapshot.sections[section];
   const q = filterInput.value.trim().toLowerCase();
-  let rows = block.predictions || [];
+  let rows = [...(block.predictions || [])];
   if (edgesOnly.checked) rows = rows.filter((r) => r.edge >= 0.02);
   if (q) {
     rows = rows.filter((r) =>
@@ -100,43 +100,43 @@ function renderMarkets() {
         .includes(q)
     );
   }
+  rows.sort((a, b) => Math.abs(b.edge || 0) - Math.abs(a.edge || 0));
 
   if (!rows.length) {
-    board.innerHTML = `<div class="empty">No markets in this view. Try clearing filters or refreshing.</div>`;
+    board.innerHTML = `<div class="empty">${
+      edgesOnly.checked
+        ? "No ≥ 2¢ edges in this tab. Uncheck the filter to browse every live contract."
+        : "No contracts in this view. Try another tab or refresh."
+    }</div>`;
     return;
   }
 
   board.innerHTML = rows
     .map((row) => {
-      const pickYes = row.side === "YES";
-      const pickNo = row.side === "NO";
+      const lean = row.side === "NO" ? "NO" : row.side === "YES" ? "YES" : "—";
+      const leanClass = lean === "NO" ? "no" : lean === "YES" ? "yes" : "";
       const edgeClass = row.edge >= 0.02 ? "pos" : row.edge < 0 ? "neg" : "";
+      const meta = [closeLabel(row.close_time), row.spot != null ? `spot ${formatSpot(row.spot)}` : ""]
+        .filter(Boolean)
+        .join(" · ");
       return `
-        <button class="card" type="button" data-ticker="${escapeHtml(row.market_ticker)}">
-          <div class="card-top">
-            <div class="event">${escapeHtml(row.event_title)}</div>
-            <div class="ticker">${escapeHtml(row.asset || "")}</div>
-          </div>
-          <div class="sub">${escapeHtml(row.subtitle || row.market_title)}</div>
-          <div class="pair">
-            <span class="leg yes ${pickYes ? "pick" : ""}">
-              <span class="leg-name">Yes</span>
-              <span class="leg-px">${cents(yesAsk(row))}</span>
+        <button class="scan-row" type="button" data-ticker="${escapeHtml(row.market_ticker)}">
+          <span class="scan-lean ${leanClass}">${lean}</span>
+          <span class="scan-body">
+            <span class="scan-title">${escapeHtml(row.event_title)}</span>
+            <span class="scan-sub">${escapeHtml(row.subtitle || row.market_title || "")}</span>
+            <span class="scan-stats">
+              <span>Fair ${pct(row.model_prob)}</span>
+              <span>Yes ${cents(yesAsk(row))}</span>
+              <span class="edge ${edgeClass}">${cents(row.edge, true)}</span>
+              <span>${escapeHtml(meta)}</span>
             </span>
-            <span class="leg no ${pickNo ? "pick" : ""}">
-              <span class="leg-name">No</span>
-              <span class="leg-px">${cents(noAsk(row))}</span>
-            </span>
-          </div>
-          <div class="meta-row">
-            <span>${[closeLabel(row.close_time), volumeLabel(row.volume_24h || row.volume), row.spot != null ? `spot ${formatSpot(row.spot)}` : ""].filter(Boolean).join(" · ")}</span>
-            <span class="edge ${edgeClass}">fair ${pct(row.model_prob)} · ${cents(row.edge, true)}</span>
-          </div>
-          <div class="why">${escapeHtml(row.rationale || "")}</div>
+          </span>
+          <span class="scan-go">Chart</span>
         </button>`;
     })
     .join("");
-  board.querySelectorAll(".card").forEach((card) => {
+  board.querySelectorAll(".scan-row").forEach((card) => {
     card.addEventListener("click", () => {
       const row = rows.find((r) => r.market_ticker === card.dataset.ticker);
       if (row) openMarket(row, true);
@@ -261,7 +261,7 @@ function renderBlotter() {
 
 async function load(force = false) {
   if (updated) updated.textContent = etClock();
-  if (!snapshot) board.innerHTML = `<div class="status">Pulling live Kalshi markets…</div>`;
+  if (!snapshot) board.innerHTML = `<div class="status">Scanning live Kalshi contracts…</div>`;
   const response = await fetch(`/api/predictions${force ? "?force=true" : ""}`);
   if (!response.ok) {
     board.innerHTML = `<div class="empty">Could not load markets (${response.status}).</div>`;
@@ -438,8 +438,8 @@ function renderTradePair(row) {
   const pickYes = row.side === "YES";
   const pickNo = row.side === "NO";
   document.getElementById("trade-pair").innerHTML = `
-    <span class="leg yes ${pickYes ? "pick" : ""}"><span class="leg-name">Yes</span><span class="leg-px">${cents(yesAsk(row))}</span></span>
-    <span class="leg no ${pickNo ? "pick" : ""}"><span class="leg-name">No</span><span class="leg-px">${cents(noAsk(row))}</span></span>`;
+    <span class="leg yes ${pickYes ? "pick" : ""}"><span class="leg-name">Yes quote</span><span class="leg-px">${cents(yesAsk(row))}</span></span>
+    <span class="leg no ${pickNo ? "pick" : ""}"><span class="leg-name">No quote</span><span class="leg-px">${cents(noAsk(row))}</span></span>`;
 }
 
 function stopChart() {

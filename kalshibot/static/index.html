@@ -21,7 +21,7 @@
           <span class="word">Kalshi<span>Bot</span></span>
         </a>
         <nav class="nav-links" aria-label="Primary">
-          <a class="nav-link active" href="/" data-view="markets">Markets</a>
+          <a class="nav-link active" href="/" data-view="markets">Scanner</a>
           <a class="nav-link" href="/portfolio" data-view="portfolio">Portfolio</a>
         </nav>
       </div>
@@ -71,8 +71,15 @@
       </section>
 
       <section class="markets-view" id="view-markets">
+        <div class="scan-head">
+          <h2>Scanner</h2>
+          <p class="muted" id="scan-copy">
+            Live Kalshi contracts vs the model. Tap a row for the Yes-price chart.
+            The 15m / maker / hourly loops place their own tickets — this list does not buy.
+          </p>
+        </div>
         <div class="cat-row">
-          <nav class="cats" aria-label="Market categories">
+          <nav class="cats" aria-label="Scanner categories">
             <button class="cat active" data-section="crypto" type="button">
               Crypto <span class="cat-count" id="stat-crypto"></span>
             </button>
@@ -85,11 +92,11 @@
           </nav>
           <div class="toolbar">
             <label class="search">
-              <input id="filter" type="search" placeholder="Search markets, tickers, BTC…" />
+              <input id="filter" type="search" placeholder="Filter contracts…" />
             </label>
             <label class="toggle">
-              <input id="edges-only" type="checkbox" />
-              Edges ≥ 2¢
+              <input id="edges-only" type="checkbox" checked />
+              ≥ 2¢ edge
             </label>
           </div>
         </div>
@@ -97,11 +104,11 @@
         <section id="board" class="board" aria-live="polite"></section>
       </section>
 
-      <section class="trade-view hidden" id="view-trade" aria-label="Live market">
-        <button class="back" id="trade-back" type="button">← Markets</button>
+      <section class="trade-view hidden" id="view-trade" aria-label="Live chart">
+        <button class="back" id="trade-back" type="button">← Scanner</button>
         <div class="trade-head">
           <div>
-            <h2 id="trade-title">Market</h2>
+            <h2 id="trade-title">Contract</h2>
             <p class="sub" id="trade-sub"></p>
           </div>
           <div class="trade-last">
@@ -109,6 +116,7 @@
             <div class="edge" id="trade-change"></div>
           </div>
         </div>
+        <p class="quote-caption">Live Kalshi quotes · not an order ticket</p>
         <div class="pair trade-pair" id="trade-pair"></div>
         <div class="chart-card">
           <div class="chart-toolbar">

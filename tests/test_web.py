@@ -10,6 +10,9 @@ def test_index_serves_live_ui():
         assert page.status_code == 200
         assert "text/html" in page.headers["content-type"]
         assert b"KalshiBot" in page.content
+        assert b"Scanner" in page.content
+        assert b"this list does not buy" in page.content
+        assert b"scan-row" in page.content
         assert b'data-fire="fifteen"' in page.content
         assert b"title=\"Fire 15m now\"" in page.content
         # Phone Safari over Tailscale often drops extra /static requests, and Pi
