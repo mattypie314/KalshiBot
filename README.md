@@ -37,13 +37,13 @@ Tracker: `~/.kalshi/crypto-campaign.json` (override with `TRACKER_PATH`).
 
 This is a separate routine from the 4–6% playbook. In the final 3 minutes, a confirmed favorite often sits at **taker break-even**. Taking the ask has no edge after fees. Resting a bid at 74–93¢ earns the spread (cents per fill, many fills). Never IOC. Size is still small-account (about 3% cap).
 
-After this is merged it **runs every 15-minute window by itself** (GitHub schedule). To stop everything: **Actions → Kalshi campaign → Run workflow** and set `halted` to **yes**. That cancels resting orders and blocks new tickets until you set `halted` to **no**. Scheduled jobs leave the saved halt flag alone (`keep`). To stop only maker: set `maker_auto` to **no**. Leave `keep` if you are only changing bankroll.
+After this is merged the **Pi** runs the loops (dashboard Fire buttons, or `python -m kalshibot serve` plus a local scheduler). GitHub Actions does **not** auto-trade. To run one GitHub fire by hand: **Actions → Kalshi campaign → Run workflow**. Set `halted` to **yes** only on that GitHub job (it cancels resting orders GitHub still sees). To stop only maker: set `maker_auto` to **no**. Leave `keep` if you are only changing bankroll.
 
 **Raising the book as it grows**
 
 You do not have to edit code. Size is a **percent of the book**, so bigger cash means bigger tickets.
 
-On your iPhone: **Actions → Kalshi campaign → Run workflow**
+On your iPhone: open the Pi dashboard (Halt, Fire, DRY / LIVE). GitHub **Run workflow** is only a one-off Actions fire — do not use it while the Pi is live.
 
 | Field | What to type | Leave blank / keep |
 | --- | --- | --- |
@@ -98,11 +98,11 @@ pytest
 
 ## From an iPhone (no computer)
 
-GitHub runs the campaign every 5 minutes after this pull request is merged.
+GitHub does **not** run the campaign on a schedule. The Pi is the live host.
 
 1. Merge this pull request.
-2. Open the repo **Actions** tab. If GitHub asks to enable workflows, tap Enable.
-3. Open **Kalshi campaign → Run workflow** on the latest `main`. Set `halted` to **yes** to stop new trades, or **no** to resume. Leave `keep` on a scheduled run. Set `maker_auto` to **no** if you only want to stop last-3-min bids. Do not re-run an old red job.
+2. Open the repo **Actions** tab. If the **Kalshi campaign** workflow is still enabled, open it → **…** → **Disable workflow** so no leftover cron fires.
+3. Optional: **Kalshi campaign → Run workflow** is a one-off GitHub fire. Do not use it while the Pi is live.
 
 It stays in practice mode (DRY) until Kalshi secrets are under **Settings → Secrets and variables → Actions**: `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY` (the full .pem text), and `KALSHI_LIVE` set to `1`.
 
