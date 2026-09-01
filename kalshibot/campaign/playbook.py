@@ -99,6 +99,7 @@ class Playbook:
         join = self.inside_join(side, yes_bid, yes_ask)
         take = take_price(side, yes_bid, yes_ask)
         hbid = held_bid(side, yes_bid, yes_ask)
+        cost = join if side == "yes" else max(0.0, 1.0 - join)
         spread = yes_ask - yes_bid
         gross = model - market
         taker_pts = fee_points(market, TAKER_K)
@@ -107,7 +108,7 @@ class Playbook:
         sit_out = None
         if secs_left < self.min_time_seconds:
             sit_out = f"only {secs_left / 60:.1f}m left (need {self.min_time_seconds / 60:.0f}m)"
-        elif join <= self.min_join or join >= self.max_join or take >= 0.99:
+        elif cost <= self.min_join or cost >= self.max_join or take >= 0.99:
             sit_out = "lock / lottery book"
         elif gross <= taker_pts + self.model_buffer:
             sit_out = f"model {model:.2f} vs mkt {market:.2f} does not cover fees+buffer"
