@@ -202,8 +202,8 @@ class KalshiClient:
                 key = str(row.get("order_id") or row.get("ticker") or "")
                 if key:
                     found[key] = row
-            if extra == {} and found:
-                break
+            # Do not stop after a nonempty default page. Crypto rests live on
+            # shard 2 and are omitted from the unscoped list.
         return list(found.values())[:limit]
 
     async def get_positions(self, *, limit: int = 200) -> list[dict[str, Any]]:

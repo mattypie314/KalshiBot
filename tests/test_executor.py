@@ -87,3 +87,44 @@ def test_live_without_confirm_stays_dry(tmp_path: Path):
     )
     client.create_order.assert_not_called()
     assert out["mode"] == "dry_run"
+
+
+def test_live_cancels_stale_daily_rests_with_uuid_client_ids(tmp_path: Path):
+    """V2 client_order_id is a UUID — cancel must not require an hourly- prefix."""
+    client = MagicMock()
+    client.get_orders.return_value = [
+        {
+            "order_id": "old-eth",
+            "ticker": "KXETHD-26SEP0117-T2399.99",
+            "client_order_id": "4a7e012f-50c1-4af4-909f-192e400f8de0",
+        },
+        {
+            "order_id": "campaign-15m",
+            "ticker": "KXBTC15M-26SEP011615-30",
+            "client_order_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        },
+        {
+            "order_id": "legacy-hourly",
+            "ticker": "KXBTCD-26SEP0116-T77249.99",
+            "client_order_id": "hourly-old-run-KXBTCD-yes",
+        },
+    ]
+    client.create_order.return_value = {
+        "order": {"order_id": "new-1", "fill_count": "0.00", "remaining_count": "4.00"}
+    }
+    out = execute_ideas(
+        [_idea()],
+        client=client,
+        artifacts_dir=tmp_path,
+        live=True,
+        confirm_live=True,
+        run_id="test-run",
+    )
+    canceled = {row["order_id"] for row in out["canceled"]}
+    assert canceled == {"old-eth", "legacy-hourly"}
+    assert out["placed"][0]["order_id"] == "new-1"
+    client.cancel_order.assert_any_call("old-eth", ticker="KXETHD-26SEP0117-T2399.99")
+    campaign_calls = [
+        args for args in client.cancel_order.call_args_list if args.args and args.args[0] == "campaign-15m"
+    ]
+    assert campaign_calls == []

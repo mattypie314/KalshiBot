@@ -10,8 +10,29 @@ from pathlib import Path
 from typing import Any
 
 from src.filters import Idea
+from src.kalshi_client import unwrap_order
 
 logger = logging.getLogger(__name__)
+
+# Daily BTC/ETH threshold books this scanner trades. Not 15m campaign rests.
+HOURLY_SERIES = frozenset({"KXBTCD", "KXETHD"})
+
+
+def series_code(ticker: str) -> str:
+    return str(ticker or "").upper().split("-", 1)[0]
+
+
+def is_hourly_rest(row: dict[str, Any]) -> bool:
+    """True for this scanner's rests, including UUID client_order_ids.
+
+    Kalshi V2 requires a UUID client_order_id, so we cannot tag orders with an
+    `hourly-` prefix anymore. Identify them by series (or leftover hourly- ids).
+    """
+    ticker = str(row.get("ticker") or row.get("market_ticker") or "")
+    series = str(row.get("series_ticker") or "")
+    if series in HOURLY_SERIES or series_code(ticker) in HOURLY_SERIES:
+        return True
+    return str(row.get("client_order_id") or "").startswith("hourly-")
 
 
 def _order_payload(idea: Idea, run_id: str) -> dict[str, Any]:
@@ -77,13 +98,13 @@ def execute_ideas(
             logger.warning("Could not list resting orders: %s", exc)
             resting = []
         for row in resting:
-            cid = str(row.get("client_order_id") or "")
-            if not cid.startswith("hourly-"):
+            row = unwrap_order(row)
+            if not is_hourly_rest(row):
                 continue
             order_id = str(row.get("order_id") or "")
-            ticker = str(row.get("ticker") or "")
+            ticker = str(row.get("ticker") or row.get("market_ticker") or "")
             still_wanted = any(p.get("ticker") == ticker for p in orders)
-            if still_wanted:
+            if still_wanted or not order_id:
                 continue
             try:
                 client.cancel_order(order_id, ticker=ticker or None)
@@ -97,7 +118,7 @@ def execute_ideas(
 
     for payload in orders:
         try:
-            placed = create(payload)
+            placed = unwrap_order(create(payload))
             result["placed"].append(placed)
             logger.info("placed order %s", placed.get("order_id") or placed)
             try:

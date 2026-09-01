@@ -30,6 +30,16 @@ class ForbiddenError(Exception):
     """Kalshi 403 — often cloud IPs. Do not retry-storm."""
 
 
+def unwrap_order(data: Any) -> dict[str, Any]:
+    """Kalshi sometimes nests the order under `order`."""
+    if not isinstance(data, dict):
+        return {}
+    inner = data.get("order")
+    if isinstance(inner, dict) and data.get("order_id") in (None, ""):
+        return inner
+    return data
+
+
 def _expand_path(path: str) -> Path:
     return Path(os.path.expandvars(os.path.expanduser(path or ""))).resolve()
 
@@ -198,7 +208,7 @@ class KalshiClient:
         body = dict(payload)
         body.setdefault("exchange_index", -1)
         try:
-            return self.post_json("/portfolio/events/orders", body)
+            return unwrap_order(self.post_json("/portfolio/events/orders", body))
         except ForbiddenError:
             self.read_only = True
             raise
@@ -206,9 +216,9 @@ class KalshiClient:
             if exc.response is not None and exc.response.status_code == 404:
                 body.pop("exchange_index", None)
                 try:
-                    return self.post_json("/portfolio/events/orders", body)
+                    return unwrap_order(self.post_json("/portfolio/events/orders", body))
                 except httpx.HTTPStatusError:
-                    return self.post_json("/portfolio/orders", payload)
+                    return unwrap_order(self.post_json("/portfolio/orders", payload))
             raise
 
     def create_order_v2(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -226,16 +236,48 @@ class KalshiClient:
                 return
             raise
 
+    def _paged_orders(self, params: dict[str, Any], limit: int) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while len(rows) < limit:
+            page = dict(params)
+            page["limit"] = min(200, limit - len(rows))
+            if cursor:
+                page["cursor"] = cursor
+            data = self.get_json("/portfolio/orders", params=page, auth=True)
+            batch = [unwrap_order(row) if isinstance(row, dict) else row for row in (data.get("orders") or [])]
+            rows.extend(batch)
+            cursor = data.get("cursor") or None
+            if not batch or not cursor:
+                break
+        return rows[:limit]
+
     def get_orders(self, *, status: str = "resting", limit: int = 200) -> list[dict[str, Any]]:
-        params: dict[str, Any] = {"limit": min(200, limit)}
+        """List resting orders across shards.
+
+        A default GET /portfolio/orders often returns only one shard. Crypto
+        (KXBTCD / KXETHD) lives on exchange_index 2, so a nonempty default
+        page is not enough — keep scanning 2/0/1 and merge.
+        """
+        params: dict[str, Any] = {}
         if status:
             params["status"] = status
-        try:
-            data = self.get_json("/portfolio/orders", params=params, auth=True)
-        except ForbiddenError:
-            self.read_only = True
-            return []
-        return list(data.get("orders") or [])
+        found: dict[str, dict[str, Any]] = {}
+        for extra in ({}, {"exchange_index": 2}, {"exchange_index": 0}, {"exchange_index": 1}):
+            try:
+                rows = self._paged_orders({**params, **extra}, limit)
+            except ForbiddenError:
+                self.read_only = True
+                if found:
+                    break
+                return []
+            except httpx.HTTPStatusError:
+                continue
+            for row in rows:
+                key = str(row.get("order_id") or row.get("ticker") or "")
+                if key:
+                    found[key] = row
+        return list(found.values())[:limit]
 
     def get_fills(self, *, limit: int = 100) -> list[dict[str, Any]]:
         try:
