@@ -87,6 +87,7 @@ def test_live_fire_drops_practice_tickets_without_ordering(tmp_path):
     engine.kalshi.create_order_v2 = AsyncMock(side_effect=AssertionError("no live flatten of paper"))
     engine.kalshi.get_json = AsyncMock(side_effect=AssertionError("practice tickets should not be quoted"))
     engine.kalshi.series_for_category = AsyncMock(return_value=[])
+    engine._enter_hourly = AsyncMock(return_value=["No actionable edge."])
 
     result = asyncio.run(engine.fire("hourly"))
     asyncio.run(engine.aclose())
@@ -221,16 +222,18 @@ def test_dry_limit_does_not_fake_a_fill(tmp_path):
 
 def test_revenge_sit_out_after_a_loss(tmp_path):
     from datetime import datetime, timezone
+    from unittest.mock import patch
 
     engine = _engine(tmp_path, 35)
     engine.tracker.state["last_loss_at"] = datetime.now(timezone.utc).isoformat()
     engine.tracker.save()
-    engine.kalshi.series_for_category = AsyncMock(return_value=[])
-    engine.kalshi.open_events = AsyncMock(side_effect=AssertionError("revenge must not scan"))
+    engine._enter_maker = AsyncMock(side_effect=AssertionError("revenge must not order"))
     engine.kalshi.create_order_v2 = AsyncMock(side_effect=AssertionError("revenge must not order"))
-    result = asyncio.run(engine.fire("hourly"))
+    with patch("kalshibot.campaign.engine.in_maker_window", return_value=True):
+        result = asyncio.run(engine.fire("maker"))
     asyncio.run(engine.aclose())
     assert any("revenge" in a.lower() for a in result["actions"])
+    assert engine._enter_maker.await_count == 0
 
 
 def test_no_side_sizes_against_the_no_cost(tmp_path):
@@ -282,6 +285,39 @@ def test_no_side_sizes_against_the_no_cost(tmp_path):
     no_cost = 0.20
     assert count * no_cost <= 0.10 * 35 + 1e-9
     assert count * no_cost >= 0.25
+
+
+def test_hourly_sits_out_when_net_edge_is_thin(tmp_path):
+    from kalshibot.assets import asset_by_key
+    from kalshibot.campaign.hourly import NO_EDGE
+
+    engine = _engine(tmp_path, 55)
+    pick = {
+        "series": "KXBTC15M",
+        "event": {"title": "BTC 15m"},
+        "market": {"ticker": "KXBTC15M-ATM", "title": "BTC above"},
+        "asset": asset_by_key("BTC"),
+        "spot": 100.0,
+        "strike": 100.0,
+        "spec_kind": "greater",
+        "cap": None,
+        "secs": 600,
+        "close": None,
+        "hourly_vol": 0.0045,
+        "model_yes": 0.52,
+        "sigma": 0.1,
+        "yes_bid": 0.49,
+        "yes_ask": 0.51,
+        "exchange_index": 2,
+    }
+    engine._load_candidates = AsyncMock(return_value=[{"row": True}])
+    engine._score_market = AsyncMock(return_value=pick)
+    engine.live = True
+    engine.kalshi.create_order_v2 = AsyncMock(side_effect=AssertionError("hourly must sit out under 6%"))
+    actions = asyncio.run(engine._enter_hourly())
+    asyncio.run(engine.aclose())
+    assert actions == [NO_EDGE]
+    assert engine.kalshi.create_order_v2.await_count == 0
 
 
 def test_hourly_skips_maker_priced_favorites(tmp_path):
@@ -377,7 +413,7 @@ def test_cash_sync_does_not_abort_the_loop(tmp_path):
     engine.kalshi.api_key_id = "x"
     engine.kalshi._private_key = object()
     engine.kalshi.get_balance = AsyncMock(return_value={"balance_dollars": "40.00"})
-    engine.kalshi.series_for_category = AsyncMock(return_value=[])
+    engine._enter_hourly = AsyncMock(return_value=["No actionable edge."])
     engine.kalshi.create_order_v2 = AsyncMock(side_effect=AssertionError("should sit out, not order"))
     result = asyncio.run(engine.fire("hourly"))
     asyncio.run(engine.aclose())
@@ -482,6 +518,7 @@ def test_halted_cancels_rests_and_skips_new_tickets(tmp_path):
     engine.tracker.save()
     engine.live = True
     engine.kalshi.cancel_order = AsyncMock()
+    engine._enter_hourly = AsyncMock(side_effect=AssertionError("halted must not enter"))
     engine._enter_limit = AsyncMock(side_effect=AssertionError("halted must not enter"))
     engine._fifteen_gate_and_enter = AsyncMock(side_effect=AssertionError("halted must not enter"))
     engine._quotes_for_open_tickets = AsyncMock(return_value={})
@@ -489,6 +526,7 @@ def test_halted_cancels_rests_and_skips_new_tickets(tmp_path):
     result = asyncio.run(engine.fire("hourly"))
     asyncio.run(engine.aclose())
     engine.kalshi.cancel_order.assert_awaited_once()
+    assert engine._enter_hourly.await_count == 0
     assert engine._enter_limit.await_count == 0
     assert any("halted until further notice" in a for a in result["actions"])
     assert result["status"]["halted"] is True

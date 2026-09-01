@@ -209,7 +209,7 @@ function renderCampaign() {
 
   const follow = campaign.follow_kalshi_cash ? "follows Kalshi cash" : "fixed book";
   const cadence = campaign.auto
-    ? "auto · 15m at :02–:04 · maker last 3 min · hourly every 5 min"
+    ? "auto · 15m at :02–:04 · maker last 3 min · hourly KXBTC15M tape"
     : "manual fire";
   const book = campaign.rests_source === "kalshi" || campaign.positions_source === "kalshi"
     ? "Kalshi book"
