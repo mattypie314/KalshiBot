@@ -743,57 +743,33 @@
       "pass_line": "PASS fair 0.99 vs mid 0.33 \u00b7 edge +66\u00a2",
       "paper": false,
       "exit_reason": "halted"
+    },
+    {
+      "id": "cfa9b6af-dbd2-4ad5-9f0b-590b88b6dabd",
+      "loop": "fifteen",
+      "kind": "fifteen_edge",
+      "ticker": "KXGOLD15M-26AUG312345-45",
+      "side": "yes",
+      "price": 0.68,
+      "count": 2.85,
+      "status": "open",
+      "order_id": "01a05b06-a020-799a-afc0-388639af481c",
+      "model_prob": 0.99,
+      "model_yes": 0.99,
+      "sigma": 9.08326747862535,
+      "spot": 4483.0,
+      "strike": 4434.05,
+      "spec_kind": "greater",
+      "cap": null,
+      "asset_key": "GOLD",
+      "close_at": "2026-09-01T03:45:00+00:00",
+      "hourly_vol": 0.0026593599773200947,
+      "window_id": "2026-08-31T23:30:00-04:00",
+      "pass_line": "PASS fair 0.99 vs mid 0.69 \u00b7 edge +30\u00a2",
+      "paper": false
     }
   ],
   "log": [
-    {
-      "ts": "2026-08-29T13:22:51.618820+00:00",
-      "loop": "fifteen",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T13:22:51.621376+00:00",
-      "loop": "hourly",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T13:22:51.623826+00:00",
-      "loop": "maker",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T15:15:33.923837+00:00",
-      "loop": "sizing",
-      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T15:15:33.925756+00:00",
-      "loop": "fifteen",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T15:15:33.928518+00:00",
-      "loop": "hourly",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T15:15:33.931247+00:00",
-      "loop": "maker",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T15:19:52.984122+00:00",
-      "loop": "sizing",
-      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
-      "tell_matt": true
-    },
     {
       "ts": "2026-08-29T15:19:52.985982+00:00",
       "loop": "fifteen",
@@ -1945,6 +1921,54 @@
       "loop": "maker",
       "message": "No 74\u201393\u00a2 favorite in the last 3 minutes. Sitting out is a valid trade.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T03:32:33.826691+00:00",
+      "loop": "sizing",
+      "message": "Follow Kalshi cash: yes.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T03:32:33.826707+00:00",
+      "loop": "sizing",
+      "message": "Maker auto is ON. It will rest 74\u201393\u00a2 bids every 15-minute window until you set this to no.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T03:32:36.664064+00:00",
+      "loop": "fifteen",
+      "message": "Kalshi cash $48.47 \u00b7 campaign equity $48.47.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-09-01T03:32:36.664079+00:00",
+      "loop": "fifteen",
+      "message": "LIVE post-only yes KXGOLD15M-26AUG312345-45 2.85@ 0.68 \u00b7 PASS fair 0.99 vs mid 0.69 \u00b7 edge +30\u00a2",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T03:32:45.881830+00:00",
+      "loop": "hourly",
+      "message": "Kalshi cash $48.47 \u00b7 campaign equity $48.47.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T03:32:45.881853+00:00",
+      "loop": "hourly",
+      "message": "No idea passed the filters. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T03:32:46.385378+00:00",
+      "loop": "maker",
+      "message": "Kalshi cash $48.47 \u00b7 campaign equity $48.47.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T03:32:46.385393+00:00",
+      "loop": "maker",
+      "message": "Maker window closed; stay quiet.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1961,5 +1985,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-09-01T02:45:01.286061+00:00"
+  "updated_at": "2026-09-01T03:32:46.385434+00:00"
 }
