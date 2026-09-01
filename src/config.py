@@ -3,13 +3,21 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 EXIT_OK = 0
 EXIT_CONFIG = 2
 EXIT_RATE_LIMITED = 3
+
+# Same host the campaign bot already signs against.
+DEFAULT_BASE_URL = "https://external-api.kalshi.com/trade-api/v2"
+
+
+def _strip_secret(value: object) -> str:
+    text = str(value or "").strip().strip('"').strip("'")
+    return text.strip()
 
 
 class HourlySettings(BaseSettings):
@@ -23,7 +31,7 @@ class HourlySettings(BaseSettings):
     kalshi_api_key_id: str = ""
     kalshi_private_key_path: str = ""
     kalshi_private_key: str = ""  # raw PEM from Actions secret
-    kalshi_base_url: str = "https://external-api.kalshi.com/trade-api/v2"
+    kalshi_base_url: str = DEFAULT_BASE_URL
     kalshi_demo_url: str = "https://demo-api.kalshi.co/trade-api/v2"
     use_demo: bool = True
     live_trading: bool = False
@@ -57,6 +65,31 @@ class HourlySettings(BaseSettings):
     def _upper_confirm(cls, value: object) -> str:
         return str(value or "NO").strip().upper()
 
+    @field_validator("kalshi_api_key_id", "kalshi_private_key_path", mode="before")
+    @classmethod
+    def _clean_key_fields(cls, value: object) -> str:
+        return _strip_secret(value)
+
+    @model_validator(mode="after")
+    def default_kalshi_key_files(self) -> HourlySettings:
+        home = Path.home() / ".kalshi"
+        pem = home / "kalshi_private_key.pem"
+        path = (self.kalshi_private_key_path or "").strip()
+        if path.startswith("KALSHI_PRIVATE_KEY_PATH="):
+            path = path.split("=", 1)[-1].strip()
+        path = os.path.expandvars(os.path.expanduser(path))
+        if not path or not Path(path).is_file():
+            path = str(pem) if pem.is_file() else path
+        self.kalshi_private_key_path = path
+        id_file = home / "api_key_id"
+        if not id_file.is_file():
+            id_file = home / "key_id"
+        if id_file.is_file() and (not self.kalshi_api_key_id or path == str(pem)):
+            self.kalshi_api_key_id = id_file.read_text().strip()
+        if self.kalshi_base_url and "tra>" in self.kalshi_base_url:
+            self.kalshi_base_url = DEFAULT_BASE_URL
+        return self
+
     @property
     def asset_list(self) -> list[str]:
         return [part.strip().upper() for part in self.assets.split(",") if part.strip()]
@@ -72,6 +105,8 @@ class HourlySettings(BaseSettings):
     def ensure_private_key_file(self) -> str:
         """Write KALSHI_PRIVATE_KEY PEM to a temp path when Actions injects it."""
         if self.kalshi_private_key_path:
+            expanded = os.path.expandvars(os.path.expanduser(self.kalshi_private_key_path))
+            self.kalshi_private_key_path = expanded
             return self.kalshi_private_key_path
         pem = (self.kalshi_private_key or os.environ.get("KALSHI_PRIVATE_KEY") or "").strip()
         if not pem:

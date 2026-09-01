@@ -10,30 +10,51 @@ from pathlib import Path
 from typing import Any
 
 from src.filters import Idea
+from src.kalshi_client import unwrap_order
 
 logger = logging.getLogger(__name__)
 
+# Daily BTC/ETH threshold books this scanner trades. Not 15m campaign rests.
+HOURLY_SERIES = frozenset({"KXBTCD", "KXETHD"})
+
+
+def series_code(ticker: str) -> str:
+    return str(ticker or "").upper().split("-", 1)[0]
+
+
+def is_hourly_rest(row: dict[str, Any]) -> bool:
+    """True for this scanner's rests, including UUID client_order_ids.
+
+    Kalshi V2 requires a UUID client_order_id, so we cannot tag orders with an
+    `hourly-` prefix anymore. Identify them by series (or leftover hourly- ids).
+    """
+    ticker = str(row.get("ticker") or row.get("market_ticker") or "")
+    series = str(row.get("series_ticker") or "")
+    if series in HOURLY_SERIES or series_code(ticker) in HOURLY_SERIES:
+        return True
+    return str(row.get("client_order_id") or "").startswith("hourly-")
+
 
 def _order_payload(idea: Idea, run_id: str) -> dict[str, Any]:
-    price_cents = int(round(idea.limit_price * 100))
+    """Kalshi V2 CreateOrder: count and price are strings. Side is bid/ask on the Yes book."""
     side = idea.side.lower()
-    body: dict[str, Any] = {
-        "ticker": idea.market.ticker,
-        "client_order_id": f"hourly-{run_id}-{idea.market.ticker}-{side}"[:64],
-        "side": side,
-        "action": "buy",
-        "count": idea.contracts,
-        "type": "limit",
-        "time_in_force": "good_till_canceled",
-        "post_only": bool(idea.post_maker),
-    }
     if side == "yes":
-        body["yes_price"] = price_cents
+        book_side = "bid"
+        yes_price = idea.limit_price
     else:
-        body["no_price"] = price_cents
-    if idea.market.exchange_index is not None:
-        body["exchange_index"] = idea.market.exchange_index
-    return body
+        book_side = "ask"
+        yes_price = max(0.0, min(1.0, 1.0 - idea.limit_price))
+    return {
+        "ticker": idea.market.ticker,
+        "client_order_id": str(uuid.uuid4()),
+        "side": book_side,
+        "count": f"{int(idea.contracts):.2f}",
+        "price": f"{yes_price:.4f}",
+        "time_in_force": "good_till_canceled",
+        "self_trade_prevention_type": "maker",
+        "post_only": bool(idea.post_maker),
+        "exchange_index": -1,
+    }
 
 
 def execute_ideas(
@@ -77,13 +98,13 @@ def execute_ideas(
             logger.warning("Could not list resting orders: %s", exc)
             resting = []
         for row in resting:
-            cid = str(row.get("client_order_id") or "")
-            if not cid.startswith("hourly-"):
+            row = unwrap_order(row)
+            if not is_hourly_rest(row):
                 continue
             order_id = str(row.get("order_id") or "")
-            ticker = str(row.get("ticker") or "")
+            ticker = str(row.get("ticker") or row.get("market_ticker") or "")
             still_wanted = any(p.get("ticker") == ticker for p in orders)
-            if still_wanted:
+            if still_wanted or not order_id:
                 continue
             try:
                 client.cancel_order(order_id, ticker=ticker or None)
@@ -97,7 +118,7 @@ def execute_ideas(
 
     for payload in orders:
         try:
-            placed = create(payload)
+            placed = unwrap_order(create(payload))
             result["placed"].append(placed)
             logger.info("placed order %s", placed.get("order_id") or placed)
             try:
@@ -106,7 +127,7 @@ def execute_ideas(
             except Exception as exc:  # noqa: BLE001
                 logger.warning("fetch open orders failed: %s", exc)
         except Exception as exc:  # noqa: BLE001
-            logger.error("create_order failed: %s", exc)
+            logger.error("create_order failed: %s payload=%s", exc, json.dumps(payload))
             result["errors"].append(str(exc))
 
     (dest / "last_run.json").write_text(json.dumps(result, indent=2, default=str))

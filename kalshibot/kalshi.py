@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import random
+from pathlib import Path
 from typing import Any
 
 import httpx
 
-from kalshibot.auth import load_private_key, sign_path_from_url, signed_headers
+from kalshibot.auth import expand_key_path, load_private_key, sign_path_from_url, signed_headers
 
 
 def _position_qty(row: dict[str, Any]) -> float:
@@ -41,7 +42,10 @@ class KalshiClient:
         self._gate = asyncio.Lock()
         self._next_ok = 0.0
         self.api_key_id = api_key_id
-        self._private_key = load_private_key(private_key_path) if api_key_id and private_key_path else None
+        pem = expand_key_path(private_key_path)
+        self._private_key = (
+            load_private_key(pem) if api_key_id and pem and Path(pem).is_file() else None
+        )
 
     @property
     def can_trade(self) -> bool:
@@ -202,8 +206,8 @@ class KalshiClient:
                 key = str(row.get("order_id") or row.get("ticker") or "")
                 if key:
                     found[key] = row
-            if extra == {} and found:
-                break
+            # Do not stop after a nonempty default page. Crypto rests live on
+            # shard 2 and are omitted from the unscoped list.
         return list(found.values())[:limit]
 
     async def get_positions(self, *, limit: int = 200) -> list[dict[str, Any]]:

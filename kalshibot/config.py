@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from pydantic import model_validator
@@ -72,7 +73,10 @@ class Settings(BaseSettings):
                 if path.is_file():
                     self.kalshi_api_key_id = path.read_text().strip()
                     break
-        if self.kalshi_api_key_id and not self.kalshi_private_key_path:
+        path = os.path.expandvars(os.path.expanduser(self.kalshi_private_key_path or ""))
+        if path and Path(path).is_file():
+            self.kalshi_private_key_path = path
+        elif self.kalshi_api_key_id and not path:
             pem = home / "kalshi_private_key.pem"
             if pem.is_file():
                 self.kalshi_private_key_path = str(pem)
