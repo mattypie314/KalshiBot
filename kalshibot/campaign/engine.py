@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -72,6 +73,7 @@ class CampaignEngine:
         self.tracker = Tracker(self.cfg.tracker_path, self.cfg.campaign_bankroll)
         self.playbook = playbook_from_settings(self.cfg)
         self._live_override: bool | None = None
+        self._fire_lock = asyncio.Lock()
 
     async def aclose(self) -> None:
         if self._owns_http:
@@ -101,6 +103,7 @@ class CampaignEngine:
             "follow_kalshi_cash": bool(sizing.get("follow_kalshi_cash", True)),
             "maker_auto": bool(sizing.get("maker_auto", True)),
             "halted": bool(sizing.get("halted", False)),
+            "auto": bool(self.cfg.kalshi_auto),
             "fifteen_stopped": fifteen_stopped(state),
             "fifteen_revenge": in_fifteen_revenge(state),
             "fifteen_look": in_fifteen_entry_window(),
@@ -216,6 +219,10 @@ class CampaignEngine:
         self._live_override = bool(value)
 
     async def fire(self, loop: str) -> dict[str, Any]:
+        async with self._fire_lock:
+            return await self._fire(loop)
+
+    async def _fire(self, loop: str) -> dict[str, Any]:
         self.tracker.load()
         self._reload_playbook()
         self.spots.clear()

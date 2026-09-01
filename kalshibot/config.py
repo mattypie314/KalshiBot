@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     kalshi_api_key_id: str = ""
     kalshi_private_key_path: str = ""
     kalshi_live: bool = False
+    kalshi_auto: bool = True
     tracker_path: str = "~/.kalshi/crypto-campaign.json"
     campaign_bankroll: float = 15.0
     skip_last_seconds: float = 180.0

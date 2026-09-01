@@ -215,7 +215,19 @@ button { cursor: pointer; }
 .chip.on { background: var(--yes-bg); color: var(--yes-ink); border-color: transparent; }
 .chip.warn { background: var(--no-bg); color: var(--no-ink); border-color: transparent; }
 
-.trade-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.trade-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.fire-now { display: flex; gap: 4px; }
+.ghost-fire {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ghost-fire:disabled { opacity: 0.5; cursor: wait; }
 .btn {
   background: var(--ink);
   color: var(--bg);
@@ -227,13 +239,14 @@ button { cursor: pointer; }
 }
 .btn:disabled { opacity: 0.5; cursor: wait; }
 .btn-halt {
-  background: transparent;
-  color: var(--no);
-  border: 1px solid var(--no);
+  background: var(--no-bg);
+  color: var(--no-ink);
+  border: 1px solid transparent;
+  padding: 9px 16px;
 }
 .btn-halt.resume {
+  background: var(--yes-bg);
   color: var(--yes-ink);
-  border-color: var(--yes);
 }
 
 .cat-row {

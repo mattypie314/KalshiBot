@@ -10,7 +10,8 @@ def test_index_serves_live_ui():
         assert page.status_code == 200
         assert "text/html" in page.headers["content-type"]
         assert b"KalshiBot" in page.content
-        assert b"Fire 15m" in page.content
+        assert b'data-fire="fifteen"' in page.content
+        assert b"title=\"Fire 15m now\"" in page.content
         # Phone Safari over Tailscale often drops extra /static requests, and Pi
         # hosts may serve .css as octet-stream. The shell inlines both assets.
         assert b"color-scheme: dark" in page.content
@@ -73,3 +74,9 @@ def test_campaign_control_live_toggle(tmp_path):
         off = client.post("/api/campaign/control", json={"live": False})
         assert off.json()["status"]["live"] is False
         assert any("DRY" in note for note in off.json()["notes"])
+
+
+def test_campaign_status_auto_off_in_tests():
+    with TestClient(app) as client:
+        status = client.get("/api/campaign").json()
+        assert status["auto"] is False
