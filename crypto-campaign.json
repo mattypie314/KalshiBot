@@ -747,42 +747,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-29T10:28:47.678271+00:00",
-      "loop": "maker",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T10:38:45.037572+00:00",
-      "loop": "sizing",
-      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T10:38:45.039581+00:00",
-      "loop": "fifteen",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T10:38:45.042501+00:00",
-      "loop": "hourly",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T10:38:45.045452+00:00",
-      "loop": "maker",
-      "message": "Campaign halted until further notice. No new trades.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T13:22:51.617071+00:00",
-      "loop": "sizing",
-      "message": "Campaign HALTED until further notice. No new trades; resting orders get canceled.",
-      "tell_matt": true
-    },
-    {
       "ts": "2026-08-29T13:22:51.618820+00:00",
       "loop": "fifteen",
       "message": "Campaign halted until further notice. No new trades.",
@@ -1945,6 +1909,42 @@
       "loop": "maker",
       "message": "Maker window closed; stay quiet.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T02:44:49.977243+00:00",
+      "loop": "fifteen",
+      "message": "Kalshi cash $48.47 \u00b7 campaign equity $48.47.",
+      "tell_matt": false
+    },
+    {
+      "ts": "2026-09-01T02:44:59.025876+00:00",
+      "loop": "hourly",
+      "message": "Kalshi cash $48.47 \u00b7 campaign equity $48.47.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T02:44:59.025888+00:00",
+      "loop": "hourly",
+      "message": "LIVE limit failed KXBTC-26AUG3123-B78350: Client error '400 Bad Request' for url 'https://external-api.kalshi.com/trade-api/v2/portfolio/events/orders'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 Kalshi said: {\"error\":{\"code\":\"invalid_order\",\"message\":\"invalid order\",\"details\":\"post only cross\"}}",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T02:44:59.025890+00:00",
+      "loop": "hourly",
+      "message": "Filters passed but size/room blocked a ticket. Sitting out is a valid trade.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T02:45:01.286022+00:00",
+      "loop": "maker",
+      "message": "Kalshi cash $48.47 \u00b7 campaign equity $48.47.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T02:45:01.286029+00:00",
+      "loop": "maker",
+      "message": "No 74\u201393\u00a2 favorite in the last 3 minutes. Sitting out is a valid trade.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1961,5 +1961,5 @@
     "risk_percent": 8.0,
     "halted": false
   },
-  "updated_at": "2026-09-01T01:25:04.929115+00:00"
+  "updated_at": "2026-09-01T02:45:01.286061+00:00"
 }
