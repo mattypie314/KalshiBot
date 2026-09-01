@@ -44,29 +44,57 @@ def parse_yes_no(raw: object) -> bool | None:
 
 
 def cash_from_balance(payload: dict[str, Any]) -> float | None:
-    raw = payload.get("balance_dollars")
+    return _dollars_or_cents(payload, "balance_dollars", "balance")
+
+
+def portfolio_value_from_balance(payload: dict[str, Any]) -> float | None:
+    """Kalshi `portfolio_value` in dollars. May be NAV or position mark."""
+    return _dollars_or_cents(payload, "portfolio_value_dollars", "portfolio_value")
+
+
+def _dollars_or_cents(payload: dict[str, Any], dollars_key: str, cents_key: str) -> float | None:
+    raw = payload.get(dollars_key)
     if raw not in (None, ""):
         return float(raw)
-    cents = payload.get("balance")
-    if isinstance(cents, (int, float)):
-        return float(cents) / 100.0
-    return None
+    cents = payload.get(cents_key)
+    if isinstance(cents, bool) or not isinstance(cents, (int, float)):
+        return None
+    if isinstance(cents, float) and not cents.is_integer() and abs(cents) < 1_000_000:
+        return float(cents)
+    return float(cents) / 100.0
 
 
-def total_value_from_balance(payload: dict[str, Any]) -> float | None:
-    """Kalshi total bankroll. Floor at available cash if portfolio_value is smaller."""
-    cash = cash_from_balance(payload)
-    raw = payload.get("portfolio_value_dollars")
-    tv: float | None = None
-    if raw not in (None, ""):
-        tv = float(raw)
-    else:
-        cents = payload.get("portfolio_value")
-        if isinstance(cents, (int, float)):
-            tv = float(cents) / 100.0
-    if tv is not None and cash is not None:
-        return max(tv, cash)
-    return tv if tv is not None else cash
+def account_nav(
+    cash: float | None,
+    portfolio_mark: float | None,
+    positions_cost: float = 0.0,
+) -> float | None:
+    """Cash vs portfolio: Kalshi NAV is cash + live mark of open positions.
+
+    The wire `portfolio_value` is sometimes that NAV and sometimes the
+    position mark only. Prefer whichever reading matches the live lots.
+    """
+    cost = max(0.0, float(positions_cost or 0))
+    if cash is None and portfolio_mark is None:
+        return None if cost <= 0 else round(cost, 4)
+    cash_v = float(cash or 0.0)
+    mark = portfolio_mark
+    if mark is None:
+        return round(cash_v + cost, 4)
+    if cost > 0.01:
+        as_positions = cash_v + mark
+        as_nav = mark
+        if abs(mark - cost) <= abs(mark - (cash_v + cost)):
+            return round(as_positions, 4)
+        return round(as_nav, 4)
+    if mark + 0.005 < cash_v:
+        return round(cash_v + mark, 4)
+    return round(max(mark, cash_v), 4)
+
+
+def total_value_from_balance(payload: dict[str, Any], positions_cost: float = 0.0) -> float | None:
+    """Kalshi total bankroll (cash + positions). Used for size and the Portfolio tile."""
+    return account_nav(cash_from_balance(payload), portfolio_value_from_balance(payload), positions_cost)
 
 
 def playbook_from_sizing(cfg: object, sizing: dict[str, Any] | None) -> Playbook:
