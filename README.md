@@ -46,7 +46,44 @@ export KALSHI_API_KEY_ID=your-key-id
 export KALSHI_PRIVATE_KEY_PATH=~/.kalshi/kalshi_private_key.pem
 ```
 
-GitHub Actions (`.github/workflows/hourly.yml`) runs `scan` at minute 3 of every hour. It does **not** place live orders. Kalshi often 403s cloud IPs. For live limits use a VPS with a stable IP.
+GitHub Actions (`.github/workflows/hourly.yml`) runs `scan` at minute 3 of every hour. It does **not** place live orders. Kalshi often 403s cloud IPs. For live limits use a VPS or the Pi with a stable IP.
+
+## On the Pi (`/home/KalshiBot`)
+
+The repo root **is** the project. Clone straight into that folder so you do not get a nested `KalshiBot/KalshiBot`:
+
+```bash
+git clone https://github.com/mattypie314/KalshiBot.git /home/KalshiBot
+```
+
+If you already have `/home/mkubit/KalshiBot/KalshiBot` (or `/home/mkubit/KalshiBot`), move it up:
+
+```bash
+# stop anything using the old path first
+sudo mv /home/mkubit/KalshiBot/KalshiBot /home/KalshiBot
+# or, if it was already flattened under your home:
+# sudo mv /home/mkubit/KalshiBot /home/KalshiBot
+sudo chown -R mkubit:mkubit /home/KalshiBot
+```
+
+Then:
+
+```bash
+cd /home/KalshiBot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp -n .env.example .env   # edit keys; never commit .env
+python -m src.main auth
+```
+
+systemd units in `scripts/` use `WorkingDirectory=/home/KalshiBot`:
+
+```bash
+sudo cp scripts/kalshi-hourly.service scripts/kalshi-hourly.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now kalshi-hourly.timer
+```
 
 ## Bankroll caps
 

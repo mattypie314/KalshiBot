@@ -1,0 +1,15 @@
+[Unit]
+Description=KalshiBot hourly BTC/ETH scan
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=mkubit
+WorkingDirectory=/home/KalshiBot
+Environment=PYTHONPATH=/home/KalshiBot
+EnvironmentFile=-/home/KalshiBot/.env
+EnvironmentFile=-/home/mkubit/.kalshi/env
+ExecStart=/usr/bin/python3 -m src.main once
+
+[Install]
+WantedBy=multi-user.target
