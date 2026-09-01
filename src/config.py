@@ -100,6 +100,8 @@ class HourlySettings(BaseSettings):
     def ensure_private_key_file(self) -> str:
         """Write KALSHI_PRIVATE_KEY PEM to a temp path when Actions injects it."""
         if self.kalshi_private_key_path:
+            expanded = os.path.expandvars(os.path.expanduser(self.kalshi_private_key_path))
+            self.kalshi_private_key_path = expanded
             return self.kalshi_private_key_path
         pem = (self.kalshi_private_key or os.environ.get("KALSHI_PRIVATE_KEY") or "").strip()
         if not pem:

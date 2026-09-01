@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 import random
 import time
 from pathlib import Path
@@ -29,8 +30,12 @@ class ForbiddenError(Exception):
     """Kalshi 403 — often cloud IPs. Do not retry-storm."""
 
 
+def _expand_path(path: str) -> Path:
+    return Path(os.path.expandvars(os.path.expanduser(path or ""))).resolve()
+
+
 def load_private_key(path: str):
-    pem = Path(path).expanduser().read_bytes()
+    pem = _expand_path(path).read_bytes()
     return serialization.load_pem_private_key(pem, password=None)
 
 
@@ -244,7 +249,7 @@ class KalshiClient:
         return self.get_json("/portfolio/balance", auth=True)
 
     def auth_status(self) -> dict[str, Any]:
-        pem = Path(self._private_key_path).expanduser() if self._private_key_path else None
+        pem = _expand_path(self._private_key_path) if self._private_key_path else None
         head = ""
         if pem and pem.is_file():
             head = pem.read_text(errors="replace").splitlines()[0] if pem.stat().st_size else ""
