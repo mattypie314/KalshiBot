@@ -181,16 +181,17 @@ function renderCampaign() {
 
   const pill = document.getElementById("live-pill");
   pill.className = "live-pill";
-  if (campaign.halted) {
-    pill.classList.add("halted");
-    pill.textContent = "HALTED";
-  } else if (campaign.live) {
+  if (campaign.live) {
     pill.classList.add("live");
     pill.textContent = "LIVE";
   } else {
     pill.classList.add("dry");
     pill.textContent = "DRY";
   }
+  pill.title = campaign.can_trade
+    ? (campaign.live ? "Tap to switch to DRY (no real orders)" : "Tap to go LIVE (real Kalshi orders)")
+    : "Need Kalshi API key and private key on this host before going LIVE";
+  pill.setAttribute("aria-pressed", campaign.live ? "true" : "false");
 
   const chips = [];
   chips.push(`<span class="chip ${campaign.maker_auto === false ? "" : "on"}">Maker ${campaign.maker_auto === false ? "off" : "on"}</span>`);
@@ -346,6 +347,39 @@ document.querySelectorAll("[data-fire]").forEach((btn) => {
       btn.disabled = false;
     }
   });
+});
+
+document.getElementById("live-pill").addEventListener("click", async () => {
+  if (!campaign) await loadCampaign();
+  if (!campaign) return;
+  const next = !campaign.live;
+  if (next) {
+    if (!campaign.can_trade) {
+      window.alert("This host does not have Kalshi keys loaded. Set KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY_PATH, restart serve, then tap LIVE.");
+      return;
+    }
+    if (!window.confirm("Go LIVE? Fire 15m / hourly / maker will send real post-only orders to Kalshi from this process.")) {
+      return;
+    }
+  }
+  const pill = document.getElementById("live-pill");
+  pill.disabled = true;
+  try {
+    const response = await fetch("/api/campaign/control", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ live: next }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      window.alert(data.detail || "Could not change DRY / LIVE.");
+      return;
+    }
+    campaign = data.status || campaign;
+    renderCampaign();
+  } finally {
+    pill.disabled = false;
+  }
 });
 
 document.getElementById("halt-btn").addEventListener("click", async () => {

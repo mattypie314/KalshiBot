@@ -98,6 +98,7 @@ def apply_phone_overrides(
     risk_percent: object = None,
     risk_cap_percent: object = None,
     halted: object = None,
+    live: object = None,
 ) -> list[str]:
     """Save iPhone/Actions knobs onto the campaign tracker. Blank means keep."""
     tracker.load()
@@ -114,6 +115,14 @@ def apply_phone_overrides(
             "Campaign HALTED until further notice. No new trades; resting orders get canceled."
             if halted_val
             else "Campaign is live again. New tickets are allowed."
+        )
+    live_val = parse_yes_no(live)
+    if live_val is not None:
+        sizing["live"] = live_val
+        notes.append(
+            "Trading is LIVE. Fire buttons send real post-only orders to Kalshi from this process."
+            if live_val
+            else "Practice mode (DRY). Orders are not sent to Kalshi."
         )
     maker_auto_val = parse_yes_no(maker_auto)
     if maker_auto_val is not None:

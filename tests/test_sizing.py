@@ -53,6 +53,12 @@ def test_phone_override_saves_on_tracker(tmp_path):
     assert state["sizing"]["halted"] is True
     assert any("OFF" in n for n in notes)
     assert any("HALTED" in n for n in notes)
+    live_notes = apply_phone_overrides(tracker, live="yes")
+    assert tracker.load()["sizing"]["live"] is True
+    assert any("LIVE" in n for n in live_notes)
+    dry_notes = apply_phone_overrides(tracker, live="no")
+    assert tracker.load()["sizing"]["live"] is False
+    assert any("DRY" in n for n in dry_notes)
 
 
 def test_phone_override_resume_and_keep_halt(tmp_path):
