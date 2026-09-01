@@ -449,7 +449,9 @@ button { cursor: pointer; }
 
 @media (max-width: 860px) {
   .nav { padding: 0 12px; height: 56px; }
-  .nav-links, .nav-clock, .ghost { display: none; }
+  .nav-clock, .ghost { display: none; }
+  .nav-links { gap: 0; }
+  .nav-link { padding: 6px 8px; font-size: 13px; }
   .word { display: none; }
   .page { padding: 12px 12px 56px; }
   .folio-stats { grid-template-columns: repeat(3, 1fr); }
