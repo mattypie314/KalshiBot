@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import os
 import time
 from pathlib import Path
 
@@ -8,8 +9,12 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
 
+def expand_key_path(path: str) -> str:
+    return os.path.expandvars(os.path.expanduser(path or ""))
+
+
 def load_private_key(path: str):
-    pem = Path(path).expanduser().read_bytes()
+    pem = Path(expand_key_path(path)).read_bytes()
     return serialization.load_pem_private_key(pem, password=None)
 
 

@@ -98,6 +98,8 @@ def test_live_fire_drops_practice_tickets_without_ordering(tmp_path):
 
 def test_tracker_live_flag_requires_keys(tmp_path):
     engine = _engine(tmp_path)
+    engine.kalshi.api_key_id = ""
+    engine.kalshi._private_key = None
     engine.tracker.state.setdefault("sizing", {})["live"] = True
     engine.tracker.save()
     engine.tracker.load()
