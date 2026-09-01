@@ -1,0 +1,132 @@
+name: Kalshi campaign
+
+on:
+  # Manual only. The Pi is the live host. A GitHub cron would trade the
+  # same Kalshi book (and a halted GitHub job would cancel Pi rests).
+  workflow_dispatch:
+    inputs:
+      loop:
+        description: Which loop to fire
+        type: choice
+        options:
+          - auto
+          - fifteen
+          - hourly
+          - maker
+        default: auto
+      halted:
+        description: "Shut the book down. yes = no new trades, cancel resting orders."
+        type: choice
+        options:
+          - keep
+          - "yes"
+          - "no"
+        default: keep
+      bankroll:
+        description: "Max dollars the bot may use. Leave blank to follow Kalshi cash / the saved book."
+        type: string
+        default: ""
+      follow_kalshi_cash:
+        description: "Use live Kalshi cash so size grows when you deposit."
+        type: choice
+        options:
+          - keep
+          - "yes"
+          - "no"
+        default: keep
+      risk_percent:
+        description: "Max percent of the book per idea (example: 5). Blank = keep 3–5% Kelly / 8% cap."
+        type: string
+        default: ""
+      maker_auto:
+        description: "Rest 74–93¢ maker bids every 15-minute window until you turn this off."
+        type: choice
+        options:
+          - keep
+          - "yes"
+          - "no"
+        default: keep
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kalshi-campaign
+  cancel-in-progress: false
+
+jobs:
+  fire:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout bot
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Restore campaign tracker
+        continue-on-error: true
+        run: |
+          mkdir -p "$HOME/.kalshi"
+          git fetch origin campaign-state:campaign-state || true
+          tmp="$(mktemp)"
+          if git show campaign-state:crypto-campaign.json > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+            mv "$tmp" "$HOME/.kalshi/crypto-campaign.json"
+            echo "Restored tracker"
+          else
+            rm -f "$tmp" "$HOME/.kalshi/crypto-campaign.json"
+            echo "Starting a new tracker"
+          fi
+
+      - name: Optional Kalshi key
+        env:
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: |
+          if [ -n "$KALSHI_PRIVATE_KEY" ]; then
+            printf '%s\n' "$KALSHI_PRIVATE_KEY" > "$HOME/.kalshi/kalshi_private_key.pem"
+            echo "KALSHI_PRIVATE_KEY_PATH=$HOME/.kalshi/kalshi_private_key.pem" >> "$GITHUB_ENV"
+          fi
+
+      - name: Fire loops
+        env:
+          LOOP: ${{ github.event.inputs.loop || 'auto' }}
+          HALTED: ${{ github.event.inputs.halted || 'keep' }}
+          BANKROLL: ${{ github.event.inputs.bankroll || '' }}
+          FOLLOW_KALSHI: ${{ github.event.inputs.follow_kalshi_cash || 'keep' }}
+          MAKER_AUTO: ${{ github.event.inputs.maker_auto || 'keep' }}
+          RISK_PERCENT: ${{ github.event.inputs.risk_percent || '' }}
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
+          KALSHI_LIVE: ${{ secrets.KALSHI_LIVE || 'false' }}
+          TRACKER_PATH: /home/runner/.kalshi/crypto-campaign.json
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/ci_fire.py
+
+      - name: Save campaign tracker
+        if: success()
+        continue-on-error: true
+        run: |
+          set -e
+          test -f "$HOME/.kalshi/crypto-campaign.json"
+          git config user.name "kalshibot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin campaign-state:campaign-state || true
+          if git rev-parse --verify campaign-state >/dev/null 2>&1; then
+            git checkout campaign-state
+          else
+            git checkout --orphan campaign-state
+            git rm -rf --ignore-unmatch . >/dev/null 2>&1 || true
+          fi
+          cp "$HOME/.kalshi/crypto-campaign.json" crypto-campaign.json
+          git add crypto-campaign.json
+          if git diff --cached --quiet; then
+            echo "Tracker unchanged"
+          else
+            git commit -m "Update campaign tracker"
+            git push origin campaign-state
+          fi
