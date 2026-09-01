@@ -33,6 +33,7 @@ from kalshibot.campaign.hourly import (
     hourly_stake,
     pick_atm,
 )
+from kalshibot.campaign.playbook import playbook_from_settings
 from kalshibot.campaign.sizing import cash_from_balance, playbook_from_sizing, total_value_from_balance
 from kalshibot.campaign.rules import (
     classify_favorite,
