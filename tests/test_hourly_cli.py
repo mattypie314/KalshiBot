@@ -33,8 +33,9 @@ def test_live_refused_without_flags(monkeypatch):
 def test_live_is_armed_by_prompt_or_flag():
     dry = HourlySettings(live_trading=False, confirm_live="NO")
     assert live_is_armed(dry, confirm="", isatty=False) is False
-    assert live_is_armed(dry, confirm="YES", isatty=False) is True
-    assert live_is_armed(dry, confirm="no", isatty=True, prompt=lambda _: "YES") is True
+    assert live_is_armed(dry, confirm="LIVE", isatty=False) is True
+    assert live_is_armed(dry, confirm="no", isatty=True, prompt=lambda _: "LIVE") is True
+    assert live_is_armed(dry, confirm="YES", isatty=False) is False
     assert live_is_armed(dry, confirm="", isatty=True, prompt=lambda _: "nope") is False
     env = HourlySettings(live_trading=True, confirm_live="YES")
     assert live_is_armed(env, confirm="", isatty=False) is True
@@ -44,7 +45,7 @@ def test_live_confirm_flag_does_not_need_env(monkeypatch):
     monkeypatch.setenv("LIVE_TRADING", "false")
     monkeypatch.setenv("CONFIRM_LIVE", "NO")
     monkeypatch.setattr("src.main.run_scan", lambda *args, **kwargs: 0)
-    assert main(["live", "--confirm", "YES"]) == 0
+    assert main(["live", "--confirm", "LIVE"]) == 0
 
 
 def test_live_enabled_requires_both_flags():

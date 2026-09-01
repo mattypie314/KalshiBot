@@ -210,7 +210,7 @@ def run_scan(
             live = bool(force_live and (armed or settings.live_enabled))
             if force_live and not live:
                 print(
-                    "LIVE refused: type YES at the prompt, pass --confirm YES, "
+                    "LIVE refused: type LIVE at the prompt, pass --confirm LIVE, "
                     "or set LIVE_TRADING=true and CONFIRM_LIVE=YES.",
                     file=sys.stderr,
                 )
@@ -303,7 +303,7 @@ KalshiBot — pick a mode
   1  scan   report only (default)
   2  once   dry-run limit payloads
   3  auth   test key + PEM
-  4  live   real limits (type YES — no .env edit)
+  4  live   real limits (type LIVE — no .env edit)
 
 Mode [scan]: """
 
@@ -334,6 +334,13 @@ def normalize_argv(
     return raw
 
 
+LIVE_CONFIRM = "LIVE"
+
+
+def _typed_live(value: str) -> bool:
+    return str(value or "").strip().upper() == LIVE_CONFIRM
+
+
 def live_is_armed(
     settings: HourlySettings,
     *,
@@ -341,18 +348,18 @@ def live_is_armed(
     isatty: bool | None = None,
     prompt: Callable[[str], str] | None = None,
 ) -> bool:
-    """Arm live for this run only. Env flags, --confirm YES, or a TTY YES prompt."""
+    """Arm live for this run only. Env flags, --confirm LIVE, or a TTY LIVE prompt."""
     if settings.live_enabled:
         return True
-    if str(confirm or "").strip().upper() == "YES":
+    if _typed_live(confirm):
         return True
     if isatty is None:
         isatty = sys.stdin.isatty()
     if not isatty:
         return False
     where = " on DEMO" if settings.use_demo else " on PROD"
-    reply = (prompt or input)(f"Type YES to place LIVE limits{where} (anything else aborts): ")
-    return reply.strip().upper() == "YES"
+    reply = (prompt or input)(f"Type LIVE to place live limits{where} (anything else aborts): ")
+    return _typed_live(reply)
 
 
 def cli() -> None:
@@ -373,13 +380,13 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("auth", help="Test Kalshi API key + PEM (no orders)")
     live = sub.add_parser(
         "live",
-        help="Place limits after typing YES (or --confirm YES). .env can stay dry.",
+        help="Place limits after typing LIVE (or --confirm LIVE). .env can stay dry.",
     )
     live.add_argument(
         "--confirm",
         default="",
-        metavar="YES",
-        help="Pass YES to arm live without a prompt. Leaves .env unchanged.",
+        metavar="LIVE",
+        help="Pass LIVE to arm live without a prompt. Leaves .env unchanged.",
     )
 
     args = parser.parse_args(normalize_argv(argv))
@@ -400,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "live":
         if not live_is_armed(settings, confirm=args.confirm):
             print(
-                "LIVE refused: type YES at the prompt, pass --confirm YES, "
+                "LIVE refused: type LIVE at the prompt, pass --confirm LIVE, "
                 "or set LIVE_TRADING=true and CONFIRM_LIVE=YES.",
                 file=sys.stderr,
             )

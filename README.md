@@ -2,7 +2,7 @@
 
 Hourly BTC and ETH threshold scanner for Kalshi (`KXBTCD`, `KXETHD`).
 
-Not financial advice. You can lose the full amount you put on a contract. Demo first. `.env` can stay dry. Live is a one-run confirm: type `YES` at the prompt, or pass `--confirm YES`.
+Not financial advice. You can lose the full amount you put on a contract. Demo first. `.env` can stay dry. Live is a one-run confirm: type `LIVE` at the prompt, or pass `--confirm LIVE`.
 
 The 15-minute campaign, maker loop, dashboard, and research desk are parked on the `archive/campaign-desk` branch for later.
 
@@ -26,13 +26,13 @@ Pick a mode from a menu, or pass it on the command line:
 ./kb scan --asset BTC
 ./kb once            # also: o  or  2   dry-run limit payloads
 ./kb auth            # also: a  or  3   test key + PEM
-./kb live            # also: l  or  4   type YES (or --confirm YES). .env can stay dry
-./kb live --confirm YES
+./kb live            # also: l  or  4   type LIVE (or --confirm LIVE). .env can stay dry
+./kb live --confirm LIVE
 ```
 
 `python -m src.main …` and (after `pip install -e .`) `kalshibot` / `kb` do the same thing. No args on a TTY opens the menu; no args in a script defaults to `scan`.
 
-Live does **not** require editing `.env`. On a terminal, `./kb live` asks you to type `YES`. Scripts can use `./kb live --confirm YES`. The old `LIVE_TRADING=true` + `CONFIRM_LIVE=YES` pair still works if you want unattended live. GitHub Actions stays dry.
+Live does **not** require editing `.env`. On a terminal, `./kb live` asks you to type `LIVE`. Scripts can use `./kb live --confirm LIVE`. The old `LIVE_TRADING=true` + `CONFIRM_LIVE=YES` pair still works if you want unattended live. GitHub Actions stays dry.
 
 Exit codes: `0` success or `NO_ACTIONABLE_EDGE`, `2` config/auth, `3` rate limited.
 
