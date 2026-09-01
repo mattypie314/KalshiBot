@@ -747,24 +747,6 @@
   ],
   "log": [
     {
-      "ts": "2026-08-29T03:25:38.758122+00:00",
-      "loop": "sizing",
-      "message": "Follow Kalshi cash: no.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T03:25:38.758133+00:00",
-      "loop": "sizing",
-      "message": "Maker auto is OFF. No new last-3-min bids until you set maker_auto to yes.",
-      "tell_matt": true
-    },
-    {
-      "ts": "2026-08-29T03:25:39.504878+00:00",
-      "loop": "fifteen",
-      "message": "LIVE cancel rest KXETH-26AUG2900-B2437 (edge_decay)",
-      "tell_matt": false
-    },
-    {
       "ts": "2026-08-29T03:25:48.455826+00:00",
       "loop": "hourly",
       "message": "LIVE post-only no KXBNB-26AUG2900-B692 15.81@ 0.84 \u00b7 fair 0.39 vs mid 0.18 \u00b7 net +19.6% after fees \u00b7 0.32\u03c3 \u00b7 spread 0.06",
@@ -1945,6 +1927,24 @@
       "loop": "maker",
       "message": "Campaign halted until further notice. No new trades.",
       "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T00:14:09.395818+00:00",
+      "loop": "sizing",
+      "message": "Campaign is live again. New tickets are allowed.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T00:14:09.395818+00:00",
+      "loop": "sizing",
+      "message": "Follow Kalshi cash: yes.",
+      "tell_matt": true
+    },
+    {
+      "ts": "2026-09-01T00:14:09.395818+00:00",
+      "loop": "sizing",
+      "message": "Maker auto is ON. It will rest 74\u201393\u00a2 bids every 15-minute window until you set this to no.",
+      "tell_matt": true
     }
   ],
   "last_loss_at": null,
@@ -1955,11 +1955,11 @@
   "fifteen_stopped_until": null,
   "fifteen_revenge_until": null,
   "sizing": {
-    "follow_kalshi_cash": false,
+    "follow_kalshi_cash": true,
     "bankroll_cap": null,
-    "maker_auto": false,
+    "maker_auto": true,
     "risk_percent": 8.0,
-    "halted": true
+    "halted": false
   },
-  "updated_at": "2026-08-31T23:58:03.995576+00:00"
+  "updated_at": "2026-09-01T00:14:09.395818+00:00"
 }
