@@ -12,7 +12,7 @@ EXIT_CONFIG = 2
 EXIT_RATE_LIMITED = 3
 
 # Same host the campaign bot already signs against.
-DEFAULT_BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
+DEFAULT_BASE_URL = "https://external-api.kalshi.com/trade-api/v2"
 
 
 def _strip_secret(value: object) -> str:
@@ -22,7 +22,7 @@ def _strip_secret(value: object) -> str:
 
 class HourlySettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env", str(Path.home() / ".kalshi" / "env")),
+        env_file=(".env",),
         extra="ignore",
         env_ignore_empty=True,
         case_sensitive=False,
@@ -73,16 +73,21 @@ class HourlySettings(BaseSettings):
     @model_validator(mode="after")
     def default_kalshi_key_files(self) -> HourlySettings:
         home = Path.home() / ".kalshi"
-        if not self.kalshi_api_key_id:
-            for name in ("api_key_id", "key_id"):
-                path = home / name
-                if path.is_file():
-                    self.kalshi_api_key_id = path.read_text().strip()
-                    break
-        if self.kalshi_api_key_id and not self.kalshi_private_key_path:
-            pem = home / "kalshi_private_key.pem"
-            if pem.is_file():
-                self.kalshi_private_key_path = str(pem)
+        pem = home / "kalshi_private_key.pem"
+        path = (self.kalshi_private_key_path or "").strip()
+        if path.startswith("KALSHI_PRIVATE_KEY_PATH="):
+            path = path.split("=", 1)[-1].strip()
+        path = os.path.expandvars(os.path.expanduser(path))
+        if not path or not Path(path).is_file():
+            path = str(pem) if pem.is_file() else path
+        self.kalshi_private_key_path = path
+        id_file = home / "api_key_id"
+        if not id_file.is_file():
+            id_file = home / "key_id"
+        if id_file.is_file() and (not self.kalshi_api_key_id or path == str(pem)):
+            self.kalshi_api_key_id = id_file.read_text().strip()
+        if self.kalshi_base_url and "tra>" in self.kalshi_base_url:
+            self.kalshi_base_url = DEFAULT_BASE_URL
         return self
 
     @property

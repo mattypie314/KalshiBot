@@ -15,5 +15,5 @@ def test_live_enabled_requires_both_flags():
 
 
 def test_key_id_strips_quotes():
-    settings = HourlySettings(kalshi_api_key_id='  "abc-123"  ')
+    settings = HourlySettings(kalshi_api_key_id='  "abc-123"  ', kalshi_private_key_path="/tmp/not-the-home-pem")
     assert settings.kalshi_api_key_id == "abc-123"
