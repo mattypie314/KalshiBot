@@ -211,10 +211,38 @@ function renderCampaign() {
   const cadence = campaign.auto
     ? "auto · 15m at :02–:04 · maker last 3 min · hourly every 5 min"
     : "manual fire";
+  const book = campaign.rests_source === "kalshi" || campaign.positions_source === "kalshi"
+    ? "Kalshi book"
+    : "local book";
   document.getElementById("book-meta").textContent =
-    `${follow} · ${cadence} · ${campaign.open_tickets?.length || 0} open · ${campaign.rests?.length || 0} resting`;
+    `${book} · ${follow} · ${cadence} · ${campaign.open_tickets?.length || 0} open · ${campaign.rests?.length || 0} resting`;
 
   renderBlotter();
+}
+
+function emptyBlotter(kind) {
+  if (kind === "orders") {
+    if (String(campaign.blotter_error || "").includes("orders")) {
+      return "Could not load Kalshi orders. Showing the local book.";
+    }
+    if (!campaign.can_trade) {
+      return "No resting orders in the local book. Load Kalshi keys on this host to see live orders.";
+    }
+    if (campaign.rests_source === "kalshi") {
+      return "No resting orders on Kalshi. Filled contracts show under Positions.";
+    }
+    return "No resting orders.";
+  }
+  if (String(campaign.blotter_error || "").includes("positions")) {
+    return "Could not load Kalshi positions. Showing the local book.";
+  }
+  if (!campaign.can_trade) {
+    return "No open positions in the local book. Load Kalshi keys on this host to see live holdings.";
+  }
+  if (campaign.positions_source === "kalshi") {
+    return "No open positions on Kalshi.";
+  }
+  return "No open positions.";
 }
 
 function renderBlotter() {
@@ -229,7 +257,7 @@ function renderBlotter() {
   }
   const rows = blot === "orders" ? campaign.rests || [] : campaign.open_tickets || [];
   if (!rows.length) {
-    blotter.innerHTML = `<div class="empty">${blot === "orders" ? "No resting orders." : "No open positions."}</div>`;
+    blotter.innerHTML = `<div class="empty">${emptyBlotter(blot)}</div>`;
     return;
   }
   const body = rows

@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock
 
 from kalshibot.campaign.tracker import Tracker
 from kalshibot.web import app
@@ -66,6 +67,8 @@ def test_campaign_control_live_toggle(tmp_path):
         engine.tracker.save()
         engine.kalshi.api_key_id = "test-key"
         engine.kalshi._private_key = object()
+        engine.kalshi.get_orders = AsyncMock(return_value=[])
+        engine.kalshi.get_positions = AsyncMock(return_value=[])
         on = client.post("/api/campaign/control", json={"live": True})
         assert on.status_code == 200
         assert on.json()["status"]["live"] is True
@@ -80,3 +83,34 @@ def test_campaign_status_auto_off_in_tests():
     with TestClient(app) as client:
         status = client.get("/api/campaign").json()
         assert status["auto"] is False
+        assert status["positions_source"] == "local"
+        assert status["rests_source"] == "local"
+
+
+def test_campaign_status_shows_kalshi_positions(tmp_path):
+    with TestClient(app) as client:
+        engine = app.state.campaign
+        engine.tracker = Tracker(tmp_path / "book.json", bankroll=25.0)
+        engine.tracker.save()
+        engine.kalshi.api_key_id = "test-key"
+        engine.kalshi._private_key = object()
+        engine.kalshi.get_orders = AsyncMock(return_value=[])
+        engine.kalshi.get_positions = AsyncMock(
+            return_value=[
+                {
+                    "ticker": "KXBNB-26SEP0118-B687",
+                    "position_fp": "-25.00",
+                    "market_exposure_dollars": "22.25",
+                }
+            ]
+        )
+        status = client.get("/api/campaign").json()
+        assert status["positions_source"] == "kalshi"
+        assert status["open_tickets"][0]["ticker"] == "KXBNB-26SEP0118-B687"
+        assert status["open_tickets"][0]["side"] == "no"
+        assert status["open_tickets"][0]["count"] == 25.0
+        assert status["open_tickets"][0]["cost"] == 22.25
+        assert status["rests"] == []
+        page = client.get("/portfolio")
+        assert b"No open positions in the local book" in page.content
+        assert b"emptyBlotter" in page.content

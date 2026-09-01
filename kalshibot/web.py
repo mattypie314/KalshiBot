@@ -104,7 +104,7 @@ async def predictions(force: bool = False) -> dict:
 @app.get("/api/campaign")
 async def campaign_status() -> dict:
     engine: CampaignEngine = app.state.campaign
-    return engine.status()
+    return await engine.public_status()
 
 
 class CampaignControl(BaseModel):
@@ -147,7 +147,7 @@ async def campaign_control(payload: CampaignControl) -> dict:
     for note in notes:
         engine.tracker.note(note, "sizing")
     engine.tracker.save()
-    return {"notes": notes, "status": engine.status()}
+    return {"notes": notes, "status": await engine.public_status()}
 
 
 @app.get("/api/chart/{series_ticker}/{ticker}")

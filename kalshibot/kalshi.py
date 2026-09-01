@@ -149,3 +149,49 @@ class KalshiClient:
 
     async def get_balance(self) -> dict[str, Any]:
         return await self.get_json("/portfolio/balance")
+
+    async def _paged(
+        self,
+        path: str,
+        list_key: str,
+        params: dict[str, Any],
+        *,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while len(rows) < limit:
+            page = dict(params)
+            page["limit"] = min(200, limit - len(rows))
+            if cursor:
+                page["cursor"] = cursor
+            data = await self.get_json(path, params=page)
+            batch = list(data.get(list_key) or [])
+            if not batch and list_key == "market_positions":
+                batch = list(data.get("positions") or [])
+            rows.extend(batch)
+            cursor = data.get("cursor") or None
+            if not batch or not cursor:
+                break
+        return rows[:limit]
+
+    async def get_orders(self, *, status: str = "resting", limit: int = 200) -> list[dict[str, Any]]:
+        """List portfolio orders. Resting orders always come from GET /portfolio/orders."""
+        params: dict[str, Any] = {}
+        if status:
+            params["status"] = status
+        return await self._paged("/portfolio/orders", "orders", params, limit=limit)
+
+    async def get_positions(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        """List non-zero market positions across shards."""
+        try:
+            return await self._paged(
+                "/portfolio/positions",
+                "market_positions",
+                {"count_filter": "position"},
+                limit=limit,
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response is None or exc.response.status_code != 400:
+                raise
+            return await self._paged("/portfolio/positions", "market_positions", {}, limit=limit)
