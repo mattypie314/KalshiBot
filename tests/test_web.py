@@ -14,6 +14,9 @@ def test_index_serves_live_ui():
         css = client.get("/static/styles.css")
         assert css.status_code == 200
         assert b"--yes:" in css.content
+        assert client.get("/manifest.webmanifest").status_code == 200
+        assert client.get("/portfolio").status_code == 200
+        assert client.get("/market/KXBTC-26SEP0117-T87749.99").status_code == 200
 
 
 def test_campaign_control_halt(tmp_path):

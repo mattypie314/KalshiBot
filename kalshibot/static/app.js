@@ -11,6 +11,10 @@ let campaign = null;
 let section = "crypto";
 let view = "markets";
 let blot = "positions";
+let selected = null;
+let chartHours = 4;
+let chartTimer = null;
+let chartData = null;
 
 function money(value) {
   if (value == null || Number.isNaN(Number(value))) return "—";
@@ -107,32 +111,37 @@ function renderMarkets() {
       const pickYes = row.side === "YES";
       const pickNo = row.side === "NO";
       const edgeClass = row.edge >= 0.02 ? "pos" : row.edge < 0 ? "neg" : "";
-      const href = `https://kalshi.com/markets/${encodeURIComponent((row.series_ticker || "").toLowerCase())}`;
       return `
-        <article class="card">
+        <button class="card" type="button" data-ticker="${escapeHtml(row.market_ticker)}">
           <div class="card-top">
             <div class="event">${escapeHtml(row.event_title)}</div>
             <div class="ticker">${escapeHtml(row.asset || "")}</div>
           </div>
           <div class="sub">${escapeHtml(row.subtitle || row.market_title)}</div>
           <div class="pair">
-            <a class="leg yes ${pickYes ? "pick" : ""}" href="${href}" target="_blank" rel="noreferrer">
+            <span class="leg yes ${pickYes ? "pick" : ""}">
               <span class="leg-name">Yes</span>
               <span class="leg-px">${cents(yesAsk(row))}</span>
-            </a>
-            <a class="leg no ${pickNo ? "pick" : ""}" href="${href}" target="_blank" rel="noreferrer">
+            </span>
+            <span class="leg no ${pickNo ? "pick" : ""}">
               <span class="leg-name">No</span>
               <span class="leg-px">${cents(noAsk(row))}</span>
-            </a>
+            </span>
           </div>
           <div class="meta-row">
             <span>${[closeLabel(row.close_time), volumeLabel(row.volume_24h || row.volume), row.spot != null ? `spot ${formatSpot(row.spot)}` : ""].filter(Boolean).join(" · ")}</span>
             <span class="edge ${edgeClass}">fair ${pct(row.model_prob)} · ${cents(row.edge, true)}</span>
           </div>
           <div class="why">${escapeHtml(row.rationale || "")}</div>
-        </article>`;
+        </button>`;
     })
     .join("");
+  board.querySelectorAll(".card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const row = rows.find((r) => r.market_ticker === card.dataset.ticker);
+      if (row) openMarket(row, true);
+    });
+  });
 }
 
 function updateStats() {
@@ -147,9 +156,11 @@ function setView(next) {
   view = next;
   document.getElementById("view-markets").classList.toggle("hidden", view !== "markets");
   document.getElementById("view-portfolio").classList.toggle("hidden", view !== "portfolio");
+  document.getElementById("view-trade").classList.toggle("hidden", view !== "trade");
   document.querySelectorAll(".nav-link").forEach((el) => {
     el.classList.toggle("active", el.dataset.view === view);
   });
+  if (view !== "trade") stopChart();
 }
 
 function renderCampaign() {
@@ -272,9 +283,36 @@ document.querySelectorAll(".cat").forEach((btn) => {
   });
 });
 
-document.querySelectorAll(".nav-link").forEach((btn) => {
-  btn.addEventListener("click", () => setView(btn.dataset.view));
+document.querySelectorAll(".nav-link").forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    const next = link.dataset.view;
+    history.pushState({ view: next }, "", next === "portfolio" ? "/portfolio" : "/");
+    setView(next);
+  });
 });
+
+document.querySelector(".brand").addEventListener("click", (event) => {
+  event.preventDefault();
+  history.pushState({ view: "markets" }, "", "/");
+  setView("markets");
+});
+
+document.getElementById("trade-back").addEventListener("click", () => {
+  history.pushState({ view: "markets" }, "", "/");
+  setView("markets");
+});
+
+document.querySelectorAll("#chart-ranges button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    chartHours = Number(btn.dataset.hours);
+    document.querySelectorAll("#chart-ranges button").forEach((el) => el.classList.toggle("on", el === btn));
+    if (selected) loadChart();
+  });
+});
+
+window.addEventListener("popstate", route);
+route();
 
 document.querySelectorAll(".blot-tab").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -334,7 +372,127 @@ setInterval(() => {
   if (updated) updated.textContent = etClock();
 }, 1000);
 
-load(false);
+function findRow(ticker) {
+  if (!snapshot || !ticker) return null;
+  for (const key of ["crypto", "commodities", "sports"]) {
+    const hit = (snapshot.sections[key].predictions || []).find((row) => row.market_ticker === ticker);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function openMarket(row, push = false) {
+  selected = row;
+  if (push) history.pushState({ view: "trade", ticker: row.market_ticker }, "", `/market/${encodeURIComponent(row.market_ticker)}`);
+  setView("trade");
+  document.getElementById("trade-title").textContent = row.event_title;
+  document.getElementById("trade-sub").textContent = row.subtitle || row.market_title;
+  document.getElementById("trade-why").textContent = row.rationale || "";
+  document.getElementById("trade-kalshi").href = `https://kalshi.com/markets/${encodeURIComponent((row.series_ticker || "").toLowerCase())}`;
+  renderTradePair(row);
+  loadChart();
+  stopChart();
+  chartTimer = setInterval(loadChart, 15000);
+}
+
+function renderTradePair(row) {
+  const pickYes = row.side === "YES";
+  const pickNo = row.side === "NO";
+  document.getElementById("trade-pair").innerHTML = `
+    <span class="leg yes ${pickYes ? "pick" : ""}"><span class="leg-name">Yes</span><span class="leg-px">${cents(yesAsk(row))}</span></span>
+    <span class="leg no ${pickNo ? "pick" : ""}"><span class="leg-name">No</span><span class="leg-px">${cents(noAsk(row))}</span></span>`;
+}
+
+function stopChart() {
+  if (chartTimer) clearInterval(chartTimer);
+  chartTimer = null;
+}
+
+function drawChart(points) {
+  const svg = document.getElementById("chart");
+  const empty = document.getElementById("chart-empty");
+  if (!points.length) {
+    svg.innerHTML = "";
+    empty.classList.remove("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  const w = 640;
+  const h = 240;
+  const pad = { l: 8, r: 48, t: 16, b: 20 };
+  const ys = points.map((p) => p.yes);
+  let min = Math.min(...ys);
+  let max = Math.max(...ys);
+  if (max - min < 0.02) {
+    min = Math.max(0, min - 0.02);
+    max = Math.min(1, max + 0.02);
+  }
+  const xs = points.map((p) => p.ts);
+  const x0 = xs[0];
+  const x1 = xs[xs.length - 1] === x0 ? x0 + 1 : xs[xs.length - 1];
+  const x = (ts) => pad.l + ((ts - x0) / (x1 - x0)) * (w - pad.l - pad.r);
+  const y = (val) => pad.t + (1 - (val - min) / (max - min)) * (h - pad.t - pad.b);
+  const coords = points.map((p) => `${x(p.ts).toFixed(1)},${y(p.yes).toFixed(1)}`);
+  const line = coords.join(" ");
+  const area = `${pad.l},${h - pad.b} ${coords.join(" ")} ${x(points[points.length - 1].ts).toFixed(1)},${h - pad.b}`;
+  const last = points[points.length - 1];
+  const first = points[0];
+  const up = last.yes >= first.yes;
+  const stroke = up ? "#00a35c" : "#e11d48";
+  const fill = up ? "rgba(0,163,92,0.12)" : "rgba(225,29,72,0.10)";
+  svg.innerHTML = `
+    <polyline points="${pad.l},${y(min).toFixed(1)} ${w - pad.r},${y(min).toFixed(1)}" fill="none" stroke="#e6e6e1" />
+    <polyline points="${pad.l},${y((min + max) / 2).toFixed(1)} ${w - pad.r},${y((min + max) / 2).toFixed(1)}" fill="none" stroke="#eee" />
+    <polygon points="${area}" fill="${fill}" />
+    <polyline points="${line}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+    <circle cx="${x(last.ts).toFixed(1)}" cy="${y(last.yes).toFixed(1)}" r="4" fill="${stroke}" />
+    <text x="${w - 6}" y="${y(last.yes).toFixed(1)}" text-anchor="end" dominant-baseline="middle" fill="${stroke}" font-size="12" font-family="DM Mono, monospace">${(100 * last.yes).toFixed(0)}¢</text>`;
+}
+
+async function loadChart() {
+  if (!selected) return;
+  const response = await fetch(`/api/chart/${encodeURIComponent(selected.series_ticker)}/${encodeURIComponent(selected.market_ticker)}?hours=${chartHours}`);
+  if (!response.ok) {
+    document.getElementById("chart-empty").classList.remove("hidden");
+    document.getElementById("chart-empty").textContent = "Chart unavailable";
+    return;
+  }
+  chartData = await response.json();
+  const live = chartData.live || {};
+  if (live.yes != null) {
+    selected = { ...selected, yes_bid: live.yes_bid, yes_ask: live.yes_ask, market_prob: live.yes };
+    renderTradePair(selected);
+    document.getElementById("trade-last").textContent = cents(live.yes);
+  }
+  const change = chartData.change;
+  const ch = document.getElementById("trade-change");
+  if (change == null) {
+    ch.textContent = "";
+    ch.className = "edge";
+  } else {
+    ch.textContent = `${change >= 0 ? "+" : ""}${(100 * change).toFixed(1)}¢`;
+    ch.className = `edge ${change >= 0 ? "pos" : "neg"}`;
+  }
+  document.getElementById("chart-meta").innerHTML = `<span>Live · ${chartData.points.length} prints · ${chartData.interval}m bars</span><span>${closeLabel(live.close_time || selected.close_time)}</span>`;
+  drawChart(chartData.points || []);
+}
+
+function route() {
+  const path = location.pathname.replace(/\/+$/, "") || "/";
+  if (path === "/portfolio") {
+    setView("portfolio");
+    return;
+  }
+  if (path.startsWith("/market/")) {
+    const ticker = decodeURIComponent(path.slice("/market/".length));
+    const row = findRow(ticker) || selected || { market_ticker: ticker, series_ticker: ticker.split("-")[0], event_title: ticker, subtitle: "", side: "" };
+    openMarket(row, false);
+    return;
+  }
+  setView("markets");
+}
+
+load(false).then(() => route());
 loadCampaign();
 setInterval(() => load(false), 60000);
 setInterval(loadCampaign, 30000);

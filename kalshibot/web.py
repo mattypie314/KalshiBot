@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from kalshibot.assets import SECTIONS
 from kalshibot.campaign.engine import CampaignEngine
 from kalshibot.campaign.sizing import apply_phone_overrides
+from kalshibot.charts import market_chart
 from kalshibot.scanner import Scanner
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -33,8 +34,24 @@ app = FastAPI(title="KalshiBot", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+@app.get("/manifest.webmanifest")
+async def manifest() -> FileResponse:
+    return FileResponse(STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+async def service_worker() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "sw.js",
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+    )
+
+
 @app.get("/")
-async def index() -> FileResponse:
+@app.get("/portfolio")
+@app.get("/market/{ticker:path}")
+async def index(ticker: str | None = None) -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
@@ -89,6 +106,15 @@ async def campaign_control(payload: CampaignControl) -> dict:
         engine.tracker.note(note, "sizing")
     engine.tracker.save()
     return {"notes": notes, "status": engine.status()}
+
+
+@app.get("/api/chart/{series_ticker}/{ticker}")
+async def chart(series_ticker: str, ticker: str, hours: float = 6.0) -> dict:
+    scanner: Scanner = app.state.scanner
+    try:
+        return await market_chart(scanner._kalshi, series_ticker, ticker, hours=hours)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Chart unavailable: {exc}") from exc
 
 
 @app.get("/api/sections/{section_id}")
