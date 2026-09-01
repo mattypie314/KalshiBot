@@ -1,5 +1,5 @@
-const CACHE = "kalshibot-shell-v1";
-const SHELL = ["/", "/portfolio", "/static/styles.css", "/static/app.js", "/static/favicon.svg", "/manifest.webmanifest"];
+const CACHE = "kalshibot-shell-v2";
+const SHELL = ["/", "/portfolio", "/static/favicon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -16,6 +16,21 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(fetch(event.request).catch(() => new Response(JSON.stringify({ error: "offline" }), { headers: { "Content-Type": "application/json" } })));
+    return;
+  }
+  const dest = event.request.destination;
+  if (dest === "style" || dest === "script" || dest === "image" || dest === "manifest") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((hit) => hit || Response.error()))
+    );
     return;
   }
   event.respondWith(

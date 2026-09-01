@@ -22,7 +22,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
 body {
-  font-family: "DM Sans", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
@@ -95,7 +95,7 @@ button { cursor: pointer; }
 
 .nav-clock {
   color: var(--muted);
-  font-family: "DM Mono", monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
   white-space: nowrap;
 }
@@ -178,7 +178,7 @@ button { cursor: pointer; }
   margin-bottom: 4px;
 }
 .folio .num, .num {
-  font-family: "DM Mono", monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 22px;
   font-weight: 500;
   letter-spacing: -0.03em;
@@ -400,7 +400,7 @@ button { cursor: pointer; }
 .sub { color: var(--muted); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
 .ticker {
   color: var(--muted);
-  font-family: "DM Mono", monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 11px;
 }
 
@@ -427,7 +427,7 @@ button { cursor: pointer; }
   text-transform: uppercase;
 }
 .leg .leg-px {
-  font-family: "DM Mono", monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 26px;
   font-weight: 500;
   letter-spacing: -0.04em;
@@ -446,7 +446,7 @@ button { cursor: pointer; }
   font-size: 12px;
 }
 .edge {
-  font-family: "DM Mono", monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-weight: 500;
 }
 .edge.pos { color: var(--yes); }
@@ -516,7 +516,7 @@ button { cursor: pointer; }
   padding: 14px 16px;
   max-height: 420px;
   overflow: auto;
-  font-family: "DM Mono", monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
   color: var(--muted);
   white-space: pre-wrap;

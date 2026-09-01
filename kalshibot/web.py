@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -15,6 +16,31 @@ from kalshibot.charts import market_chart
 from kalshibot.scanner import Scanner
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# Raspberry Pi / slim OS images often lack /etc/mime.types. Safari then
+# refuses to apply CSS or run JS served as application/octet-stream.
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("image/svg+xml", ".svg")
+mimetypes.add_type("image/png", ".png")
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+
+
+def _index_html() -> str:
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    css = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+    js = (STATIC_DIR / "app.js").read_text(encoding="utf-8").replace("</", "<\\/")
+    html = html.replace(
+        '<link rel="stylesheet" href="/static/styles.css" />',
+        f"<style>\n{css}\n</style>",
+        1,
+    )
+    html = html.replace(
+        '<script src="/static/app.js"></script>',
+        f"<script>\n{js}\n</script>",
+        1,
+    )
+    return html
 
 
 @asynccontextmanager
@@ -51,8 +77,8 @@ async def service_worker() -> FileResponse:
 @app.get("/")
 @app.get("/portfolio")
 @app.get("/market/{ticker:path}")
-async def index(ticker: str | None = None) -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+async def index(ticker: str | None = None) -> HTMLResponse:
+    return HTMLResponse(_index_html(), headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/health")
