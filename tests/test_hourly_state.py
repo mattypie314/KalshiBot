@@ -36,6 +36,7 @@ def test_load_state_keeps_ticket_across_hour_roll(tmp_path: Path):
             "last_side": "Yes",
             "last_contracts": 7,
             "loss_this_hour": False,
+            "kill_close_no": True,
         },
     )
     loaded = load_state(path)
@@ -43,6 +44,7 @@ def test_load_state_keeps_ticket_across_hour_roll(tmp_path: Path):
     assert loaded["last_side"] == "Yes"
     assert loaded["last_contracts"] == 7
     assert loaded["hour_key"] == _hour_key(datetime.now(timezone.utc))
+    assert loaded["kill_close_no"] is True
     assert "loss_this_hour" not in loaded
 
 

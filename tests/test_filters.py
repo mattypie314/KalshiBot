@@ -38,7 +38,7 @@ def _market(**kwargs) -> HourlyMarket:
 
 CFG = FilterConfig(
     min_net_edge=0.06,
-    soft_net_edge=0.04,
+    soft_net_edge=0.06,
     max_spread=0.06,
     min_minutes_left=3,
     min_visible_depth=5,
@@ -110,6 +110,66 @@ def test_filters_pass_clear_yes_edge_on_executable_ask():
     assert result.idea.side == "Yes"
     assert result.idea.entry_price == 0.82
     assert result.idea.net_edge >= 0.06
+
+
+def test_filters_reject_close_strike_fade():
+    # ETH No $2,375 while spot is $2,390 — 0.63% is a coin-flip fade.
+    market = _market(
+        asset="ETH",
+        threshold=2375.0,
+        yes_sub_title="$2,375 or above",
+        yes_bid=0.62,
+        yes_ask=0.64,
+        no_bid=0.36,
+        no_ask=0.38,
+    )
+    result = evaluate_market(
+        market,
+        spot=2390.0,
+        hourly_vol=0.005,
+        now=datetime.now(timezone.utc),
+        cfg=CFG,
+        vol_fallback=0.005,
+    )
+    assert result.idea is None
+    assert any("close strike" in r.lower() for r in result.avoid_reasons)
+
+
+def test_filters_keep_far_strike_with_edge():
+    # BTC No $77,600 while spot is $76,800 — ~1.0% away, the keeper shape.
+    market = _market(
+        threshold=77600.0,
+        yes_sub_title="$77,600 or above",
+        yes_bid=0.18,
+        yes_ask=0.20,
+        no_bid=0.80,
+        no_ask=0.82,
+    )
+    result = evaluate_market(
+        market,
+        spot=76800.0,
+        hourly_vol=0.004,
+        now=datetime.now(timezone.utc),
+        cfg=CFG,
+        vol_fallback=0.004,
+    )
+    assert result.idea is not None
+    assert result.idea.side == "No"
+    assert result.idea.strike_distance_pct >= 0.005
+
+
+def test_filters_sit_on_elevated_vol():
+    market = _market(threshold=77000.0)
+    result = evaluate_market(
+        market,
+        spot=78120.0,
+        hourly_vol=0.010,
+        now=datetime.now(timezone.utc),
+        cfg=CFG,
+        vol_fallback=0.004,
+    )
+    assert result.idea is None
+    assert any("elevated vol" in r.lower() for r in result.avoid_reasons)
 
 
 def test_maker_limit_never_sits_on_or_through_the_ask():

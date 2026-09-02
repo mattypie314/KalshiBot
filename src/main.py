@@ -14,7 +14,9 @@ from typing import Any
 from src.clock import configure_logging, format_et, hour_key, same_et_hour, to_et
 from src.config import EXIT_CONFIG, EXIT_OK, EXIT_RATE_LIMITED, HourlySettings, load_settings
 from src.executor import execute_ideas
+from src.exposure import blocks_new_idea, open_hourly_tickets
 from src.filters import FilterConfig, FilterResult, Idea, evaluate_market, news_blackout_active
+from src.journal import append_trade, bucket_underwater, load_trades, new_trade_row, resolve_pending, write_trades
 from src.kalshi_client import AuthConfigError, ForbiddenError, KalshiClient, RateLimitedError
 from src.markets import MarketDiscovery
 from src.report import format_report
@@ -38,6 +40,12 @@ def _filter_cfg(settings: HourlySettings, state: dict[str, Any]) -> FilterConfig
         last_loss_same_hour=bool(state.get("loss_this_hour")),
         last_contracts=state.get("last_contracts"),
         news_blackout=news_blackout_active(),
+        min_strike_distance_pct=settings.min_strike_distance_pct,
+        min_strike_sigma=settings.min_strike_sigma,
+        close_strike_edge=settings.close_strike_edge,
+        vol_pause_mult=settings.vol_pause_mult,
+        kill_close_no=bool(state.get("kill_close_no")),
+        kill_close_yes=bool(state.get("kill_close_yes")),
     )
 
 
@@ -47,6 +55,7 @@ def _hour_key(now: datetime) -> str:
 
 # Survive the :00 hour roll so a just-settled hourly ticket can still count as a loss.
 TICKET_KEYS = ("last_ticker", "last_side", "last_contracts")
+KEEP_KEYS = TICKET_KEYS + ("kill_close_no", "kill_close_yes")
 
 
 def fill_is_loss(fill: dict[str, Any]) -> bool:
@@ -85,7 +94,7 @@ def load_state(path: Path) -> dict[str, Any]:
     current = _hour_key(to_et())
     if data.get("hour_key") == current:
         return data
-    kept = {key: data[key] for key in TICKET_KEYS if key in data}
+    kept = {key: data[key] for key in KEEP_KEYS if key in data}
     kept["hour_key"] = current
     return kept
 
@@ -170,7 +179,15 @@ def run_scan(
         trading_base_url=settings.trading_base_url,
     )
     state = _resolve_settled_ticket(client, state)
-    spots_svc = SpotService(preferred=settings.spot_source)
+    journal_path = artifacts / "trade_log.jsonl"
+    trades = resolve_pending(load_trades(journal_path), client.get_market, market_result_is_loss)
+    write_trades(journal_path, trades)
+    state["kill_close_no"] = bucket_underwater(trades, "close_no")
+    state["kill_close_yes"] = bucket_underwater(trades, "close_yes")
+    if "hour_key" not in state:
+        state["hour_key"] = _hour_key(to_et())
+    save_state(Path(settings.state_path), state)
+    spots_svc = SpotService(preferred=settings.spot_source, kalshi=client)
     try:
         try:
             spots = spots_svc.snapshot(
@@ -212,6 +229,10 @@ def run_scan(
 
         cfg = _filter_cfg(settings, state)
         now = to_et()
+        vol_fallback = {
+            "BTC": settings.hourly_vol_fallback_btc,
+            "ETH": settings.hourly_vol_fallback_eth,
+        }
         ideas: list[Idea] = []
         nearby: list[FilterResult] = []
         avoided: list[FilterResult] = []
@@ -220,7 +241,14 @@ def run_scan(
             vol = spots.hourly_vol.get(market.asset)
             if not spot or not vol:
                 continue
-            result = evaluate_market(market, spot=spot, hourly_vol=vol, now=now, cfg=cfg)
+            result = evaluate_market(
+                market,
+                spot=spot,
+                hourly_vol=vol,
+                now=now,
+                cfg=cfg,
+                vol_fallback=vol_fallback.get(market.asset),
+            )
             if result.idea:
                 ideas.append(result.idea)
             elif result.nearby:
@@ -231,6 +259,21 @@ def run_scan(
         ideas.sort(key=lambda i: i.net_edge, reverse=True)
         extra = ideas[settings.max_ideas_per_run :]
         ideas = ideas[: settings.max_ideas_per_run]
+        open_tickets = open_hourly_tickets(client, state)
+        kept: list[Idea] = []
+        for idea in ideas:
+            blocked = blocks_new_idea(open_tickets, idea)
+            if blocked:
+                nearby.append(
+                    FilterResult(
+                        market=idea.market,
+                        nearby=True,
+                        watch_note=f"{idea.side} held back ({blocked})",
+                    )
+                )
+                continue
+            kept.append(idea)
+        ideas = kept
         for idea in extra:
             nearby.append(
                 FilterResult(
@@ -284,6 +327,7 @@ def run_scan(
                     artifacts_dir=artifacts,
                     live=live,
                     confirm_live=live,
+                    keep_tickers={row["ticker"] for row in open_tickets},
                 )
             except RateLimitedError as exc:
                 print(f"rate limited: {exc}", file=sys.stderr)
@@ -314,6 +358,24 @@ def run_scan(
                 state["last_contracts"] = idea.contracts
                 state["last_ticker"] = idea.market.ticker
                 state["last_side"] = idea.side
+                append_trade(
+                    journal_path,
+                    new_trade_row(
+                        ticker=idea.market.ticker,
+                        asset=idea.market.asset,
+                        side=idea.side,
+                        strike=idea.market.threshold,
+                        spot=idea.spot or spots.prices.get(idea.market.asset) or 0.0,
+                        minutes_left=idea.minutes_left,
+                        fair=idea.fair,
+                        kalshi_price=idea.entry_price,
+                        limit_price=idea.limit_price,
+                        contracts=idea.contracts,
+                        risk_dollars=idea.risk_dollars,
+                        hourly_vol=spots.hourly_vol.get(idea.market.asset) or 0.0,
+                        source=spots.source,
+                    ),
+                )
                 save_state(Path(settings.state_path), state)
         return EXIT_OK
     finally:

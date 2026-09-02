@@ -162,6 +162,7 @@ def execute_ideas(
     confirm_live: bool = False,
     run_id: str | None = None,
     cancel_stale: bool = True,
+    keep_tickers: set[str] | None = None,
 ) -> dict[str, Any]:
     run_id = run_id or uuid.uuid4().hex[:12]
     dest = Path(artifacts_dir)
@@ -199,7 +200,9 @@ def execute_ideas(
                 continue
             order_id = str(row.get("order_id") or "")
             ticker = str(row.get("ticker") or row.get("market_ticker") or "")
-            still_wanted = any(p.get("ticker") == ticker for p in orders)
+            still_wanted = any(p.get("ticker") == ticker for p in orders) or (
+                keep_tickers is not None and ticker in keep_tickers
+            )
             if still_wanted or not order_id:
                 continue
             try:

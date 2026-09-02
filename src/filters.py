@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 from src.clock import to_et
 from src.fees import ev_per_contract, taker_fee_dollars
+from src.journal import strike_distance_pct, trade_bucket
 from src.markets import HourlyMarket
 from src.model import fair_no, fair_prob, hours_left, model_z
 from src.sizer import size_idea
@@ -45,7 +46,7 @@ FOMC_DATES = frozenset(
 @dataclass(frozen=True)
 class FilterConfig:
     min_net_edge: float = 0.06
-    soft_net_edge: float = 0.04
+    soft_net_edge: float = 0.06
     max_spread: float = 0.06
     min_minutes_left: float = 3
     min_visible_depth: int = 5
@@ -57,10 +58,18 @@ class FilterConfig:
     bankroll: float = 40.00
     kelly_mult: float = 0.25
     max_risk_pct: float = 0.05
-    max_risk_dollars: float = 3.00
-    preferred_risk_dollars: float = 2.00
+    max_risk_dollars: float = 2.00
+    preferred_risk_dollars: float = 1.75
     last_loss_same_hour: bool = False
     last_contracts: int | None = None
+    min_strike_distance_pct: float = 0.005
+    min_strike_sigma: float = 1.5
+    close_strike_edge: float = 0.10
+    vol_pause_mult: float = 2.0
+    vol_widen_mult: float = 1.25
+    vol_widen_distance_pct: float = 0.0075
+    kill_close_no: bool = False
+    kill_close_yes: bool = False
 
 
 @dataclass
@@ -81,6 +90,10 @@ class Idea:
     max_loss: float
     rationale: list[str]
     post_maker: bool
+    strike_distance_pct: float = 0.0
+    spot: float = 0.0
+    minutes_left: float = 0.0
+    bucket: str = ""
 
 
 @dataclass
@@ -139,6 +152,7 @@ def evaluate_market(
     hourly_vol: float,
     now: datetime,
     cfg: FilterConfig,
+    vol_fallback: float | None = None,
 ) -> FilterResult:
     reasons: list[str] = []
     if market.status not in {"open", "active"}:
@@ -156,6 +170,18 @@ def evaluate_market(
 
     if cfg.news_blackout or news_blackout_active(now):
         return FilterResult(market=market, avoid_reasons=["scheduled CPI/FOMC news window — sit out"])
+
+    fallback = vol_fallback if vol_fallback and vol_fallback > 0 else hourly_vol
+    if fallback > 0 and hourly_vol >= cfg.vol_pause_mult * fallback:
+        return FilterResult(
+            market=market,
+            avoid_reasons=[
+                f"elevated vol {hourly_vol:.2%} ≥ {cfg.vol_pause_mult:g}× typical {fallback:.2%} — news tape, sit"
+            ],
+        )
+
+    distance = strike_distance_pct(spot, market.threshold)
+    sigma = hourly_vol * (hrs**0.5) if hourly_vol > 0 and hrs > 0 else 0.0
 
     z = model_z(spot, market.threshold, hourly_vol, hrs)
     fair_yes = fair_prob(spot, market.threshold, hourly_vol, hrs)
@@ -217,8 +243,7 @@ def evaluate_market(
             )
             continue
 
-        tight = spread <= 0.02 and depth >= cfg.min_visible_depth
-        min_edge = cfg.soft_net_edge if tight else cfg.min_net_edge
+        min_edge = max(cfg.min_net_edge, cfg.soft_net_edge)
         if net < min_edge:
             if net >= 0.02:
                 nearby_note = f"{side} net {net:.1%} vs {ask:.2f} (need {min_edge:.0%})"
@@ -234,6 +259,28 @@ def evaluate_market(
             reasons.append(f"{side}: sizer skip ({trial.reason})")
             continue
 
+        fading = (side == "No" and spot > market.threshold) or (
+            side == "Yes" and spot < market.threshold
+        )
+        need = max(cfg.min_strike_distance_pct, cfg.min_strike_sigma * hourly_vol)
+        if fading:
+            need = max(need, cfg.min_strike_sigma * sigma)
+        if fallback > 0 and hourly_vol >= cfg.vol_widen_mult * fallback:
+            need = max(need, cfg.vol_widen_distance_pct)
+        if distance < need:
+            reasons.append(
+                f"{side}: close strike {distance:.2%} from spot (need {need:.2%}; coin-flip / fade)"
+            )
+            continue
+
+        bucket = trade_bucket(side, distance)
+        if cfg.kill_close_no and bucket == "close_no":
+            reasons.append(f"{side}: close-strike No bucket is underwater — rule off")
+            continue
+        if cfg.kill_close_yes and bucket == "close_yes":
+            reasons.append(f"{side}: close-strike Yes bucket is underwater — rule off")
+            continue
+
         # Prefer maker: reprice fee at 0 if we rest inside / at bid.
         using_maker = bool(limit) and limit + 1e-9 < ask
         taker_total = taker_fee_dollars(trial.contracts, ask)
@@ -243,8 +290,9 @@ def evaluate_market(
         rationale = [
             f"Executable {side} ask {ask:.2f}; model fair {p_hat:.1%}.",
             f"Net edge after taker fee on {trial.contracts} ct: {net:.1%}.",
-            f"z={z:.2f}, hours_left={hrs:.2f}, hourly_vol={hourly_vol:.3%}.",
-            f"Settlement source: {market.settlement_source}. Spot is an exchange proxy, not that index.",
+            f"Strike {market.threshold:,.2f} is {distance:.2%} from spot {spot:,.2f} ({bucket}).",
+            f"z={z:.2f}, minutes_left={minutes:.1f}, hourly_vol={hourly_vol:.3%}.",
+            f"Settlement source: {market.settlement_source}.",
         ]
         if using_maker:
             rationale.append(f"Post limit at {limit:.2f} (maker, fee 0) inside {bid:.2f}/{ask:.2f}.")
@@ -268,6 +316,10 @@ def evaluate_market(
             max_loss=trial.risk_dollars + taker_total,
             rationale=rationale,
             post_maker=using_maker,
+            strike_distance_pct=distance,
+            spot=spot,
+            minutes_left=minutes,
+            bucket=bucket,
         )
         if best is None or idea.net_edge > best.net_edge:
             best = idea

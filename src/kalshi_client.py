@@ -287,6 +287,10 @@ class KalshiClient:
             return []
         return list(data.get("fills") or [])
 
+    def get_cf_values(self, index_id: str) -> dict[str, Any]:
+        """Kalshi CF Benchmarks passthrough. Requires a signed live key."""
+        return self.get_json("/cfbenchmarks/values", params={"id": index_id}, auth=True)
+
     def get_market(self, ticker: str) -> dict[str, Any]:
         """Fresh public quote for one ticker. Used to requote before a live post."""
         data = self.get_json(f"/markets/{ticker}", auth=False)

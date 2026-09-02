@@ -54,6 +54,9 @@ def format_report(
                 f"**Edge after fees:** {idea.net_edge:.1%} (taker fee on size ${idea.fee_total:.2f})",
                 f"**Size:** {idea.contracts} contracts | ${idea.risk_dollars:.2f} risked",
                 f"**Max loss:** ${idea.max_loss:.2f}",
+                f"**Strike distance:** {idea.strike_distance_pct:.2%} from spot"
+                f"{f' ${idea.spot:,.2f}' if idea.spot else ''}"
+                f"{f' ({idea.bucket})' if idea.bucket else ''}",
                 "**Rationale:**",
                 *[f"- {item}" for item in idea.rationale],
                 "**Exit:** hold to settle unless next run shows edge < 3%",
