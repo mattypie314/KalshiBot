@@ -25,14 +25,16 @@ Pick a mode from a menu, or pass it on the command line:
 ./kb scan            # also: s  or  1
 ./kb scan --asset BTC
 ./kb once            # also: o  or  2   dry-run limit payloads
-./kb auth            # also: a  or  3   test key + PEM
-./kb live            # also: l  or  4   type LIVE (or --confirm LIVE). .env can stay dry
-./kb live --confirm LIVE
+./kb auth            # also: a  or  3   test key + PEM (tries demo then prod)
+./kb auth --prod     # force live Kalshi API this run
+./kb live            # also: l  or  4   type LIVE. .env can stay dry
+./kb live --prod     # real-money host + type LIVE
+./kb live --prod --confirm LIVE
 ```
 
 `python -m src.main …` and (after `pip install -e .`) `kalshibot` / `kb` do the same thing. No args on a TTY opens the menu; no args in a script defaults to `scan`.
 
-Live does **not** require editing `.env`. On a terminal, `./kb live` asks you to type `LIVE`. Scripts can use `./kb live --confirm LIVE`. The old `LIVE_TRADING=true` + `CONFIRM_LIVE=YES` pair still works if you want unattended live. GitHub Actions stays dry.
+A **live Kalshi key** (created on kalshi.com, not demo) returns 401 on demo. Use `--prod` for that key, or `USE_DEMO=false ./kb auth`. Live does **not** require editing `LIVE_TRADING` in `.env`. On a terminal, `./kb live` asks you to type `LIVE`. Scripts can use `--confirm LIVE`. GitHub Actions stays dry.
 
 Exit codes: `0` success or `NO_ACTIONABLE_EDGE`, `2` config/auth, `3` rate limited.
 

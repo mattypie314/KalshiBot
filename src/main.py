@@ -247,40 +247,90 @@ def run_scan(
         spots_svc.close()
 
 
-def run_auth(settings: HourlySettings) -> int:
-    """Check that signed Kalshi calls work. Prints no secret material."""
-    settings.ensure_private_key_file()
-    client = KalshiClient(
-        settings.kalshi_base_url,
+def _host_client(settings: HourlySettings, *, use_demo: bool) -> KalshiClient:
+    url = settings.kalshi_demo_url if use_demo else settings.kalshi_base_url
+    return KalshiClient(
+        url,
         timeout=settings.request_timeout_seconds,
         api_key_id=settings.kalshi_api_key_id,
         private_key_path=settings.kalshi_private_key_path,
-        trading_base_url=settings.trading_base_url,
+        trading_base_url=url,
     )
+
+
+def _auth_miss(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return "401" in text or "authentication_error" in text
+
+
+def probe_balance(settings: HourlySettings, *, use_demo: bool) -> tuple[bool, Any]:
+    """GET /portfolio/balance on demo or prod. Does not print secrets."""
+    client = _host_client(settings, use_demo=use_demo)
     try:
-        info = client.auth_status()
-        print(f"trading host: {info['trading_host']}")
-        print(f"USE_DEMO={settings.use_demo} LIVE_TRADING={settings.live_trading} CONFIRM_LIVE={settings.confirm_live}")
-        print(f"key id set: {info['key_id_set']} (len {info['key_id_len']})")
-        print(f"pem: {info['pem_path'] or '(none)'} exists={info['pem_exists']} private={info['pem_looks_private']}")
-        if not info["key_id_set"] or not info["pem_exists"]:
-            print("Missing key id or PEM. Set KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY_PATH.")
-            return EXIT_CONFIG
-        if not info["pem_looks_private"]:
-            print("PEM does not look like a PRIVATE key. Use kalshi_private_key.pem, not the public file.")
-            return EXIT_CONFIG
-        try:
-            bal = client.get_balance()
-        except Exception as exc:  # noqa: BLE001
-            print(f"AUTH FAILED: {exc}")
-            print("Use the same key id + private PEM + host as your Kalshi account.")
-            print("Live Kalshi key + USE_DEMO=false + KALSHI_BASE_URL=https://external-api.kalshi.com/trade-api/v2")
-            return EXIT_CONFIG
-        cash = bal.get("balance_dollars") or bal.get("balance")
-        print(f"AUTH OK. Kalshi balance field: {cash}")
-        return EXIT_OK
+        return True, client.get_balance()
+    except Exception as exc:  # noqa: BLE001
+        return False, exc
     finally:
         client.close()
+
+
+def apply_host_flags(settings: HourlySettings, args: argparse.Namespace) -> None:
+    if getattr(args, "prod", False):
+        settings.use_demo = False
+    elif getattr(args, "demo", False):
+        settings.use_demo = True
+
+
+def _add_host_flags(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--prod", action="store_true", help="Use live Kalshi this run (not demo)")
+    group.add_argument("--demo", action="store_true", help="Use demo Kalshi this run")
+
+
+def run_auth(settings: HourlySettings) -> int:
+    """Check that signed Kalshi calls work. Prints no secret material."""
+    settings.ensure_private_key_file()
+    client = _host_client(settings, use_demo=settings.use_demo)
+    try:
+        info = client.auth_status()
+    finally:
+        client.close()
+
+    print(f"trading host: {info['trading_host']}")
+    print(f"USE_DEMO={settings.use_demo} LIVE_TRADING={settings.live_trading} CONFIRM_LIVE={settings.confirm_live}")
+    print(f"key id set: {info['key_id_set']} (len {info['key_id_len']})")
+    print(f"pem: {info['pem_path'] or '(none)'} exists={info['pem_exists']} private={info['pem_looks_private']}")
+    if not info["key_id_set"] or not info["pem_exists"]:
+        print("Missing key id or PEM. Set KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY_PATH.")
+        return EXIT_CONFIG
+    if not info["pem_looks_private"]:
+        print("PEM does not look like a PRIVATE key. Use kalshi_private_key.pem, not the public file.")
+        return EXIT_CONFIG
+
+    ok, payload = probe_balance(settings, use_demo=settings.use_demo)
+    if ok:
+        cash = payload.get("balance_dollars") or payload.get("balance") if isinstance(payload, dict) else payload
+        print(f"AUTH OK. Kalshi balance field: {cash}")
+        return EXIT_OK
+
+    print(f"AUTH FAILED on {'DEMO' if settings.use_demo else 'PROD'}: {payload}")
+    other_demo = not settings.use_demo
+    other_ok, other_payload = probe_balance(settings, use_demo=other_demo)
+    if other_ok:
+        label = "DEMO" if other_demo else "PROD"
+        flag = "--demo" if other_demo else "--prod"
+        cash = (
+            other_payload.get("balance_dollars") or other_payload.get("balance")
+            if isinstance(other_payload, dict)
+            else other_payload
+        )
+        print(f"AUTH OK on {label}. This key belongs there, not the host above.")
+        print(f"Balance field: {cash}")
+        print(f"Re-run with: ./kb auth {flag}")
+        print(f"Live on that host: ./kb live {flag}")
+        return EXIT_CONFIG
+    print("The other host also failed. Key id and private PEM must be a matching pair from the same Kalshi account.")
+    return EXIT_CONFIG
 
 
 MODE_ALIASES = {
@@ -375,9 +425,14 @@ def main(argv: list[str] | None = None) -> int:
 
     scan = sub.add_parser("scan", help="Scan books and print the report (no orders)")
     scan.add_argument("--asset", choices=["BTC", "ETH", "btc", "eth"], default=None)
+    _add_host_flags(scan)
 
-    sub.add_parser("once", help="Scan and print dry-run limit order payloads")
-    sub.add_parser("auth", help="Test Kalshi API key + PEM (no orders)")
+    once = sub.add_parser("once", help="Scan and print dry-run limit order payloads")
+    _add_host_flags(once)
+
+    auth = sub.add_parser("auth", help="Test Kalshi API key + PEM (no orders)")
+    _add_host_flags(auth)
+
     live = sub.add_parser(
         "live",
         help="Place limits after typing LIVE (or --confirm LIVE). .env can stay dry.",
@@ -388,6 +443,7 @@ def main(argv: list[str] | None = None) -> int:
         metavar="LIVE",
         help="Pass LIVE to arm live without a prompt. Leaves .env unchanged.",
     )
+    _add_host_flags(live)
 
     args = parser.parse_args(normalize_argv(argv))
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -398,6 +454,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"config error: {exc}", file=sys.stderr)
         return EXIT_CONFIG
 
+    apply_host_flags(settings, args)
+
     if args.command == "auth":
         return run_auth(settings)
     if args.command == "scan":
@@ -405,6 +463,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "once":
         return run_scan(settings, asset=None, place=True, force_live=False)
     if args.command == "live":
+        ok, payload = probe_balance(settings, use_demo=settings.use_demo)
+        if not ok:
+            label = "DEMO" if settings.use_demo else "PROD"
+            print(f"LIVE refused: auth failed on {label}: {payload}", file=sys.stderr)
+            other = not settings.use_demo
+            other_ok, _other = probe_balance(settings, use_demo=other)
+            if other_ok:
+                flag = "--demo" if other else "--prod"
+                print(
+                    f"This key works on {'DEMO' if other else 'PROD'}. Re-run: ./kb live {flag}",
+                    file=sys.stderr,
+                )
+            else:
+                print("Run: ./kb auth", file=sys.stderr)
+            return EXIT_CONFIG
         if not live_is_armed(settings, confirm=args.confirm):
             print(
                 "LIVE refused: type LIVE at the prompt, pass --confirm LIVE, "
