@@ -9,12 +9,15 @@ def test_normalize_expands_shortcuts():
     assert normalize_argv(["o"]) == ["once"]
     assert normalize_argv(["a"]) == ["auth"]
     assert normalize_argv(["l"]) == ["live"]
+    assert normalize_argv(["e"]) == ["env"]
+    assert normalize_argv(["5"]) == ["env"]
     assert normalize_argv(["1", "--asset", "BTC"]) == ["scan", "--asset", "BTC"]
     assert normalize_argv(["scan", "--asset", "ETH"]) == ["scan", "--asset", "ETH"]
 
 
 def test_normalize_menu_pick_on_tty():
     assert normalize_argv([], isatty=True, prompt=lambda _: "2") == ["once"]
+    assert normalize_argv([], isatty=True, prompt=lambda _: "5") == ["env"]
     assert normalize_argv([], isatty=True, prompt=lambda _: "") == ["scan"]
     with pytest.raises(SystemExit):
         normalize_argv([], isatty=True, prompt=lambda _: "nope")
@@ -148,6 +151,15 @@ def test_env_prod_writes_dotenv(monkeypatch, tmp_path, capsys):
     assert main(["env", "--prod"]) == 0
     assert "USE_DEMO=false" in (tmp_path / ".env").read_text()
     assert "PROD" in capsys.readouterr().out
+
+
+def test_env_show_prints_nano_path(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("src.main.load_settings", lambda: HourlySettings(_env_file=None, use_demo=True))
+    assert main(["env"]) == 0
+    out = capsys.readouterr().out
+    assert "DEMO" in out
+    assert "nano" in out
 
 
 def test_default_bankroll_is_forty(monkeypatch):

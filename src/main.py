@@ -355,6 +355,9 @@ MODE_ALIASES = {
     "4": "live",
     "l": "live",
     "live": "live",
+    "5": "env",
+    "e": "env",
+    "env": "env",
 }
 
 MODE_MENU = """\
@@ -363,6 +366,7 @@ KalshiBot — pick a mode
   2  once   dry-run limit payloads
   3  auth   test key + PEM
   4  live   real limits (type LIVE — no .env edit)
+  5  env    show / set DEMO vs PROD in .env
 
 Mode [scan]: """
 

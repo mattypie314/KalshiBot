@@ -4,6 +4,7 @@
 #                 ./kb once     (o / 2)
 #                 ./kb auth     (a / 3)
 #                 ./kb live     (l / 4)
+#                 ./kb env      (e / 5)   show/set USE_DEMO in .env
 root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 export PYTHONPATH="${PYTHONPATH:-$root}"
 cd "$root" || exit 1

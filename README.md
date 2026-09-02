@@ -21,12 +21,12 @@ chmod +x kb
 Pick a mode from a menu, or pass it on the command line:
 
 ```bash
-./kb                 # menu: 1 scan / 2 once / 3 auth / 4 live
+./kb                 # menu: 1 scan / 2 once / 3 auth / 4 live / 5 env
 ./kb scan            # also: s  or  1
 ./kb scan --asset BTC
 ./kb once            # also: o  or  2   dry-run limit payloads
 ./kb auth            # also: a  or  3   test key + PEM (tries demo then prod)
-./kb env             # show DEMO vs PROD
+./kb env             # also: e  or  5   show DEMO vs PROD
 ./kb env --prod      # write USE_DEMO=false to .env (live Kalshi)
 ./kb env --demo      # write USE_DEMO=true
 ./kb auth --prod
@@ -89,8 +89,26 @@ source .venv/bin/activate
 pip install -r requirements.txt
 chmod +x kb
 cp -n .env.example .env   # edit keys; never commit .env
+nano .env                 # Ctrl+O then Enter to save, Ctrl+X to quit
 ./kb auth
 ```
+
+A **401** on `./kb auth` or `./kb live` with `LIVE order failed auth` means a **live** Kalshi key was sent to the **demo** host. The PEM is fine. Point `.env` at prod, then type `LIVE` only if the prompt says `on PROD` (real money):
+
+```bash
+cd /home/KalshiBot
+nano .env
+# change USE_DEMO=true  →  USE_DEMO=false
+# save: Ctrl+O, Enter, then Ctrl+X
+
+# same thing without nano:
+#   echo USE_DEMO=false >> .env
+
+USE_DEMO=false ./kb auth    # want AUTH OK on external-api.kalshi.com
+USE_DEMO=false ./kb live    # prompt must say on PROD, then type LIVE
+```
+
+After this branch is on the Pi, `./kb env --prod` writes that line for you.
 
 systemd units in `scripts/` use `WorkingDirectory=/home/KalshiBot`:
 

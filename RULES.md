@@ -14,6 +14,7 @@ Set `BANKROLL=40` in `.env` if you override it. The code default is **$40**.
 - **Books:** hourly threshold markets, up to 12 per coin per scan
 - **One idea per run.** Everything else is watch-only
 - **Execution:** limit orders only (prefer rest inside the spread). It does not market-buy
+- **Host:** a live Kalshi key needs `USE_DEMO=false` (edit `.env` or `./kb env --prod`). Demo host 401s that key.
 - **Live:** `./kb live` then type `LIVE` (or `--confirm LIVE`). `.env` can stay dry. Unattended live still needs `LIVE_TRADING=true` and `CONFIRM_LIVE=YES`
 
 A contract pays $1 if you are right and $0 if you are wrong. The price (like 0.42) is what you pay per contract. That 42¢ is also the market’s implied chance.
