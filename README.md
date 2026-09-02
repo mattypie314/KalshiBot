@@ -114,6 +114,14 @@ After this branch is on the Pi, `./kb env --prod` writes that line for you.
 
 `./kb` uses `/home/KalshiBot/.venv/bin/python` when that venv exists.
 
+To land in the repo (and activate the venv) when you SSH in, add one line to `~/.bashrc` on the Pi:
+
+```bash
+echo '. /home/KalshiBot/scripts/pi-shell.sh' >> ~/.bashrc
+```
+
+Then `source ~/.bashrc` or open a new SSH session. It only `cd`s if you started in your home directory, so it will not fight a directory you already chose.
+
 systemd units in `scripts/` use the venv and `WorkingDirectory=/home/KalshiBot`. The timer is **unattended live** at minute 3: `live --prod --confirm LIVE` (real money, still $2/$3 caps, one idea). It does not catch up if the Pi was off at `:03`.
 
 ```bash
