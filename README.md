@@ -2,6 +2,8 @@
 
 Hourly BTC and ETH threshold scanner for Kalshi (`KXBTCD`, `KXETHD`).
 
+Pi operating manual (PDF): `docs/KalshiBot-operating-manual.pdf`. Rebuild with `python3 scripts/build_operating_manual.py`.
+
 Not financial advice. You can lose the full amount you put on a contract. Demo first. `.env` can stay dry. Live is a one-run confirm: type `LIVE` at the prompt, or pass `--confirm LIVE`.
 
 The 15-minute campaign, maker loop, dashboard, and research desk are parked on the `archive/campaign-desk` branch for later.
