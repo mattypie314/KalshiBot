@@ -1,5 +1,5 @@
 [Unit]
-Description=KalshiBot hourly BTC/ETH scan (dry-run, not live)
+Description=KalshiBot hourly BTC/ETH live limits (real money)
 After=network-online.target
 
 [Service]
@@ -9,8 +9,9 @@ WorkingDirectory=/home/KalshiBot
 Environment=PYTHONPATH=/home/KalshiBot
 EnvironmentFile=-/home/KalshiBot/.env
 EnvironmentFile=-/home/mkubit/.kalshi/env
-# venv python. `once` is dry-run only. Live stays ./kb live --prod
-ExecStart=/home/KalshiBot/.venv/bin/python -m src.main once
+# Unattended live on prod. Caps still apply ($2 typical, $3 max, one idea).
+# To go back to dry-run: change this line to `... -m src.main once`
+ExecStart=/home/KalshiBot/.venv/bin/python -m src.main live --prod --confirm LIVE
 
 [Install]
 WantedBy=multi-user.target

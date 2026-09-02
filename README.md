@@ -112,13 +112,17 @@ After this branch is on the Pi, `./kb env --prod` writes that line for you.
 
 `./kb` uses `/home/KalshiBot/.venv/bin/python` when that venv exists.
 
-systemd units in `scripts/` use the venv and `WorkingDirectory=/home/KalshiBot`. The timer is **scan/dry-run only** (`once`). It does not place live orders:
+systemd units in `scripts/` use the venv and `WorkingDirectory=/home/KalshiBot`. The timer is **unattended live** at minute 3: `live --prod --confirm LIVE` (real money, still $2/$3 caps, one idea). It does not catch up if the Pi was off at `:03`.
 
 ```bash
 sudo cp scripts/kalshi-hourly.service scripts/kalshi-hourly.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now kalshi-hourly.timer
 ```
+
+Logs: `journalctl -u kalshi-hourly.service -n 80 --no-pager`  
+Off: `sudo systemctl disable --now kalshi-hourly.timer`  
+Dry-run again: change `ExecStart` in the service to `... -m src.main once`, then `daemon-reload`.
 
 ## Bankroll caps
 
