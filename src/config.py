@@ -75,11 +75,15 @@ class HourlySettings(BaseSettings):
 
     bankroll: float = 40.00
     min_net_edge: float = 0.06
-    soft_net_edge: float = 0.04
+    soft_net_edge: float = 0.06
     max_risk_pct: float = 0.05
-    max_risk_dollars: float = 3.00
-    preferred_risk_dollars: float = 2.00
+    max_risk_dollars: float = 2.00
+    preferred_risk_dollars: float = 1.75
     kelly_mult: float = 0.25
+    min_strike_distance_pct: float = 0.005
+    min_strike_sigma: float = 1.5
+    close_strike_edge: float = 0.10
+    vol_pause_mult: float = 2.0
 
     assets: str = "BTC,ETH"
     max_markets_per_asset: int = 12
@@ -88,7 +92,7 @@ class HourlySettings(BaseSettings):
     max_spread: float = 0.06
     min_visible_depth_contracts: int = 5
 
-    spot_source: str = "coinbase"
+    spot_source: str = "cfbenchmarks"
     hourly_vol_fallback_btc: float = 0.004
     hourly_vol_fallback_eth: float = 0.005
 

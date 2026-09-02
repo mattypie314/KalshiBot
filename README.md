@@ -12,7 +12,7 @@ The 15-minute campaign, maker loop, dashboard, and research desk are parked on t
 
 Scans the live hourly above/below books for Bitcoin and Ethereum. Fair probability comes from spot plus recent realized vol. It only prints or places a **limit** order when net edge after estimated fees clears the filter.
 
-Bankroll default **$40**. Risk per idea **3–5%** ($1.20–$2.00), preferred **$2.00**, hard cap **$3.00**. Maker / limit only. Skip if the spread eats the edge. Net edge after estimated taker fees must be ≥ 6% (4% only if the spread is tight and the book can fill the tiny size). Full rules: `RULES.md`.
+Bankroll default **$40**. Risk per idea **$1.50–$2.00**, preferred **$1.75**, hard cap **$2.00**. Maker / limit only. Sit unless net edge after fees is ≥ 6%. Ban close strikes (coin-flip fades inside ~0.5–0.75% of spot). Max 1 open hourly ticket. Full rules: `RULES.md`.
 
 ```bash
 pip install -r requirements.txt
@@ -141,13 +141,14 @@ Dry-run again: change `ExecStart` in the service to `... -m src.main once`, then
 | --- | --- | --- |
 | Bankroll | $40 | `BANKROLL` |
 | Min net edge | 6% | `MIN_NET_EDGE` |
-| Soft edge (tight book) | 4% | `SOFT_NET_EDGE` |
+| Soft edge (no longer a discount) | 6% | `SOFT_NET_EDGE` |
 | Risk % cap | 5% | `MAX_RISK_PCT` |
-| Preferred risk | $2.00 | `PREFERRED_RISK_DOLLARS` |
-| Hard dollar cap | $3.00 | `MAX_RISK_DOLLARS` |
+| Preferred risk | $1.75 | `PREFERRED_RISK_DOLLARS` |
+| Hard dollar cap | $2.00 | `MAX_RISK_DOLLARS` |
+| Min fade distance | 0.50% | `MIN_STRIKE_DISTANCE_PCT` |
 | Fractional Kelly | 0.25× | `KELLY_MULT` |
 
-Settlement on these books uses CF Benchmarks RTI (60-second average), not a single exchange last tick. The model uses Coinbase/Binance spot as a **proxy** and says so in every report.
+Settlement is the 60-second average of CF Benchmarks BRTI (BTC) / ERTI (ETH). The bot prices off that index via Kalshi when the key can; Coinbase/Binance are fallbacks. Vol is still exchange-realized. A 2× typical vol day sits.
 
 ```bash
 pytest

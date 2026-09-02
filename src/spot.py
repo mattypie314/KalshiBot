@@ -1,4 +1,8 @@
-"""BTC/ETH last price and 1h realized vol. Proxy only — not Kalshi settlement."""
+"""BTC/ETH last price and 1h realized vol.
+
+Price prefers CF Benchmarks BRTI/ERTI via Kalshi (the settlement index).
+Vol still uses exchange candles; that is move-size, not the print.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,11 @@ import math
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
+
 import httpx
+
+from src.cfindex import index_id_for, parse_cf_index_value
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +31,8 @@ class SpotSnapshot:
     source: str = "unknown"
     vol_source: dict[str, str] = field(default_factory=dict)
     note: str = (
-        "Spot/vol are exchange proxies, not the official Kalshi settlement index "
-        "(typically CF Benchmarks RTI)."
+        "Spot prefers CF Benchmarks BRTI/ERTI (Kalshi settlement). "
+        "Vol is exchange-realized, not that index."
     )
 
 
@@ -43,41 +51,44 @@ def hourly_vol_from_closes(closes: list[float], seconds_per_bar: int) -> float |
 
 
 class SpotService:
-    def __init__(self, http: httpx.Client | None = None, preferred: str = "coinbase") -> None:
+    def __init__(
+        self,
+        http: httpx.Client | None = None,
+        preferred: str = "cfbenchmarks",
+        kalshi: Any | None = None,
+    ) -> None:
         self._owns = http is None
         self._http = http or httpx.Client(timeout=15.0, headers={"User-Agent": "KalshiHourly/0.1"})
         self.preferred = preferred.lower()
+        self._kalshi = kalshi
 
     def close(self) -> None:
         if self._owns:
             self._http.close()
 
-    def snapshot(
-        self,
-        assets: list[str],
-        fallbacks: dict[str, float] | None = None,
-    ) -> SpotSnapshot:
-        fallbacks = fallbacks or dict(FALLBACK_VOL)
-        snap = SpotSnapshot()
-        for asset in assets:
-            price, src = self._price(asset)
-            if price:
-                snap.prices[asset] = price
-                snap.source = src
-            vol, vol_src = self._vol(asset, fallbacks.get(asset, FALLBACK_VOL.get(asset, 0.004)))
-            snap.hourly_vol[asset] = vol
-            snap.vol_source[asset] = vol_src
-        return snap
+    def _cf_price(self, asset: str) -> float | None:
+        if self._kalshi is None or not getattr(self._kalshi, "can_trade", False):
+            return None
+        index_id = index_id_for(asset)
+        if not index_id:
+            return None
+        getter = getattr(self._kalshi, "get_cf_values", None)
+        if getter is None:
+            return None
+        blob = getter(index_id)
+        return parse_cf_index_value(blob)
 
     def _price(self, asset: str) -> tuple[float | None, str]:
-        order = [self.preferred, "coinbase", "binance"]
+        order = ["cfbenchmarks", self.preferred, "coinbase", "binance"]
         seen: set[str] = set()
         for name in order:
             if name in seen:
                 continue
             seen.add(name)
             try:
-                if name == "binance":
+                if name == "cfbenchmarks":
+                    price = self._cf_price(asset)
+                elif name == "binance":
                     price = self._binance_price(asset)
                 else:
                     price = self._coinbase_price(asset)
@@ -93,7 +104,8 @@ class SpotService:
         return None, "none"
 
     def _vol(self, asset: str, fallback: float) -> tuple[float, str]:
-        order = [self.preferred, "coinbase", "binance"]
+        preferred = self.preferred if self.preferred in {"coinbase", "binance"} else "coinbase"
+        order = [preferred, "coinbase", "binance"]
         seen: set[str] = set()
         for name in order:
             if name in seen:
@@ -114,6 +126,28 @@ class SpotService:
             if vol is not None:
                 return min(0.05, max(0.001, vol)), f"{name}-realized"
         return fallback, "fallback"
+
+    def snapshot(
+        self,
+        assets: list[str],
+        fallbacks: dict[str, float] | None = None,
+    ) -> SpotSnapshot:
+        fallbacks = fallbacks or dict(FALLBACK_VOL)
+        snap = SpotSnapshot()
+        for asset in assets:
+            price, src = self._price(asset)
+            if price:
+                snap.prices[asset] = price
+                snap.source = src
+            vol, vol_src = self._vol(asset, fallbacks.get(asset, FALLBACK_VOL.get(asset, 0.004)))
+            snap.hourly_vol[asset] = vol
+            snap.vol_source[asset] = vol_src
+        if snap.source == "cfbenchmarks":
+            snap.note = (
+                "Spot is CF Benchmarks BRTI/ERTI via Kalshi (settlement index). "
+                "Vol is exchange-realized."
+            )
+        return snap
 
     def _binance_price(self, asset: str) -> float | None:
         symbol = BINANCE_SYMBOL[asset]

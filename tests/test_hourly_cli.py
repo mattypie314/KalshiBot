@@ -166,6 +166,11 @@ def test_default_bankroll_is_forty(monkeypatch):
     monkeypatch.delenv("BANKROLL", raising=False)
     settings = HourlySettings(_env_file=None, kalshi_api_key_id="", kalshi_private_key_path="/tmp/not-the-home-pem")
     assert settings.bankroll == 40.00
+    assert settings.max_risk_dollars == 2.00
+    assert settings.preferred_risk_dollars == 1.75
+    assert settings.min_net_edge == 0.06
+    assert settings.soft_net_edge == 0.06
+    assert settings.min_strike_distance_pct == 0.005
 
 
 def test_apply_kalshi_shell_env_reads_export_and_home(tmp_path, monkeypatch):

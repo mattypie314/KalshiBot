@@ -1,10 +1,10 @@
-"""Fractional Kelly sizer never breaches the $3 hard cap on a $40 book."""
+"""Fractional Kelly sizer never breaches the $2 hard cap on a $40 book."""
 
 from src.sizer import SizeDecision, size_idea
 
 
 BANKROLL = 40.00
-MAX_RISK = 3.00
+MAX_RISK = 2.00
 
 
 def _size(**kwargs) -> SizeDecision:
@@ -15,7 +15,7 @@ def _size(**kwargs) -> SizeDecision:
         kelly_mult=0.25,
         max_risk_pct=0.05,
         max_risk_dollars=MAX_RISK,
-        preferred_risk_dollars=2.00,
+        preferred_risk_dollars=1.75,
         last_loss_same_hour=False,
         last_contracts=None,
     )
@@ -23,7 +23,7 @@ def _size(**kwargs) -> SizeDecision:
     return size_idea(**defaults)
 
 
-def test_sizer_never_exceeds_three_dollars_on_40_bankroll():
+def test_sizer_never_exceeds_two_dollars_on_40_bankroll():
     for price in (0.15, 0.40, 0.50, 0.60, 0.80, 0.94):
         for p_hat in (0.55, 0.70, 0.90, 0.99):
             decision = _size(entry_price=price, p_hat=p_hat)
@@ -33,11 +33,11 @@ def test_sizer_never_exceeds_three_dollars_on_40_bankroll():
             assert decision.contracts * price <= MAX_RISK + 1e-9
 
 
-def test_sizer_caps_at_preferred_two_dollars_when_kelly_is_large():
+def test_sizer_caps_at_preferred_when_kelly_is_large():
     decision = _size(entry_price=0.50, p_hat=0.90)
     assert not decision.skip
-    assert decision.risk_dollars <= 2.00 + 1e-9
-    assert decision.contracts == 4  # floor(2.00 / 0.50)
+    assert decision.risk_dollars <= 1.75 + 1e-9
+    assert decision.contracts == 3  # floor(1.75 / 0.50)
 
 
 def test_sizer_skips_when_one_contract_exceeds_cap():

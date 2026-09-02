@@ -29,8 +29,8 @@ def size_idea(
     p_hat: float,
     kelly_mult: float = 0.25,
     max_risk_pct: float = 0.05,
-    max_risk_dollars: float = 3.00,
-    preferred_risk_dollars: float = 2.00,
+    max_risk_dollars: float = 2.00,
+    preferred_risk_dollars: float = 1.75,
     last_loss_same_hour: bool = False,
     last_contracts: int | None = None,
 ) -> SizeDecision:
