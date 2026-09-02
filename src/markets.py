@@ -273,7 +273,7 @@ class MarketDiscovery:
         assets: list[str],
         *,
         now: datetime | None = None,
-        allow_15m_fallback: bool = True,
+        allow_15m_fallback: bool = False,
         max_per_asset: int = 12,
         spots: dict[str, float] | None = None,
     ) -> list[HourlyMarket]:
@@ -281,10 +281,8 @@ class MarketDiscovery:
         wanted = {a.upper() for a in assets}
         series = tuple(s for a in wanted for s in THRESHOLD_BY_ASSET.get(a, ()))
         hourly = self._load_series(series or THRESHOLD_SERIES, now, used_15m=False)
-        if not hourly and allow_15m_fallback:
-            logger.info("No hourly BTC/ETH threshold books in the current/next hour; falling back to 15m")
-            fifteen = tuple(s for a in wanted for s in FIFTEEN_BY_ASSET.get(a, ()))
-            hourly = self._load_series(fifteen or FIFTEEN_SERIES, now, used_15m=True, require_hour_window=False)
+        # 15m campaign books stay parked. allow_15m_fallback is accepted and ignored.
+        _ = allow_15m_fallback
         out: list[HourlyMarket] = []
         spots = spots or {}
         for asset in wanted:

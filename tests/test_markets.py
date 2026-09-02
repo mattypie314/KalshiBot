@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from src.markets import (
+    MarketDiscovery,
     in_current_or_next_hour,
     market_from_api,
     parse_threshold,
@@ -60,3 +61,14 @@ def test_market_from_api_reads_dollar_quotes_and_cf_benchmarks():
     assert market.yes_ask == 0.54
     assert market.no_ask == 0.47
     assert "CF Benchmarks" in market.settlement_source
+
+
+def test_discover_does_not_load_15m_when_hourly_empty():
+    class Client:
+        def open_events(self, series, limit=20):
+            if str(series).endswith("15M"):
+                raise AssertionError("15m series should not be requested")
+            return []
+
+    found = MarketDiscovery(Client()).discover(["BTC", "ETH"], allow_15m_fallback=True)
+    assert found == []

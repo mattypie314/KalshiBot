@@ -110,7 +110,9 @@ USE_DEMO=false ./kb live    # prompt must say on PROD, then type LIVE
 
 After this branch is on the Pi, `./kb env --prod` writes that line for you.
 
-systemd units in `scripts/` use `WorkingDirectory=/home/KalshiBot`:
+`./kb` uses `/home/KalshiBot/.venv/bin/python` when that venv exists.
+
+systemd units in `scripts/` use the venv and `WorkingDirectory=/home/KalshiBot`. The timer is **scan/dry-run only** (`once`). It does not place live orders:
 
 ```bash
 sudo cp scripts/kalshi-hourly.service scripts/kalshi-hourly.timer /etc/systemd/system/
