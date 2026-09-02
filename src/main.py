@@ -309,6 +309,9 @@ def run_scan(
             return EXIT_OK
 
         if place or force_live:
+            if settings.halted and force_live:
+                print(HALTED_MESSAGE, file=sys.stderr)
+                return EXIT_CONFIG
             live = bool(force_live and (armed or settings.live_enabled))
             if force_live and not live:
                 print(
@@ -531,6 +534,14 @@ def _typed_live(value: str) -> bool:
     return str(value or "").strip().upper() == LIVE_CONFIRM
 
 
+HALTED_MESSAGE = (
+    "HALTED: live trading is off until further notice. "
+    "--confirm LIVE cannot override this. "
+    "On the Pi: sudo systemctl disable --now kalshi-hourly.timer. "
+    "Resume later with HALTED=false."
+)
+
+
 def live_is_armed(
     settings: HourlySettings,
     *,
@@ -539,6 +550,8 @@ def live_is_armed(
     prompt: Callable[[str], str] | None = None,
 ) -> bool:
     """Arm live for this run only. Env flags, --confirm LIVE, or a TTY LIVE prompt."""
+    if settings.halted:
+        return False
     if settings.live_enabled:
         return True
     if _typed_live(confirm):
@@ -645,6 +658,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "once":
         return run_scan(settings, asset=None, place=True, force_live=False)
     if args.command == "live":
+        if settings.halted:
+            print(HALTED_MESSAGE, file=sys.stderr)
+            return EXIT_CONFIG
         ok, payload = probe_balance(settings, use_demo=settings.use_demo)
         if not ok:
             label = "DEMO" if settings.use_demo else "PROD"

@@ -16,7 +16,8 @@ Set `BANKROLL=40` in `.env` if you override it. The code default is **$40**.
 - **Execution:** limit orders only (prefer rest inside the spread). It does not market-buy
 - **Host:** a live Kalshi key needs `USE_DEMO=false` (edit `.env` or `./kb env --prod`). Demo host 401s that key.
 - **Live (keyboard):** `./kb live --prod` then type `LIVE` (or `--confirm LIVE`). `.env` can stay dry.
-- **Live (unattended):** systemd timer at minute 3 Eastern runs `live --prod --confirm LIVE`. Same caps. Disable the timer to stop.
+- **Halted:** `HALTED=true` (the default) refuses live orders even with `--confirm LIVE`. Disable the Pi timer: `sudo systemctl disable --now kalshi-hourly.timer`.
+- **Live (unattended, only after unhalt):** systemd timer at minute 3 Eastern runs `live --prod --confirm LIVE`. Same caps.
 
 A contract pays $1 if you are right and $0 if you are wrong. The price (like 0.42) is what you pay per contract. That 42¢ is also the market’s implied chance.
 
@@ -91,7 +92,7 @@ If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid
 - Yes = bid on the Yes book at the limit
 - No = ask on the Yes book at 1 − No limit (same book, other side)
 - Before a new live order, cancel leftover hourly rests that are no longer the chosen ticker
-- GitHub Actions is scan only (minute 3 of each hour). The Pi timer is unattended live. Cloud IPs often 403.
+- GitHub Actions hourly scan is halted (no cron). The Pi timer must stay disabled while `HALTED=true`. Cloud IPs often 403.
 
 ## What it will not do
 

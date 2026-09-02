@@ -32,24 +32,45 @@ def _ok_balance(*args, **kwargs):
 
 
 def test_live_refused_without_flags(monkeypatch):
+    monkeypatch.setenv("HALTED", "false")
     monkeypatch.setenv("LIVE_TRADING", "false")
     monkeypatch.setenv("CONFIRM_LIVE", "NO")
     monkeypatch.setattr("src.main.probe_balance", _ok_balance)
     assert main(["live"]) == EXIT_CONFIG
 
 
+def test_halted_blocks_confirm_live(monkeypatch, capsys):
+    monkeypatch.setenv("HALTED", "true")
+    monkeypatch.setenv("LIVE_TRADING", "true")
+    monkeypatch.setenv("CONFIRM_LIVE", "YES")
+    monkeypatch.setattr("src.main.probe_balance", _ok_balance)
+    called = {"scan": False}
+
+    def _scan(*args, **kwargs):
+        called["scan"] = True
+        return 0
+
+    monkeypatch.setattr("src.main.run_scan", _scan)
+    assert main(["live", "--confirm", "LIVE"]) == EXIT_CONFIG
+    assert called["scan"] is False
+    assert "HALTED" in capsys.readouterr().err
+
+
 def test_live_is_armed_by_prompt_or_flag():
-    dry = HourlySettings(live_trading=False, confirm_live="NO")
+    dry = HourlySettings(halted=False, live_trading=False, confirm_live="NO")
     assert live_is_armed(dry, confirm="", isatty=False) is False
     assert live_is_armed(dry, confirm="LIVE", isatty=False) is True
     assert live_is_armed(dry, confirm="no", isatty=True, prompt=lambda _: "LIVE") is True
     assert live_is_armed(dry, confirm="YES", isatty=False) is False
     assert live_is_armed(dry, confirm="", isatty=True, prompt=lambda _: "nope") is False
-    env = HourlySettings(live_trading=True, confirm_live="YES")
+    env = HourlySettings(halted=False, live_trading=True, confirm_live="YES")
     assert live_is_armed(env, confirm="", isatty=False) is True
+    halted = HourlySettings(halted=True, live_trading=True, confirm_live="YES")
+    assert live_is_armed(halted, confirm="LIVE", isatty=False) is False
 
 
 def test_live_confirm_flag_does_not_need_env(monkeypatch):
+    monkeypatch.setenv("HALTED", "false")
     monkeypatch.setenv("LIVE_TRADING", "false")
     monkeypatch.setenv("CONFIRM_LIVE", "NO")
     monkeypatch.setattr("src.main.probe_balance", _ok_balance)
@@ -105,6 +126,7 @@ def test_auth_retries_other_host_on_401(monkeypatch, capsys):
 
 
 def test_live_refuses_demo_401_and_hints_prod(monkeypatch, capsys):
+    monkeypatch.setenv("HALTED", "false")
     monkeypatch.setenv("LIVE_TRADING", "false")
     monkeypatch.setenv("CONFIRM_LIVE", "NO")
 
@@ -114,7 +136,10 @@ def test_live_refuses_demo_401_and_hints_prod(monkeypatch, capsys):
         return True, {"balance": 40}
 
     monkeypatch.setattr("src.main.probe_balance", probe)
-    monkeypatch.setattr("src.main.load_settings", lambda: HourlySettings(_env_file=None, use_demo=True))
+    monkeypatch.setattr(
+        "src.main.load_settings",
+        lambda: HourlySettings(_env_file=None, use_demo=True, halted=False),
+    )
     assert main(["live", "--confirm", "LIVE"]) == EXIT_CONFIG
     err = capsys.readouterr().err
     assert "LIVE refused: auth failed on DEMO" in err
@@ -122,9 +147,16 @@ def test_live_refuses_demo_401_and_hints_prod(monkeypatch, capsys):
 
 
 def test_live_enabled_requires_both_flags():
-    assert HourlySettings(live_trading=False, confirm_live="YES").live_enabled is False
-    assert HourlySettings(live_trading=True, confirm_live="NO").live_enabled is False
-    assert HourlySettings(live_trading=True, confirm_live="YES").live_enabled is True
+    assert HourlySettings(halted=False, live_trading=False, confirm_live="YES").live_enabled is False
+    assert HourlySettings(halted=False, live_trading=True, confirm_live="NO").live_enabled is False
+    assert HourlySettings(halted=False, live_trading=True, confirm_live="YES").live_enabled is True
+    assert HourlySettings(halted=True, live_trading=True, confirm_live="YES").live_enabled is False
+
+
+def test_halted_defaults_true(monkeypatch):
+    monkeypatch.delenv("HALTED", raising=False)
+    settings = HourlySettings(_env_file=None, kalshi_api_key_id="", kalshi_private_key_path="/tmp/not-the-home-pem")
+    assert settings.halted is True
 
 
 def test_key_id_strips_quotes():

@@ -1,5 +1,13 @@
 # KalshiBot
 
+**Halted until further notice.** Live orders are refused (`HALTED=true` by default). The GitHub hourly scan cron is off. On the Pi, stop the timer so a stale unit cannot fire:
+
+```bash
+sudo systemctl disable --now kalshi-hourly.timer
+```
+
+To resume later: set `HALTED=false`, restore the systemd `ExecStart` live line, then `sudo systemctl enable --now kalshi-hourly.timer`.
+
 Hourly BTC and ETH threshold scanner for Kalshi (`KXBTCD`, `KXETHD`).
 
 Pi operating manual (PDF): `docs/KalshiBot-operating-manual.pdf`. Rebuild with `python3 scripts/build_operating_manual.py`.
@@ -62,7 +70,7 @@ export KALSHI_API_KEY_ID=your-key-id
 export KALSHI_PRIVATE_KEY_PATH=~/.kalshi/kalshi_private_key.pem
 ```
 
-GitHub Actions (`.github/workflows/hourly.yml`) runs `scan` at minute 3 of every hour. The cron string is UTC; EST/EDT are whole-hour offsets so that is still `:03` Eastern. It does **not** place live orders. Kalshi often 403s cloud IPs. For live limits use a VPS or the Pi with a stable IP.
+GitHub Actions (`.github/workflows/hourly.yml`) is **halted** (no schedule). When re-enabled it only runs `scan` — it does **not** place live orders. Kalshi often 403s cloud IPs. For live limits use a VPS or the Pi with a stable IP.
 
 ## On the Pi (`/home/KalshiBot`)
 
@@ -122,18 +130,16 @@ echo '. /home/KalshiBot/scripts/pi-shell.sh' >> ~/.bashrc
 
 Then `source ~/.bashrc` or open a new SSH session. It only `cd`s if you started in your home directory, so it will not fight a directory you already chose.
 
-systemd units in `scripts/` use the venv and `WorkingDirectory=/home/KalshiBot`. The timer is **unattended live** at minute 3 **Eastern** (`OnCalendar=*-*-* *:03:00 America/New_York`):
+systemd units in `scripts/` use the venv and `WorkingDirectory=/home/KalshiBot`. The timer is **halted**. Keep it off:
 
 ```bash
-sudo cp scripts/kalshi-hourly.service scripts/kalshi-hourly.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now kalshi-hourly.timer
+sudo systemctl disable --now kalshi-hourly.timer
 ```
 
+When you resume: copy the units, set `HALTED=false`, restore `ExecStart` to `... -m src.main live --prod --confirm LIVE`, then `daemon-reload` and `enable --now`.
+
 Logs: `journalctl -u kalshi-hourly.service -n 80 --no-pager`  
-`~/.kalshi/env` may use bash `export KEY=value`. systemd cannot read that; the bot loads it in Python.  
-Off: `sudo systemctl disable --now kalshi-hourly.timer`  
-Dry-run again: change `ExecStart` in the service to `... -m src.main once`, then `daemon-reload`.
+`~/.kalshi/env` may use bash `export KEY=value`. systemd cannot read that; the bot loads it in Python.
 
 ## Bankroll caps
 

@@ -72,6 +72,9 @@ class HourlySettings(BaseSettings):
     use_demo: bool = True
     live_trading: bool = False
     confirm_live: str = "NO"
+    # Kill switch. Default on so a stale Pi timer cannot place live orders
+    # after this checkout is pulled. Set HALTED=false to resume.
+    halted: bool = True
 
     bankroll: float = 40.00
     min_net_edge: float = 0.06
@@ -136,7 +139,7 @@ class HourlySettings(BaseSettings):
 
     @property
     def live_enabled(self) -> bool:
-        return bool(self.live_trading) and self.confirm_live == "YES"
+        return (not self.halted) and bool(self.live_trading) and self.confirm_live == "YES"
 
     @property
     def trading_base_url(self) -> str:
