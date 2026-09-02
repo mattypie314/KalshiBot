@@ -37,17 +37,17 @@ How size is picked:
 3. Contracts = floor(dollars ÷ entry price)
 4. One contract is allowed only if that one contract is still ≤ $3
 
-Anti-revenge: if it already lost this same UTC hour, it will not size bigger than last time. If last size was zero, it sits the rest of the hour.
+Anti-revenge: if the last live hourly ticket settled against us (or a fill reports negative pnl), the next idea cannot size bigger than last time. If last size was zero, it sits. The ticket survives the `:00` hour roll so a just-settled loss still counts.
 
 ## The model
 
-1. Pull spot from Binance (Coinbase backup)
+1. Pull spot from Coinbase (Binance backup; Binance often 451s from US IPs)
 2. Pull hourly vol from recent 1-minute candles (~last 4 hours). Fallback if that fails: BTC 0.4%/hour, ETH 0.5%/hour
 3. Measure how far the line is from spot, in typical remaining-hour moves (z-score)
 4. Turn that into a fair probability that price finishes above the line
 5. Compare fair odds to the real ask you would pay (never the mid)
 
-Kalshi settles on CF Benchmarks RTI (a 60-second average), not Binance last tick. Spot is a **proxy**.
+Kalshi settles on CF Benchmarks RTI (a 60-second average), not Coinbase last tick. Spot is a **proxy**.
 
 - **Vol** = how jumpy price has been
 - **z-score** = how many normal hourly moves the line is away. |z| of 2.5+ is a long shot

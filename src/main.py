@@ -44,6 +44,34 @@ def _hour_key(now: datetime) -> str:
     return now.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0).isoformat()
 
 
+# Survive the :00 hour roll so a just-settled hourly ticket can still count as a loss.
+TICKET_KEYS = ("last_ticker", "last_side", "last_contracts")
+
+
+def fill_is_loss(fill: dict[str, Any]) -> bool:
+    if fill.get("is_confirmed_loss"):
+        return True
+    for key in ("pnl", "realized_pnl", "realized_pnl_dollars", "settlement_pnl"):
+        raw = fill.get(key)
+        if raw in (None, ""):
+            continue
+        try:
+            if float(raw) < 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def market_result_is_loss(market: dict[str, Any], side: str) -> bool | None:
+    """True if the market settled against us, False if we won, None if still open."""
+    result = str(market.get("result") or "").strip().lower()
+    ours = str(side or "").strip().lower()
+    if result not in {"yes", "no"} or ours not in {"yes", "no"}:
+        return None
+    return result != ours
+
+
 def load_state(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
@@ -51,14 +79,43 @@ def load_state(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text())
     except json.JSONDecodeError:
         return {}
-    if data.get("hour_key") != _hour_key(datetime.now(timezone.utc)):
-        return {"hour_key": _hour_key(datetime.now(timezone.utc))}
-    return data
+    if not isinstance(data, dict):
+        return {}
+    current = _hour_key(datetime.now(timezone.utc))
+    if data.get("hour_key") == current:
+        return data
+    kept = {key: data[key] for key in TICKET_KEYS if key in data}
+    kept["hour_key"] = current
+    return kept
 
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=2))
+
+
+def _resolve_settled_ticket(client: KalshiClient, state: dict[str, Any]) -> dict[str, Any]:
+    """If the last live ticker has a yes/no result, mark a loss and clear the ticket."""
+    ticker = str(state.get("last_ticker") or "")
+    side = str(state.get("last_side") or "")
+    getter = getattr(client, "get_market", None)
+    if not ticker or getter is None:
+        return state
+    try:
+        market = getter(ticker)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("settlement lookup failed for %s: %s", ticker, exc)
+        return state
+    if not isinstance(market, dict):
+        return state
+    lost = market_result_is_loss(market, side)
+    if lost is None:
+        return state
+    if lost:
+        state["loss_this_hour"] = True
+    state.pop("last_ticker", None)
+    state.pop("last_side", None)
+    return state
 
 
 def _mark_losses_from_fills(client: KalshiClient, state: dict[str, Any]) -> dict[str, Any]:
@@ -73,12 +130,12 @@ def _mark_losses_from_fills(client: KalshiClient, state: dict[str, Any]) -> dict
     lost = False
     for fill in fills:
         ts = str(fill.get("created_time") or fill.get("ts") or "")
-        if hour[:13] not in ts:
+        if hour[:13] not in ts and hour[:16] not in ts:
             continue
-        yes_price = float(fill.get("yes_price_dollars") or 0)
-        # A losing fill this hour is recorded if the fill side is marked is_taker and
-        # we previously stored that ticker as working. Keep this conservative.
-        if fill.get("is_confirmed_loss") or fill.get("pnl", 0) not in (None, "", 0) and float(fill.get("pnl") or 0) < 0:
+        ticker = str(fill.get("ticker") or fill.get("market_ticker") or "")
+        if ticker and not ticker.upper().startswith(("KXBTCD", "KXETHD")):
+            continue
+        if fill_is_loss(fill):
             lost = True
     if lost:
         state["loss_this_hour"] = True
@@ -111,6 +168,7 @@ def run_scan(
         private_key_path=settings.kalshi_private_key_path,
         trading_base_url=settings.trading_base_url,
     )
+    state = _resolve_settled_ticket(client, state)
     spots_svc = SpotService(preferred=settings.spot_source)
     try:
         try:
@@ -249,9 +307,13 @@ def run_scan(
                 return EXIT_CONFIG
             if live and placed.get("errors") and not placed.get("placed"):
                 return EXIT_CONFIG
-            state["hour_key"] = _hour_key(now)
-            state["last_contracts"] = ideas[0].contracts
-            save_state(Path(settings.state_path), state)
+            if live and placed.get("placed"):
+                idea = ideas[0]
+                state["hour_key"] = _hour_key(now)
+                state["last_contracts"] = idea.contracts
+                state["last_ticker"] = idea.market.ticker
+                state["last_side"] = idea.side
+                save_state(Path(settings.state_path), state)
         return EXIT_OK
     finally:
         client.close()

@@ -8,4 +8,9 @@
 root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 export PYTHONPATH="${PYTHONPATH:-$root}"
 cd "$root" || exit 1
-exec python3 -m src.main "$@"
+if [ -x "$root/.venv/bin/python" ]; then
+  py="$root/.venv/bin/python"
+else
+  py="python3"
+fi
+exec "$py" -m src.main "$@"
