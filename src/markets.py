@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
+from src.clock import format_et, to_et
+
 logger = logging.getLogger(__name__)
 
 KNOWN_THRESHOLD_SERIES = ("KXBTCD", "KXETHD")
@@ -67,7 +69,7 @@ class HourlyMarket:
 
     @property
     def minutes_left(self) -> float:
-        return max(0.0, (self.close_time - datetime.now(timezone.utc)).total_seconds() / 60.0)
+        return max(0.0, (self.close_time - to_et()).total_seconds() / 60.0)
 
 
 def parse_dollars(value: object) -> float | None:
@@ -156,15 +158,14 @@ def settlement_label(event: dict[str, Any], market: dict[str, Any]) -> str:
 
 
 def in_current_or_next_hour(close: datetime, now: datetime | None = None) -> bool:
-    """Keep closes at the end of this clock hour or the next one.
+    """Keep closes at the end of this Eastern hour or the next one.
 
-    A 7:00 AM print while it is 6:43 AM is the current hour's settlement.
+    A 7:00 AM ET print while it is 6:43 AM ET is the current hour's settlement.
     """
-    now = now or datetime.now(timezone.utc)
+    now = to_et(now)
     if close.tzinfo is None:
         close = close.replace(tzinfo=timezone.utc)
-    now = now.astimezone(timezone.utc)
-    close = close.astimezone(timezone.utc)
+    close = to_et(close)
     if close <= now:
         return False
     this_hour_end = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
@@ -277,7 +278,7 @@ class MarketDiscovery:
         max_per_asset: int = 12,
         spots: dict[str, float] | None = None,
     ) -> list[HourlyMarket]:
-        now = now or datetime.now(timezone.utc)
+        now = now or to_et()
         wanted = {a.upper() for a in assets}
         series = tuple(s for a in wanted for s in THRESHOLD_BY_ASSET.get(a, ()))
         hourly = self._load_series(series or THRESHOLD_SERIES, now, used_15m=False)
@@ -303,7 +304,7 @@ class MarketDiscovery:
         rows = []
         for market in sorted(seen.values(), key=lambda m: m.close_time):
             rows.append(
-                f"{market.asset} {market.close_time.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} "
+                f"{market.asset} {format_et(market.close_time)} "
                 f"({market.series_ticker} {market.settlement_source})"
             )
         return rows

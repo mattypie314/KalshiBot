@@ -16,7 +16,7 @@ Set `BANKROLL=40` in `.env` if you override it. The code default is **$40**.
 - **Execution:** limit orders only (prefer rest inside the spread). It does not market-buy
 - **Host:** a live Kalshi key needs `USE_DEMO=false` (edit `.env` or `./kb env --prod`). Demo host 401s that key.
 - **Live (keyboard):** `./kb live --prod` then type `LIVE` (or `--confirm LIVE`). `.env` can stay dry.
-- **Live (unattended):** systemd timer at minute 3 runs `live --prod --confirm LIVE`. Same caps. Disable the timer to stop.
+- **Live (unattended):** systemd timer at minute 3 Eastern runs `live --prod --confirm LIVE`. Same caps. Disable the timer to stop.
 
 A contract pays $1 if you are right and $0 if you are wrong. The price (like 0.42) is what you pay per contract. That 42¢ is also the market’s implied chance.
 
@@ -38,7 +38,7 @@ How size is picked:
 3. Contracts = floor(dollars ÷ entry price)
 4. One contract is allowed only if that one contract is still ≤ $3
 
-Anti-revenge: if the last live hourly ticket settled against us (or a fill reports negative pnl), the next idea cannot size bigger than last time. If last size was zero, it sits. The ticket survives the `:00` hour roll so a just-settled loss still counts.
+Anti-revenge: if the last live hourly ticket settled against us (or a fill reports negative pnl), the next idea cannot size bigger than last time. If last size was zero, it sits. The ticket survives the Eastern `:00` hour roll so a just-settled loss still counts. Reports and settlements are America/New_York.
 
 ## The model
 

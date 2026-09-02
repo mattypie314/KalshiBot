@@ -1,8 +1,8 @@
 [Unit]
-Description=Run KalshiBot live limits at minute 3 (real money)
+Description=Run KalshiBot live limits at minute 3 Eastern (real money)
 
 [Timer]
-OnCalendar=*-*-* *:03:00
+OnCalendar=*-*-* *:03:00 America/New_York
 # Do not catch up after downtime — a late fire would use a stale hour.
 Persistent=false
 

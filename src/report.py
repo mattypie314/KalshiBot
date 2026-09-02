@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
+from src.clock import format_et
 from src.filters import FilterResult, Idea
 from src.markets import HourlyMarket
 from src.spot import SpotSnapshot
-
-ET = ZoneInfo("America/New_York")
 
 
 def format_report(
@@ -22,7 +20,7 @@ def format_report(
     avoided: list[FilterResult],
     settlements: list[str],
 ) -> str:
-    stamp = now.astimezone(ET).isoformat(timespec="seconds")
+    stamp = format_et(now)
     btc = spots.prices.get("BTC")
     eth = spots.prices.get("ETH")
     btc_vol = spots.hourly_vol.get("BTC")

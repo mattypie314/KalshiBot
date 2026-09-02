@@ -41,7 +41,7 @@ A **live Kalshi key** (created on kalshi.com, not demo) returns 401 on demo. Use
 
 Exit codes: `0` success or `NO_ACTIONABLE_EDGE`, `2` config/auth, `3` rate limited.
 
-If nothing passes filters the process prints `NO_ACTIONABLE_EDGE` and exits 0. It never uses mid as a fill — Yes is bought at `yes_ask`, No at `no_ask`. Live limits are `post_only`. If the book moved and that would take, it requotes one tick more passive instead of crossing.
+If nothing passes filters the process prints `NO_ACTIONABLE_EDGE` and exits 0. It never uses mid as a fill — Yes is bought at `yes_ask`, No at `no_ask`. Live limits are `post_only`. If the book moved and that would take, it requotes one tick more passive instead of crossing. Report timestamps and settlements are **America/New_York** (EDT/EST).
 
 ## Keys
 
@@ -62,7 +62,7 @@ export KALSHI_API_KEY_ID=your-key-id
 export KALSHI_PRIVATE_KEY_PATH=~/.kalshi/kalshi_private_key.pem
 ```
 
-GitHub Actions (`.github/workflows/hourly.yml`) runs `scan` at minute 3 of every hour. It does **not** place live orders. Kalshi often 403s cloud IPs. For live limits use a VPS or the Pi with a stable IP.
+GitHub Actions (`.github/workflows/hourly.yml`) runs `scan` at minute 3 of every hour. The cron string is UTC; EST/EDT are whole-hour offsets so that is still `:03` Eastern. It does **not** place live orders. Kalshi often 403s cloud IPs. For live limits use a VPS or the Pi with a stable IP.
 
 ## On the Pi (`/home/KalshiBot`)
 
@@ -122,7 +122,7 @@ echo '. /home/KalshiBot/scripts/pi-shell.sh' >> ~/.bashrc
 
 Then `source ~/.bashrc` or open a new SSH session. It only `cd`s if you started in your home directory, so it will not fight a directory you already chose.
 
-systemd units in `scripts/` use the venv and `WorkingDirectory=/home/KalshiBot`. The timer is **unattended live** at minute 3: `live --prod --confirm LIVE` (real money, still $2/$3 caps, one idea). It does not catch up if the Pi was off at `:03`.
+systemd units in `scripts/` use the venv and `WorkingDirectory=/home/KalshiBot`. The timer is **unattended live** at minute 3 **Eastern** (`OnCalendar=*-*-* *:03:00 America/New_York`):
 
 ```bash
 sudo cp scripts/kalshi-hourly.service scripts/kalshi-hourly.timer /etc/systemd/system/

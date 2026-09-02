@@ -8,6 +8,7 @@ User=mkubit
 WorkingDirectory=/home/KalshiBot
 Environment=PYTHONPATH=/home/KalshiBot
 Environment=HOME=/home/mkubit
+Environment=TZ=America/New_York
 EnvironmentFile=-/home/KalshiBot/.env
 # Keys come from ~/.kalshi/ (PEM + env). Do not EnvironmentFile that path:
 # bash `export KEY=value` is invalid for systemd and $HOME does not expand.

@@ -6,7 +6,7 @@ name: Hourly BTC/ETH scan
 
 on:
   schedule:
-    - cron: "3 * * * *" # minute 3 of every hour
+    - cron: "3 * * * *" # UTC cron; EST/EDT are whole hours so this is still :03 Eastern.
   workflow_dispatch:
 
 permissions:
@@ -16,6 +16,8 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    env:
+      TZ: America/New_York
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,5 +77,5 @@ jobs:
             echo "No actionable block."
             exit 0
           fi
-          title="Hourly actionable $(date -u +%Y-%m-%dT%H:%MZ)"
+          title="Hourly actionable $(TZ=America/New_York date +'%Y-%m-%d %I:%M %p %Z')"
           gh issue create --title "$title" --body-file scan_report.md || true

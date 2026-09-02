@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.clock import format_et
 from src.filters import Idea, maker_limit
 from src.kalshi_client import unwrap_order
 from src.markets import _quote
@@ -171,7 +171,7 @@ def execute_ideas(
     orders = [_order_payload(idea, run_id) for idea in ideas]
     result: dict[str, Any] = {
         "run_id": run_id,
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": format_et(),
         "mode": "live" if go_live else "dry_run",
         "orders": orders,
         "placed": [],
