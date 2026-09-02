@@ -1,9 +1,10 @@
 [Unit]
-Description=Run KalshiBot hourly scan at minute 3
+Description=Run KalshiBot live limits at minute 3 (real money)
 
 [Timer]
 OnCalendar=*-*-* *:03:00
-Persistent=true
+# Do not catch up after downtime — a late fire would use a stale hour.
+Persistent=false
 
 [Install]
 WantedBy=timers.target
