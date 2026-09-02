@@ -3,7 +3,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from src.executor import execute_ideas
+from src.executor import execute_ideas, is_post_only_cross, step_more_passive
 from src.filters import Idea
 from src.markets import HourlyMarket
 from datetime import datetime, timedelta, timezone
@@ -128,3 +128,75 @@ def test_live_cancels_stale_daily_rests_with_uuid_client_ids(tmp_path: Path):
         args for args in client.cancel_order.call_args_list if args.args and args.args[0] == "campaign-15m"
     ]
     assert campaign_calls == []
+
+
+def test_step_more_passive_never_lifts():
+    down = step_more_passive({"side": "bid", "price": "0.1300", "client_order_id": "old"})
+    assert down is not None
+    assert down["price"] == "0.1200"
+    assert down["client_order_id"] != "old"
+    assert down["post_only"] is True
+    up = step_more_passive({"side": "ask", "price": "0.8700", "client_order_id": "old"})
+    assert up is not None
+    assert up["price"] == "0.8800"
+    assert step_more_passive({"side": "bid", "price": "0.0100"}) is None
+    assert is_post_only_cross(RuntimeError('400: {"details":"post only cross"}'))
+    assert is_post_only_cross(RuntimeError("invalid_order POST_ONLY_CROSS"))
+    assert not is_post_only_cross(RuntimeError("400 invalid_order"))
+
+
+def test_live_retries_post_only_cross_one_tick_more_passive(tmp_path: Path):
+    client = MagicMock()
+    client.get_orders.return_value = []
+    client.get_market.side_effect = RuntimeError("skip refresh")
+    prices: list[str] = []
+    ids: list[str] = []
+
+    def create(payload):
+        prices.append(payload["price"])
+        ids.append(payload["client_order_id"])
+        if payload["price"] == "0.5100":
+            raise RuntimeError('400 on /portfolio/events/orders: {"error":{"details":"post only cross"}}')
+        return {"order": {"order_id": "rested", "fill_count": "0.00", "remaining_count": "4.00"}}
+
+    client.create_order.side_effect = create
+    out = execute_ideas(
+        [_idea()],
+        client=client,
+        artifacts_dir=tmp_path,
+        live=True,
+        confirm_live=True,
+        run_id="test-run",
+    )
+    assert prices == ["0.5100", "0.5000"]
+    assert ids[0] != ids[1]
+    assert out["placed"][0]["order_id"] == "rested"
+    assert out["orders"][0]["price"] == "0.5000"
+    assert out["orders"][0]["post_only"] is True
+
+
+def test_live_requotes_from_fresh_book_before_post(tmp_path: Path):
+    client = MagicMock()
+    client.get_orders.return_value = []
+    client.get_market.return_value = {
+        "yes_bid_dollars": "0.1200",
+        "yes_ask_dollars": "0.1300",
+        "no_bid_dollars": "0.8700",
+        "no_ask_dollars": "0.8800",
+    }
+    client.create_order.return_value = {
+        "order": {"order_id": "fresh", "fill_count": "0.00", "remaining_count": "4.00"}
+    }
+    out = execute_ideas(
+        [_idea()],
+        client=client,
+        artifacts_dir=tmp_path,
+        live=True,
+        confirm_live=True,
+        run_id="test-run",
+    )
+    sent = client.create_order.call_args.args[0]
+    # 0.12/0.13 is 1¢ wide → join the bid, do not post 0.13 (that takes).
+    assert sent["price"] == "0.1200"
+    assert sent["post_only"] is True
+    assert out["placed"][0]["order_id"] == "fresh"

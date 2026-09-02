@@ -59,7 +59,7 @@ class HourlySettings(BaseSettings):
     max_spread: float = 0.06
     min_visible_depth_contracts: int = 5
 
-    spot_source: str = "binance"
+    spot_source: str = "coinbase"
     hourly_vol_fallback_btc: float = 0.004
     hourly_vol_fallback_eth: float = 0.005
 

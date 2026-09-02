@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from src.filters import FilterConfig, evaluate_market
+from src.filters import FilterConfig, evaluate_market, maker_limit
 from src.markets import HourlyMarket
 
 
@@ -110,3 +110,11 @@ def test_filters_pass_clear_yes_edge_on_executable_ask():
     assert result.idea.side == "Yes"
     assert result.idea.entry_price == 0.82
     assert result.idea.net_edge >= 0.06
+
+
+def test_maker_limit_never_sits_on_or_through_the_ask():
+    assert maker_limit("Yes", 0.12, 0.14) == 0.13
+    assert maker_limit("Yes", 0.13, 0.14) == 0.13
+    assert maker_limit("Yes", 0.13, 0.13) == 0.12
+    assert maker_limit("Yes", 0.14, 0.13) == 0.12
+    assert maker_limit("No", 0.86, 0.88) == 0.87

@@ -39,7 +39,7 @@ A **live Kalshi key** (created on kalshi.com, not demo) returns 401 on demo. Use
 
 Exit codes: `0` success or `NO_ACTIONABLE_EDGE`, `2` config/auth, `3` rate limited.
 
-If nothing passes filters the process prints `NO_ACTIONABLE_EDGE` and exits 0. It never uses mid as a fill — Yes is bought at `yes_ask`, No at `no_ask`.
+If nothing passes filters the process prints `NO_ACTIONABLE_EDGE` and exits 0. It never uses mid as a fill — Yes is bought at `yes_ask`, No at `no_ask`. Live limits are `post_only`. If the book moved and that would take, it requotes one tick more passive instead of crossing.
 
 ## Keys
 

@@ -247,6 +247,8 @@ def run_scan(
                 else:
                     print("Key id and private PEM must match. Run: ./kb auth --prod", file=sys.stderr)
                 return EXIT_CONFIG
+            if live and placed.get("errors") and not placed.get("placed"):
+                return EXIT_CONFIG
             state["hour_key"] = _hour_key(now)
             state["last_contracts"] = ideas[0].contracts
             save_state(Path(settings.state_path), state)
