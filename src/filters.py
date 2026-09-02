@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
 
+from src.clock import to_et
 from src.fees import ev_per_contract, taker_fee_dollars
 from src.markets import HourlyMarket
 from src.model import fair_no, fair_prob, hours_left, model_z
 from src.sizer import size_idea
-
-ET = ZoneInfo("America/New_York")
 
 # Remaining 2026 CPI prints (8:30 AM ET) and FOMC statements (2:00 PM ET).
 CPI_DATES = frozenset(
@@ -95,7 +93,7 @@ class FilterResult:
 
 
 def news_blackout_active(now: datetime | None = None) -> bool:
-    local = (now or datetime.now(timezone.utc)).astimezone(ET)
+    local = to_et(now)
     day = (local.year, local.month, local.day)
     if day in CPI_DATES:
         start = local.replace(hour=8, minute=15, second=0, microsecond=0)

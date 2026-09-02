@@ -13,6 +13,12 @@ A contract pays $1 if you are right and $0 if you are wrong. Paying 0.14 means y
 
 The bot’s job: estimate a fair chance from spot + recent vol, compare that to the real ask, and only act when leftover edge after fees is large enough. Sitting (`NO_ACTIONABLE_EDGE`) is a valid result.
 
+## Time zone
+
+Everything you read is **America/New_York** (EDT in summer, EST in winter): report headers, next settlements, anti-revenge hour, Pi timer (`*:03` Eastern), journal logs, and GitHub issue titles.
+
+Kalshi and Coinbase API calls still send UTC. You should not have to convert.
+
 ## Prod vs demo
 
 Prod is live Kalshi — real cash (`external-api.kalshi.com`). Demo is paper (`demo-api.kalshi.co`). Your API key was created on kalshi.com, so it only works on prod. Demo returns 401.
@@ -97,7 +103,7 @@ Daily use: `./kb scan` to look. `./kb live --prod` when you are at the keyboard 
 
 ## Hourly timer (unattended live)
 
-At minute 3 of every hour the Pi runs:
+At minute 3 Eastern of every hour the Pi runs:
 
 ```
 /home/KalshiBot/.venv/bin/python -m src.main live --prod --confirm LIVE

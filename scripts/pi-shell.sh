@@ -9,6 +9,8 @@ case $- in
   *) return 0 2>/dev/null || exit 0 ;;
 esac
 
+export TZ=America/New_York
+
 KALSHIBOT_ROOT="${KALSHIBOT_ROOT:-/home/KalshiBot}"
 
 # Login terminals start in $HOME. Do not yank the cwd if you already `cd` elsewhere.

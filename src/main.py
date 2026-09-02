@@ -7,10 +7,11 @@ import json
 import logging
 import sys
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.clock import configure_logging, format_et, hour_key, same_et_hour, to_et
 from src.config import EXIT_CONFIG, EXIT_OK, EXIT_RATE_LIMITED, HourlySettings, load_settings
 from src.executor import execute_ideas
 from src.filters import FilterConfig, FilterResult, Idea, evaluate_market, news_blackout_active
@@ -41,7 +42,7 @@ def _filter_cfg(settings: HourlySettings, state: dict[str, Any]) -> FilterConfig
 
 
 def _hour_key(now: datetime) -> str:
-    return now.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0).isoformat()
+    return hour_key(now)
 
 
 # Survive the :00 hour roll so a just-settled hourly ticket can still count as a loss.
@@ -81,7 +82,7 @@ def load_state(path: Path) -> dict[str, Any]:
         return {}
     if not isinstance(data, dict):
         return {}
-    current = _hour_key(datetime.now(timezone.utc))
+    current = _hour_key(to_et())
     if data.get("hour_key") == current:
         return data
     kept = {key: data[key] for key in TICKET_KEYS if key in data}
@@ -126,11 +127,11 @@ def _mark_losses_from_fills(client: KalshiClient, state: dict[str, Any]) -> dict
     except Exception as exc:  # noqa: BLE001
         logger.info("fills unavailable: %s", exc)
         return state
-    hour = _hour_key(datetime.now(timezone.utc))
+    hour = _hour_key(to_et())
     lost = False
     for fill in fills:
-        ts = str(fill.get("created_time") or fill.get("ts") or "")
-        if hour[:13] not in ts and hour[:16] not in ts:
+        ts = fill.get("created_time") or fill.get("ts") or ""
+        if not same_et_hour(ts):
             continue
         ticker = str(fill.get("ticker") or fill.get("market_ticker") or "")
         if ticker and not ticker.upper().startswith(("KXBTCD", "KXETHD")):
@@ -201,7 +202,7 @@ def run_scan(
             payload = {
                 "error": "403",
                 "message": str(exc),
-                "ts": datetime.now(timezone.utc).isoformat(),
+                "ts": format_et(),
             }
             (artifacts / "last_run.json").write_text(json.dumps(payload, indent=2))
             return EXIT_OK
@@ -210,7 +211,7 @@ def run_scan(
             state = _mark_losses_from_fills(client, state)
 
         cfg = _filter_cfg(settings, state)
-        now = datetime.now(timezone.utc)
+        now = to_et()
         ideas: list[Idea] = []
         nearby: list[FilterResult] = []
         avoided: list[FilterResult] = []
@@ -250,7 +251,7 @@ def run_scan(
         print(report)
 
         scan_blob = {
-            "ts": now.isoformat(),
+            "ts": format_et(now),
             "spots": spots.prices,
             "vol": spots.hourly_vol,
             "spot_source": spots.source,
@@ -565,7 +566,7 @@ def main(argv: list[str] | None = None) -> int:
     _add_host_flags(envp)
 
     args = parser.parse_args(normalize_argv(argv))
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    configure_logging()
 
     try:
         settings = load_settings()
