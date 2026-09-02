@@ -129,6 +129,27 @@ def test_key_id_strips_quotes():
     assert settings.kalshi_api_key_id == "abc-123"
 
 
+def test_upsert_dotenv_sets_use_demo(tmp_path):
+    from src.main import upsert_dotenv
+
+    path = tmp_path / ".env"
+    path.write_text("USE_DEMO=true\nBANKROLL=40\n")
+    upsert_dotenv(path, "USE_DEMO", "false")
+    text = path.read_text()
+    assert "USE_DEMO=false" in text
+    assert "BANKROLL=40" in text
+    assert text.count("USE_DEMO=") == 1
+
+
+def test_env_prod_writes_dotenv(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("USE_DEMO=true\n")
+    monkeypatch.setattr("src.main.load_settings", lambda: HourlySettings(_env_file=None, use_demo=True))
+    assert main(["env", "--prod"]) == 0
+    assert "USE_DEMO=false" in (tmp_path / ".env").read_text()
+    assert "PROD" in capsys.readouterr().out
+
+
 def test_default_bankroll_is_forty(monkeypatch):
     monkeypatch.delenv("BANKROLL", raising=False)
     settings = HourlySettings(_env_file=None, kalshi_api_key_id="", kalshi_private_key_path="/tmp/not-the-home-pem")

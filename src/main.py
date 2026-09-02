@@ -236,7 +236,16 @@ def run_scan(
                 print(f"auth/config: {exc}", file=sys.stderr)
                 return EXIT_CONFIG
             if live and any("401" in str(err) for err in placed.get("errors") or []):
-                print("LIVE order failed auth (401). Run: python -m src.main auth", file=sys.stderr)
+                host = getattr(client, "trading_base_url", "") or ""
+                print(f"LIVE order failed auth (401) on {host or 'this host'}.", file=sys.stderr)
+                if "demo-api" in host:
+                    print(
+                        "That is a live Kalshi key on the demo API. Re-run: ./kb live --prod",
+                        file=sys.stderr,
+                    )
+                    print("To make prod stick: ./kb env --prod", file=sys.stderr)
+                else:
+                    print("Key id and private PEM must match. Run: ./kb auth --prod", file=sys.stderr)
                 return EXIT_CONFIG
             state["hour_key"] = _hour_key(now)
             state["last_contracts"] = ideas[0].contracts
@@ -412,6 +421,45 @@ def live_is_armed(
     return _typed_live(reply)
 
 
+def upsert_dotenv(path: Path, key: str, value: str) -> None:
+    """Set KEY=value in .env without touching other lines or secrets."""
+    lines: list[str] = []
+    if path.is_file():
+        lines = path.read_text().splitlines()
+    found = False
+    out: list[str] = []
+    prefix = f"{key}="
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith(prefix) or stripped.startswith(f"#{prefix}"):
+            if not found:
+                out.append(f"{key}={value}")
+                found = True
+            continue
+        out.append(line)
+    if not found:
+        out.append(f"{key}={value}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(out).rstrip() + "\n")
+
+
+def run_env(settings: HourlySettings, *, prod: bool, demo: bool) -> int:
+    path = Path(".env")
+    if prod:
+        upsert_dotenv(path, "USE_DEMO", "false")
+        settings.use_demo = False
+        print(f"Wrote USE_DEMO=false to {path.resolve()}")
+    elif demo:
+        upsert_dotenv(path, "USE_DEMO", "true")
+        settings.use_demo = True
+        print(f"Wrote USE_DEMO=true to {path.resolve()}")
+    host = "DEMO" if settings.use_demo else "PROD"
+    print(f"This checkout uses {host}: {settings.trading_base_url}")
+    print("Edit other knobs in .env with nano:")
+    print(f"  nano {path.resolve()}")
+    return EXIT_OK
+
+
 def cli() -> None:
     raise SystemExit(main())
 
@@ -444,6 +492,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Pass LIVE to arm live without a prompt. Leaves .env unchanged.",
     )
     _add_host_flags(live)
+
+    envp = sub.add_parser("env", help="Show or set demo vs prod in .env")
+    _add_host_flags(envp)
 
     args = parser.parse_args(normalize_argv(argv))
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -486,6 +537,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             return EXIT_CONFIG
         return run_scan(settings, asset=None, place=True, force_live=True, armed=True)
+    if args.command == "env":
+        return run_env(settings, prod=bool(args.prod), demo=bool(args.demo))
     return EXIT_CONFIG
 
 

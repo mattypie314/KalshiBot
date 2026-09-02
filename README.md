@@ -26,10 +26,11 @@ Pick a mode from a menu, or pass it on the command line:
 ./kb scan --asset BTC
 ./kb once            # also: o  or  2   dry-run limit payloads
 ./kb auth            # also: a  or  3   test key + PEM (tries demo then prod)
-./kb auth --prod     # force live Kalshi API this run
-./kb live            # also: l  or  4   type LIVE. .env can stay dry
-./kb live --prod     # real-money host + type LIVE
-./kb live --prod --confirm LIVE
+./kb env             # show DEMO vs PROD
+./kb env --prod      # write USE_DEMO=false to .env (live Kalshi)
+./kb env --demo      # write USE_DEMO=true
+./kb auth --prod
+./kb live --prod
 ```
 
 `python -m src.main …` and (after `pip install -e .`) `kalshibot` / `kb` do the same thing. No args on a TTY opens the menu; no args in a script defaults to `scan`.
