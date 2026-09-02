@@ -27,6 +27,35 @@ def _env_files() -> tuple[str, ...]:
     return tuple(files)
 
 
+def apply_kalshi_shell_env(path: Path | None = None, environ: dict[str, str] | None = None) -> dict[str, str]:
+    """Load ~/.kalshi/env even when it uses bash `export KEY=value` and $HOME.
+
+    systemd EnvironmentFile cannot parse `export` or expand $HOME — that is why
+    the Pi timer logged 'Ignoring invalid environment assignment'.
+    """
+    dest = environ if environ is not None else os.environ
+    path = path or Path.home() / ".kalshi" / "env"
+    loaded: dict[str, str] = {}
+    if not path.is_file():
+        return loaded
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        value = os.path.expandvars(os.path.expanduser(_strip_secret(value)))
+        dest.setdefault(key, value)
+        loaded[key] = dest[key]
+    return loaded
+
+
 class HourlySettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=_env_files(),
@@ -129,6 +158,7 @@ class HourlySettings(BaseSettings):
 
 
 def load_settings() -> HourlySettings:
+    apply_kalshi_shell_env()
     settings = HourlySettings()
     settings.ensure_private_key_file()
     return settings

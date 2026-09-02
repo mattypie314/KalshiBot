@@ -7,9 +7,10 @@ Type=oneshot
 User=mkubit
 WorkingDirectory=/home/KalshiBot
 Environment=PYTHONPATH=/home/KalshiBot
+Environment=HOME=/home/mkubit
 EnvironmentFile=-/home/KalshiBot/.env
-EnvironmentFile=-/home/mkubit/.kalshi/env
-# Unattended live on prod. Caps still apply ($2 typical, $3 max, one idea).
+# Keys come from ~/.kalshi/ (PEM + env). Do not EnvironmentFile that path:
+# bash `export KEY=value` is invalid for systemd and $HOME does not expand.
 # To go back to dry-run: change this line to `... -m src.main once`
 ExecStart=/home/KalshiBot/.venv/bin/python -m src.main live --prod --confirm LIVE
 
