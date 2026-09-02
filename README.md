@@ -121,6 +121,7 @@ sudo systemctl enable --now kalshi-hourly.timer
 ```
 
 Logs: `journalctl -u kalshi-hourly.service -n 80 --no-pager`  
+`~/.kalshi/env` may use bash `export KEY=value`. systemd cannot read that; the bot loads it in Python.  
 Off: `sudo systemctl disable --now kalshi-hourly.timer`  
 Dry-run again: change `ExecStart` in the service to `... -m src.main once`, then `daemon-reload`.
 

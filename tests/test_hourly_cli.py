@@ -166,3 +166,18 @@ def test_default_bankroll_is_forty(monkeypatch):
     monkeypatch.delenv("BANKROLL", raising=False)
     settings = HourlySettings(_env_file=None, kalshi_api_key_id="", kalshi_private_key_path="/tmp/not-the-home-pem")
     assert settings.bankroll == 40.00
+
+
+def test_apply_kalshi_shell_env_reads_export_and_home(tmp_path, monkeypatch):
+    from src.config import apply_kalshi_shell_env
+
+    monkeypatch.setenv("HOME", "/home/mkubit")
+    path = tmp_path / "env"
+    path.write_text(
+        "export KALSHI_API_KEY_ID=abc-123\n"
+        "export KALSHI_PRIVATE_KEY_PATH=$HOME/.kalshi/kalshi_private_key.pem\n"
+    )
+    dest: dict[str, str] = {"HOME": "/home/mkubit"}
+    loaded = apply_kalshi_shell_env(path, dest)
+    assert loaded["KALSHI_API_KEY_ID"] == "abc-123"
+    assert dest["KALSHI_PRIVATE_KEY_PATH"] == "/home/mkubit/.kalshi/kalshi_private_key.pem"
