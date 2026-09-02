@@ -111,19 +111,27 @@ def news_blackout_active(now: datetime | None = None) -> bool:
 
 
 def maker_limit(side: str, bid: float, ask: float) -> float | None:
-    """One tick inside the spread, or at the bid if the book is one tick wide."""
+    """A post-only price: one tick inside, or join the bid if the book is 1¢.
+
+    Never returns a price at or through the ask (that would take / post-only-cross).
+    A locked or crossed book rests one tick behind the bid, or None.
+    """
     tick = 0.01
-    if ask <= 0 or bid <= 0 or ask < bid:
+    if ask <= 0 or bid <= 0:
         return None
-    if side == "Yes":
-        inside = round(bid + tick, 2)
-        if inside < ask - 1e-9:
-            return inside
-        return round(bid, 2)
-    inside = round(bid + tick, 2)  # no-side: join no bid (which is 1-yes_ask)
+
+    def _join_behind(level: float) -> float | None:
+        behind = round(level - tick, 2)
+        return behind if behind >= tick - 1e-9 else None
+
+    if ask < bid - 1e-9:
+        return _join_behind(min(bid, ask))
+    inside = round(bid + tick, 2)
     if inside < ask - 1e-9:
         return inside
-    return round(bid, 2)
+    if bid + 1e-9 < ask:
+        return round(bid, 2)
+    return _join_behind(bid)
 
 
 def evaluate_market(

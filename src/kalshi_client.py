@@ -287,6 +287,13 @@ class KalshiClient:
             return []
         return list(data.get("fills") or [])
 
+    def get_market(self, ticker: str) -> dict[str, Any]:
+        """Fresh public quote for one ticker. Used to requote before a live post."""
+        data = self.get_json(f"/markets/{ticker}", auth=False)
+        if isinstance(data, dict) and isinstance(data.get("market"), dict):
+            return data["market"]
+        return data if isinstance(data, dict) else {}
+
     def get_balance(self) -> dict[str, Any]:
         return self.get_json("/portfolio/balance", auth=True)
 

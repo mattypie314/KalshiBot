@@ -82,6 +82,7 @@ If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid
 
 - Score both Yes and No; keep the higher net-edge side
 - Prefer a maker limit: one tick inside the spread, or on the bid if the book is only 1¢ wide
+- Fresh-quote before the POST. If Kalshi rejects `post only cross`, step one tick more passive and retry. Never lift / take
 - Order type: GTC, `post_only` when resting inside
 - Yes = bid on the Yes book at the limit
 - No = ask on the Yes book at 1 − No limit (same book, other side)

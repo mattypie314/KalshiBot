@@ -43,7 +43,7 @@ def hourly_vol_from_closes(closes: list[float], seconds_per_bar: int) -> float |
 
 
 class SpotService:
-    def __init__(self, http: httpx.Client | None = None, preferred: str = "binance") -> None:
+    def __init__(self, http: httpx.Client | None = None, preferred: str = "coinbase") -> None:
         self._owns = http is None
         self._http = http or httpx.Client(timeout=15.0, headers={"User-Agent": "KalshiHourly/0.1"})
         self.preferred = preferred.lower()
@@ -82,7 +82,11 @@ class SpotService:
                 else:
                     price = self._coinbase_price(asset)
             except Exception as exc:  # noqa: BLE001
-                logger.info("%s spot failed for %s: %s", name, asset, exc)
+                text = str(exc)
+                if "451" in text:
+                    logger.debug("%s spot blocked (451) for %s; trying next source", name, asset)
+                else:
+                    logger.info("%s spot failed for %s: %s", name, asset, exc)
                 continue
             if price and price > 0:
                 return price, name
@@ -101,7 +105,11 @@ class SpotService:
                 else:
                     vol = self._coinbase_vol(asset)
             except Exception as exc:  # noqa: BLE001
-                logger.info("%s vol failed for %s: %s", name, asset, exc)
+                text = str(exc)
+                if "451" in text:
+                    logger.debug("%s vol blocked (451) for %s; trying next source", name, asset)
+                else:
+                    logger.info("%s vol failed for %s: %s", name, asset, exc)
                 continue
             if vol is not None:
                 return min(0.05, max(0.001, vol)), f"{name}-realized"
