@@ -2,9 +2,11 @@ from datetime import datetime, timedelta, timezone
 
 from src.markets import (
     MarketDiscovery,
+    HourlyMarket,
     in_current_or_next_hour,
     market_from_api,
     parse_threshold,
+    rank_hourly_markets,
 )
 
 
@@ -72,3 +74,49 @@ def test_discover_does_not_load_15m_when_hourly_empty():
 
     found = MarketDiscovery(Client()).discover(["BTC", "ETH"], allow_15m_fallback=True)
     assert found == []
+
+
+def _book(threshold: float, ticker: str) -> HourlyMarket:
+    return HourlyMarket(
+        ticker=ticker,
+        event_ticker="KXBTCD-X",
+        series_ticker="KXBTCD",
+        asset="BTC",
+        title="t",
+        yes_sub_title=f"${threshold} or above",
+        threshold=threshold,
+        strike_type="greater",
+        close_time=datetime.now(timezone.utc) + timedelta(minutes=40),
+        status="active",
+        yes_bid=0.4,
+        yes_ask=0.42,
+        no_bid=0.58,
+        no_ask=0.60,
+        yes_bid_size=10,
+        yes_ask_size=10,
+        no_bid_size=10,
+        no_ask_size=10,
+        rules_primary="",
+        rules_secondary="",
+        settlement_source="CF",
+        exchange_index=2,
+    )
+
+
+def test_rank_hourly_markets_keeps_far_strikes_when_close_ones_fill_the_book():
+    spot = 100_000.0
+    # 12 close strikes inside 0.50%, plus 3 far ones the filter could actually use.
+    close = [_book(100_000 + 40 * i, f"C{i}") for i in range(12)]
+    far = [_book(101_000, "F1"), _book(99_000, "F2"), _book(102_000, "F3")]
+    ranked = rank_hourly_markets(
+        close + far,
+        spot,
+        limit=12,
+        min_distance_pct=0.005,
+        watch_slots=3,
+    )
+    tickers = {m.ticker for m in ranked}
+    assert {"F1", "F2", "F3"} <= tickers
+    assert len(ranked) == 12
+    # Far strikes take priority; leftover slots stay nearby for the watch list.
+    assert sum(1 for m in ranked if m.ticker.startswith("C")) == 9

@@ -14,7 +14,8 @@ EnvironmentFile=-/home/KalshiBot/.env
 # Keys come from ~/.kalshi/ (PEM + env). Do not EnvironmentFile that path:
 # bash `export KEY=value` is invalid for systemd and $HOME does not expand.
 # Halted until further notice. Was: ... -m src.main live --prod --confirm LIVE
-# Re-enable live only after HALTED=false and a deliberate unit edit.
+# Re-enable only after HALTED=false AND LIVE_TRADING=true AND CONFIRM_LIVE=YES
+# in .env (unattended has no TTY; --confirm LIVE alone will not arm).
 ExecStart=/bin/true
 
 [Install]

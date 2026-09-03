@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 
-from src.clock import EasternFormatter, format_et, hour_key, same_et_hour, to_et
+from src.clock import EasternFormatter, format_et, hour_key, same_et_day, same_et_hour, to_et
 from src.filters import news_blackout_active
 from src.markets import MarketDiscovery, market_from_api
 
@@ -25,6 +25,22 @@ def test_format_et_winter_is_est():
     text = format_et(now)
     assert "8:00 AM" in text
     assert "EST" in text
+
+
+def test_parse_ts_reads_human_eastern_report_stamp():
+    from src.clock import parse_ts
+
+    parsed = parse_ts("2026-09-02 2:24 PM EDT")
+    assert parsed is not None
+    assert parsed.year == 2026 and parsed.month == 9 and parsed.day == 2
+    assert parsed.hour == 14 and parsed.minute == 24
+    assert same_et_day("2026-09-02 2:24 PM EDT", parsed)
+
+
+def test_same_et_day_crosses_utc_midnight():
+    now = datetime(2026, 9, 2, 3, 30, tzinfo=timezone.utc)  # 11:30 PM EDT Sep 1
+    assert same_et_day("2026-09-02T02:00:00Z", now)
+    assert not same_et_day("2026-09-02T06:00:00Z", now)
 
 
 def test_same_et_hour_parses_utc_zulu():

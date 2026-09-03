@@ -11,6 +11,8 @@ def test_normalize_expands_shortcuts():
     assert normalize_argv(["l"]) == ["live"]
     assert normalize_argv(["e"]) == ["env"]
     assert normalize_argv(["5"]) == ["env"]
+    assert normalize_argv(["eval"]) == ["eval"]
+    assert normalize_argv(["6"]) == ["eval"]
     assert normalize_argv(["1", "--asset", "BTC"]) == ["scan", "--asset", "BTC"]
     assert normalize_argv(["scan", "--asset", "ETH"]) == ["scan", "--asset", "ETH"]
 
@@ -59,21 +61,42 @@ def test_halted_blocks_confirm_live(monkeypatch, capsys):
 def test_live_is_armed_by_prompt_or_flag():
     dry = HourlySettings(halted=False, live_trading=False, confirm_live="NO")
     assert live_is_armed(dry, confirm="", isatty=False) is False
-    assert live_is_armed(dry, confirm="LIVE", isatty=False) is True
+    assert live_is_armed(dry, confirm="LIVE", isatty=False) is False
+    assert live_is_armed(dry, confirm="LIVE", isatty=True) is True
     assert live_is_armed(dry, confirm="no", isatty=True, prompt=lambda _: "LIVE") is True
     assert live_is_armed(dry, confirm="YES", isatty=False) is False
     assert live_is_armed(dry, confirm="", isatty=True, prompt=lambda _: "nope") is False
     env = HourlySettings(halted=False, live_trading=True, confirm_live="YES")
     assert live_is_armed(env, confirm="", isatty=False) is True
+    one_flag = HourlySettings(halted=False, live_trading=True, confirm_live="NO")
+    assert live_is_armed(one_flag, confirm="", isatty=False) is False
     halted = HourlySettings(halted=True, live_trading=True, confirm_live="YES")
     assert live_is_armed(halted, confirm="LIVE", isatty=False) is False
 
 
-def test_live_confirm_flag_does_not_need_env(monkeypatch):
+def test_unattended_confirm_live_requires_both_env_flags(monkeypatch):
     monkeypatch.setenv("HALTED", "false")
     monkeypatch.setenv("LIVE_TRADING", "false")
     monkeypatch.setenv("CONFIRM_LIVE", "NO")
     monkeypatch.setattr("src.main.probe_balance", _ok_balance)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    called = {"scan": False}
+
+    def _scan(*args, **kwargs):
+        called["scan"] = True
+        return 0
+
+    monkeypatch.setattr("src.main.run_scan", _scan)
+    assert main(["live", "--confirm", "LIVE"]) == EXIT_CONFIG
+    assert called["scan"] is False
+
+
+def test_attended_confirm_live_does_not_need_env(monkeypatch):
+    monkeypatch.setenv("HALTED", "false")
+    monkeypatch.setenv("LIVE_TRADING", "false")
+    monkeypatch.setenv("CONFIRM_LIVE", "NO")
+    monkeypatch.setattr("src.main.probe_balance", _ok_balance)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("src.main.run_scan", lambda *args, **kwargs: 0)
     assert main(["live", "--confirm", "LIVE"]) == 0
 
@@ -185,6 +208,22 @@ def test_env_prod_writes_dotenv(monkeypatch, tmp_path, capsys):
     assert "PROD" in capsys.readouterr().out
 
 
+def test_eval_prints_insufficient_data(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "src.main.load_settings",
+        lambda: HourlySettings(
+            _env_file=None,
+            artifacts_dir=str(tmp_path),
+            scan_log_path=str(tmp_path / "scan_log.jsonl"),
+        ),
+    )
+    assert main(["eval"]) == 0
+    out = capsys.readouterr().out
+    assert "Insufficient live data" in out
+    assert "Still actionable under current rules: 0" in out
+
+
 def test_env_show_prints_nano_path(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("src.main.load_settings", lambda: HourlySettings(_env_file=None, use_demo=True))
@@ -203,6 +242,8 @@ def test_default_bankroll_is_forty(monkeypatch):
     assert settings.min_net_edge == 0.06
     assert settings.soft_net_edge == 0.06
     assert settings.min_strike_distance_pct == 0.005
+    assert settings.max_daily_loss_dollars == 4.00
+    assert settings.max_daily_losses == 2
 
 
 def test_apply_kalshi_shell_env_reads_export_and_home(tmp_path, monkeypatch):

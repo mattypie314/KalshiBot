@@ -261,8 +261,41 @@ def market_from_api(
 
 
 def nearest_strikes(markets: Iterable[HourlyMarket], spot: float, limit: int) -> list[HourlyMarket]:
-    ranked = sorted(markets, key=lambda m: abs(m.threshold - spot))
-    return ranked[:limit]
+    return rank_hourly_markets(markets, spot, limit)
+
+
+def rank_hourly_markets(
+    markets: Iterable[HourlyMarket],
+    spot: float,
+    limit: int,
+    *,
+    min_distance_pct: float = 0.0,
+    watch_slots: int = 3,
+) -> list[HourlyMarket]:
+    """Keep far (filter-eligible) strikes first, plus a few nearby for the watch list.
+
+    Closest-N alone wastes the 12-book budget on coin-flip lines the filter
+    already bans. Nearby books still appear so the report can show them.
+    """
+    rows = list(markets)
+    if limit <= 0:
+        return []
+    if spot <= 0:
+        return rows[:limit]
+    far: list[HourlyMarket] = []
+    near: list[HourlyMarket] = []
+    for market in rows:
+        dist = abs(market.threshold - spot) / spot
+        if dist + 1e-12 >= min_distance_pct:
+            far.append(market)
+        else:
+            near.append(market)
+    far.sort(key=lambda m: abs(m.threshold - spot))
+    near.sort(key=lambda m: abs(m.threshold - spot))
+    reserved = min(max(watch_slots, 0), len(near), limit)
+    far_take = min(len(far), limit - reserved)
+    near_take = min(len(near), limit - far_take)
+    return far[:far_take] + near[:near_take]
 
 
 class MarketDiscovery:
@@ -277,6 +310,8 @@ class MarketDiscovery:
         allow_15m_fallback: bool = False,
         max_per_asset: int = 12,
         spots: dict[str, float] | None = None,
+        min_distance_pct: float = 0.0,
+        watch_slots: int = 3,
     ) -> list[HourlyMarket]:
         now = now or to_et()
         wanted = {a.upper() for a in assets}
@@ -290,7 +325,13 @@ class MarketDiscovery:
             subset = [m for m in hourly if m.asset == asset]
             spot = spots.get(asset)
             if spot and subset:
-                subset = nearest_strikes(subset, spot, max_per_asset)
+                subset = rank_hourly_markets(
+                    subset,
+                    spot,
+                    max_per_asset,
+                    min_distance_pct=min_distance_pct,
+                    watch_slots=watch_slots,
+                )
             else:
                 subset = subset[:max_per_asset]
             out.extend(subset)
