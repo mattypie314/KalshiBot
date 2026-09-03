@@ -16,6 +16,7 @@ from src.config import EXIT_OK, HourlySettings
 from src.filters import FilterConfig, evaluate_market
 from src.journal import counts_as_filled, load_trades
 from src.markets import HourlyMarket
+from src.paper import format_paper_section, load_paper, summarize_paper, try_settle_paper
 
 # Checked-in GitHub scan actionables from before the close-strike cut.
 # No fills or official settlements exist in this repo for these rows.
@@ -179,13 +180,17 @@ def format_eval_report(
     trades: dict[str, Any],
     scans: dict[str, Any],
     historical: dict[str, Any],
+    paper: dict[str, Any] | None = None,
 ) -> str:
+    paper = paper if paper is not None else summarize_paper([])
     lines = [
         "# Hourly BTC/ETH evaluation",
         "",
         "Not financial advice. This is a bookkeeping report, not a claim of edge.",
         "",
-        "## Local journal (`artifacts/trade_log.jsonl`)",
+        *format_paper_section(paper),
+        "",
+        "## Local live journal (`artifacts/trade_log.jsonl`)",
         f"- Rows: {trades['n_rows']}",
         f"- Filled and settled: {trades['n_filled_settled']} "
         f"({trades['n_wins']} win / {trades['n_losses']} loss)",
@@ -260,8 +265,10 @@ def format_eval_report(
 
 def run_eval(settings: HourlySettings) -> int:
     artifacts = Path(settings.artifacts_dir)
+    try_settle_paper(settings)
     trades = summarize_trades(load_trades(artifacts / "trade_log.jsonl"))
     scans = summarize_scans(load_jsonl(Path(settings.scan_log_path)))
     historical = replay_historical_actionables()
-    print(format_eval_report(trades=trades, scans=scans, historical=historical))
+    paper = summarize_paper(load_paper(Path(settings.paper_log_path)))
+    print(format_eval_report(trades=trades, scans=scans, historical=historical, paper=paper))
     return EXIT_OK

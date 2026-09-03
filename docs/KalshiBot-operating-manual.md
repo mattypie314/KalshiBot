@@ -58,7 +58,7 @@ Prod is live Kalshi — real cash (`external-api.kalshi.com`). Demo is paper (`d
 - If the last live hourly ticket **filled** and settled against you, the next idea cannot size up.
 - After 2 filled losses or $4 filled loss in an Eastern day, sit.
 - Every live ticket is logged (strike distance, time left, fair %, Kalshi price, fill status, result). A red close-No bucket (filled only) turns that rule off.
-- `./kb eval` summarizes the journal and scan log. It does not claim the strategy is profitable.
+- `./kb eval` / `./kb paper` summarize the paper tape and the live journal separately. Paper is a counterfactual (assumed maker fill at the printed limit, settled on BRTI/ERTI). It does not claim the strategy is profitable and must not retune the 6% / close-strike / size rules.
 
 ## Your Pi layout
 
@@ -106,12 +106,13 @@ source .venv/bin/activate
 | `./kb env` | e / 5 | Show DEMO vs PROD |
 | `./kb env --prod` | | Write USE_DEMO=false |
 | `./kb env --demo` | | Write USE_DEMO=true |
-| `./kb eval` | v / 6 | Local journal / scan-log report (no orders) |
+| `./kb eval` | v / 6 | Paper PnL + live journal / scan-log (no orders) |
+| `./kb paper` | p / 7 | Same as eval; paper tape listed separately from live |
 | `./kb --help` | | Help |
 
 `--prod` / `--demo` also work on `scan` and `once`.
 
-Daily use: `./kb scan` to look. `./kb live --prod` when you are at the keyboard and willing to rest a limit. Type LIVE only if the prompt says on PROD.
+Daily use: `./kb scan` to look (writes a paper row if an idea prints). `./kb eval` to read paper PnL vs the official BRTI/ERTI print. `./kb live --prod` when you are at the keyboard and willing to rest a limit. Type LIVE only if the prompt says on PROD. Live stays off by default.
 
 `NO_ACTIONABLE_EDGE` means sit. That is a successful run, not a crash.
 

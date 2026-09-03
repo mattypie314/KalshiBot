@@ -13,4 +13,5 @@ dist/
 build/
 artifacts/last_run.json
 artifacts/hourly_state.json
+artifacts/paper_log.jsonl
 
