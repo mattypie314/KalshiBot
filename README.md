@@ -18,7 +18,7 @@ The 15-minute campaign, maker loop, dashboard, and research desk are parked on t
 
 ## What this does
 
-Scans the live hourly above/below books for Bitcoin and Ethereum. Fair probability comes from spot plus recent realized vol. It only prints or places a **limit** order when net edge after estimated fees clears the filter.
+Scans the live hourly above/below books for Bitcoin and Ethereum. Fair probability comes from **CF Benchmarks BRTI/ERTI** (the 60-second average Kalshi settles on) plus recent realized vol. Coinbase last tick is a proxy, not the print — without the index the coin sits. It only prints or places a **maker limit** when net edge after estimated fees clears the filter.
 
 Bankroll default **$40**. Risk per idea **$1.50–$2.00**, preferred **$1.75**, hard cap **$2.00**. Maker / limit only. Sit unless net edge after fees is ≥ 6%. Ban close strikes (coin-flip fades inside ~0.5–0.75% of spot). Max 1 open hourly ticket. Full rules: `RULES.md`.
 
@@ -155,10 +155,13 @@ Logs: `journalctl -u kalshi-hourly.service -n 80 --no-pager`
 | Min fade distance | 0.50% | `MIN_STRIKE_DISTANCE_PCT` |
 | Fractional Kelly | 0.25× | `KELLY_MULT` |
 | Daily filled-loss sit | $4 or 2 losses | `MAX_DAILY_LOSS_DOLLARS` / `MAX_DAILY_LOSSES` |
+| Require BRTI/ERTI | on | `REQUIRE_SETTLEMENT_INDEX` |
+| Require maker rest | on | `REQUIRE_MAKER` |
+| Operator news sit | off | `NEWS_PAUSE` |
 
 Settlement is the 60-second average of CF Benchmarks BRTI (BTC) / ERTI (ETH). The bot prices off that index via Kalshi when the key can; Coinbase/Binance are fallbacks. Vol is still exchange-realized. A 2× typical vol day sits.
 
-Each scan appends one line to `artifacts/scan_log.jsonl` (quotes, spots, ideas — no keys). Live tickets in `artifacts/trade_log.jsonl` stay pending until a fill is confirmed; unfilled rests are not scored as wins or losses.
+Each scan appends one line to `artifacts/scan_log.jsonl` (quotes, spots, strike distance, time left, model %, Kalshi price — no keys). Live tickets in `artifacts/trade_log.jsonl` record those fields plus fill status and settlement result (`yes`/`no`). Rows stay pending until a fill is confirmed; unfilled rests are not scored as wins or losses.
 
 ```bash
 pytest

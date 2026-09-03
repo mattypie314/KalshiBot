@@ -244,6 +244,9 @@ def test_default_bankroll_is_forty(monkeypatch):
     assert settings.min_strike_distance_pct == 0.005
     assert settings.max_daily_loss_dollars == 4.00
     assert settings.max_daily_losses == 2
+    assert settings.require_settlement_index is True
+    assert settings.require_maker is True
+    assert settings.news_pause is False
 
 
 def test_apply_kalshi_shell_env_reads_export_and_home(tmp_path, monkeypatch):

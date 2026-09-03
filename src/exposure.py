@@ -72,6 +72,8 @@ def blocks_new_idea(open_tickets: list[dict[str, Any]], idea: Idea) -> str | Non
 
     Max 1 open hourly ticket. A second is allowed only if it is a different
     coin and the opposite side — not another 'price stays put' fade.
+
+    Same-direction BTC+ETH Nos (the 2026-09-02 stacked losing card) sit.
     """
     if not open_tickets:
         return None

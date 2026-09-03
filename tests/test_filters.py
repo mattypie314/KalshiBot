@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta, timezone
 
+from dataclasses import replace
+
 from src.filters import FilterConfig, evaluate_market, maker_limit
 from src.markets import HourlyMarket
 
@@ -170,6 +172,55 @@ def test_filters_sit_on_elevated_vol():
     )
     assert result.idea is None
     assert any("elevated vol" in r.lower() for r in result.avoid_reasons)
+
+
+def test_filters_sit_when_spot_is_exchange_proxy():
+    market = _market(threshold=77000.0, yes_bid=0.80, yes_ask=0.82, no_bid=0.18, no_ask=0.20)
+    result = evaluate_market(
+        market,
+        spot=78120.0,
+        hourly_vol=0.004,
+        now=datetime.now(timezone.utc),
+        cfg=CFG,
+        settlement_index=False,
+    )
+    assert result.idea is None
+    assert any("proxy" in r.lower() or "brti" in r.lower() for r in result.avoid_reasons)
+
+
+def test_filters_sit_when_cannot_rest_maker():
+    # Locked book: would have to lift. Do not cross for a 6% edge.
+    market = _market(
+        threshold=77000.0,
+        yes_bid=0.82,
+        yes_ask=0.82,
+        no_bid=0.18,
+        no_ask=0.18,
+        yes_sub_title="$77,000 or above",
+    )
+    result = evaluate_market(
+        market,
+        spot=78120.0,
+        hourly_vol=0.004,
+        now=datetime.now(timezone.utc),
+        cfg=CFG,
+    )
+    assert result.idea is None
+    assert any("will not cross" in r.lower() or "maker" in r.lower() for r in result.avoid_reasons)
+
+
+def test_filters_sit_on_news_pause_hook():
+    market = _market(threshold=77000.0)
+    cfg = replace(CFG, news_pause=True)
+    result = evaluate_market(
+        market,
+        spot=78120.0,
+        hourly_vol=0.004,
+        now=datetime.now(timezone.utc),
+        cfg=cfg,
+    )
+    assert result.idea is None
+    assert any("news_pause" in r.lower() for r in result.avoid_reasons)
 
 
 def test_maker_limit_never_sits_on_or_through_the_ask():
