@@ -13,9 +13,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.cfindex import (
+    OFFICIAL_INDEX_IDS,
     average_settlement_window,
     history_query_timestamp,
     index_id_for,
+    index_ids_for,
+    is_official_index_label,
     official_index_label,
     official_yes,
     parse_cf_history_ticks,
@@ -69,7 +72,7 @@ def spot_source_label(asset: str, source: str) -> str:
 
 
 def is_scoreable_source(label: str, raw_source: str = "") -> bool:
-    if str(label or "").strip().upper() in {"BRTI", "ERTI"}:
+    if is_official_index_label(label):
         return True
     return is_settlement_index(raw_source)
 
@@ -111,8 +114,8 @@ def new_paper_row(
     hourly_vol: float = 0.0,
 ) -> dict[str, Any]:
     raw = str(spot_source or "").strip()
-    if raw.upper() in {"BRTI", "ERTI"}:
-        label = raw.upper()
+    if raw.upper() in OFFICIAL_INDEX_IDS:
+        label = "ETHUSD_RTI" if raw.upper() == "ERTI" else raw.upper()
     elif raw.upper() == "PROXY":
         label = "PROXY"
     elif is_settlement_index(raw):
@@ -276,27 +279,28 @@ def fetch_official_print(
     asset: str,
     close_time: datetime | str,
 ) -> float | None:
-    """Official 60s BRTI/ERTI average. Never Coinbase / Binance last tick."""
-    index_id = index_id_for(asset)
+    """Official 60s BRTI/ETHUSD_RTI average. Never Coinbase / Binance last tick."""
+    ids = index_ids_for(asset)
     getter = getattr(client, "get_cf_history", None)
-    if not index_id or getter is None:
+    if not ids or getter is None:
         return None
     if hasattr(client, "can_trade") and not client.can_trade:
         return None
     close = parse_ts(close_time) if not isinstance(close_time, datetime) else close_time
     if close is None:
         return None
-    for timespan in ("MINUTE", "HOUR"):
-        stamp = history_query_timestamp(close, timespan=timespan)
-        try:
-            blob = getter(index_id, timestamp=stamp, timespan=timespan)
-        except Exception as exc:  # noqa: BLE001
-            logger.info("CF history %s %s failed: %s", index_id, timespan, exc)
-            continue
-        ticks = parse_cf_history_ticks(blob)
-        average = average_settlement_window(ticks, close)
-        if average:
-            return average
+    for index_id in ids:
+        for timespan in ("MINUTE", "HOUR"):
+            stamp = history_query_timestamp(close, timespan=timespan)
+            try:
+                blob = getter(index_id, timestamp=stamp, timespan=timespan)
+            except Exception as exc:  # noqa: BLE001
+                logger.info("CF history %s %s failed: %s", index_id, timespan, exc)
+                continue
+            ticks = parse_cf_history_ticks(blob)
+            average = average_settlement_window(ticks, close)
+            if average:
+                return average
     return None
 
 

@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from src.cfindex import index_id_for, parse_cf_index_value
+from src.cfindex import index_ids_for, parse_cf_index_value
 
 logger = logging.getLogger(__name__)
 
@@ -84,14 +84,23 @@ class SpotService:
     def _cf_price(self, asset: str) -> float | None:
         if self._kalshi is None or not getattr(self._kalshi, "can_trade", False):
             return None
-        index_id = index_id_for(asset)
-        if not index_id:
-            return None
         getter = getattr(self._kalshi, "get_cf_values", None)
         if getter is None:
             return None
-        blob = getter(index_id)
-        return parse_cf_index_value(blob)
+        last_error: Exception | None = None
+        for index_id in index_ids_for(asset):
+            try:
+                blob = getter(index_id)
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                logger.info("cfbenchmarks %s failed for %s: %s", index_id, asset, exc)
+                continue
+            parsed = parse_cf_index_value(blob)
+            if parsed:
+                return parsed
+        if last_error is not None:
+            raise last_error
+        return None
 
     def _price(self, asset: str) -> tuple[float | None, str]:
         order = ["cfbenchmarks", self.preferred, "coinbase", "binance"]

@@ -160,7 +160,7 @@ Logs: `journalctl -u kalshi-hourly.service -n 80 --no-pager`
 | Require maker rest | on | `REQUIRE_MAKER` |
 | Operator news sit | off | `NEWS_PAUSE` |
 
-Settlement is the 60-second average of CF Benchmarks BRTI (BTC) / ERTI (ETH). The bot prices off that index via Kalshi when the key can; Coinbase/Binance are fallbacks. Vol is still exchange-realized. A 2× typical vol day sits.
+Settlement is the 60-second average of CF Benchmarks BRTI (BTC) / ETHUSD_RTI (ETH). The ETH ticker is `ETHUSD_RTI`, not `ERTI` (Kalshi returns Unknown id for ERTI). The bot prices off that index via Kalshi when the key can; Coinbase/Binance are fallbacks. Vol is still exchange-realized. A 2× typical vol day sits.
 
 Each scan appends one line to `artifacts/scan_log.jsonl` (quotes, spots, strike distance, time left, model %, Kalshi price — no keys). Live tickets in `artifacts/trade_log.jsonl` record those fields plus fill status and settlement result (`yes`/`no`). Rows stay pending until a fill is confirmed; unfilled rests are not scored as wins or losses.
 
@@ -172,7 +172,7 @@ Default fill model is **assumed-maker-fill**: the ticket is scored at the printe
 
 PROXY / missing BRTI/ERTI ideas are logged as **sit/unscored**. They are not paper fills.
 
-After that contract’s hour, `scan` / `once` / `eval` / `paper` settle pending tickets against the official CF Benchmarks 60-second average (BRTI for BTC, ERTI for ETH) — not Coinbase last tick. Unsettled rows stay pending until that print is available.
+After that contract’s hour, `scan` / `once` / `eval` / `paper` settle pending tickets against the official CF Benchmarks 60-second average (BRTI for BTC, ETHUSD_RTI for ETH) — not Coinbase last tick. Unsettled rows stay pending until that print is available.
 
 ```bash
 ./kb scan            # dry report; writes a paper row if an idea prints

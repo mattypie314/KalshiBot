@@ -46,7 +46,7 @@ Anti-revenge: if the last live hourly ticket **filled** and settled against us (
 
 ## The model
 
-1. Pull spot from CF Benchmarks BRTI (BTC) / ERTI (ETH) via Kalshi — the 60-second average Kalshi settles on. Coinbase/Binance are **display proxies only**, not settlement truth. Without BRTI/ERTI the coin sits (`REQUIRE_SETTLEMENT_INDEX=true`).
+1. Pull spot from CF Benchmarks BRTI (BTC) / ETHUSD_RTI (ETH) via Kalshi — the 60-second average Kalshi settles on. The ETH id is `ETHUSD_RTI`, not `ERTI`. Coinbase/Binance are **display proxies only**, not settlement truth. Without the official index the coin sits (`REQUIRE_SETTLEMENT_INDEX=true`).
 2. Pull hourly vol from recent 1-minute candles (~last 4 hours). Fallback if that fails: BTC 0.4%/hour, ETH 0.5%/hour. If realized vol is 2× typical, sit (news tape)
 3. Measure how far the line is from spot, in typical remaining-hour moves (z-score)
 4. Turn that into a fair probability that price finishes above the line

@@ -4,6 +4,8 @@ from src.cfindex import (
     average_settlement_window,
     history_query_timestamp,
     index_id_for,
+    index_ids_for,
+    is_official_index_label,
     official_yes,
     parse_cf_history_ticks,
     parse_cf_index_value,
@@ -21,7 +23,11 @@ def test_parse_cf_kalshi_envelope():
     assert parse_cf_index_value({"payload": {"value": 2395.1}}) == 2395.1
     assert parse_cf_index_value({"error": "nope"}) is None
     assert index_id_for("BTC") == "BRTI"
-    assert index_id_for("ETH") == "ERTI"
+    assert index_id_for("ETH") == "ETHUSD_RTI"
+    assert index_ids_for("ETH")[0] == "ETHUSD_RTI"
+    assert "ERTI" in index_ids_for("ETH")
+    assert is_official_index_label("ETHUSD_RTI")
+    assert is_official_index_label("ERTI")  # legacy alias still scores paper rows
 
 
 def test_history_ticks_and_60s_average():

@@ -35,7 +35,7 @@ Prod is live Kalshi — real cash (`external-api.kalshi.com`). Demo is paper (`d
 
 ## What one run does
 
-1. Pull BTC and ETH spot from CF Benchmarks BRTI/ERTI via Kalshi (the 60-second settlement average). Coinbase is a **display proxy**, not the print. Without BRTI/ERTI the coin sits. Binance often 451s in the US.
+1. Pull BTC and ETH spot from CF Benchmarks BRTI / ETHUSD_RTI via Kalshi (the 60-second settlement average). ETH’s ticker is `ETHUSD_RTI`, not `ERTI`. Coinbase is a **display proxy**, not the print. Without the official index the coin sits. Binance often 451s in the US.
 2. Estimate hourly vol from recent 1-minute candles (fallback: BTC 0.4%/hour, ETH 0.5%/hour). If vol is 2× typical, sit — that is a news tape, not a range day.
 3. Load open hourly above/below books (up to 12 strikes per coin).
 4. Score Yes (finishes above) and No (at or below).
