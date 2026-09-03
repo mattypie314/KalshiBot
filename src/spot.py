@@ -29,6 +29,7 @@ class SpotSnapshot:
     prices: dict[str, float] = field(default_factory=dict)
     hourly_vol: dict[str, float] = field(default_factory=dict)
     source: str = "unknown"
+    sources: dict[str, str] = field(default_factory=dict)
     vol_source: dict[str, str] = field(default_factory=dict)
     note: str = (
         "Spot prefers CF Benchmarks BRTI/ERTI (Kalshi settlement). "
@@ -138,10 +139,16 @@ class SpotService:
             price, src = self._price(asset)
             if price:
                 snap.prices[asset] = price
-                snap.source = src
+                snap.sources[asset] = src
             vol, vol_src = self._vol(asset, fallbacks.get(asset, FALLBACK_VOL.get(asset, 0.004)))
             snap.hourly_vol[asset] = vol
             snap.vol_source[asset] = vol_src
+        if snap.sources:
+            uniq = list(dict.fromkeys(snap.sources.values()))
+            if len(uniq) == 1:
+                snap.source = uniq[0]
+            else:
+                snap.source = " ".join(f"{asset}={snap.sources[asset]}" for asset in snap.sources)
         if snap.source == "cfbenchmarks":
             snap.note = (
                 "Spot is CF Benchmarks BRTI/ERTI via Kalshi (settlement index). "

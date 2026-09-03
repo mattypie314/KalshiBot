@@ -48,6 +48,17 @@ def test_load_state_keeps_ticket_across_hour_roll(tmp_path: Path):
     assert "loss_this_hour" not in loaded
 
 
+def test_resolve_settled_ticket_skips_loss_when_unfilled():
+    class Client:
+        def get_market(self, ticker):
+            return {"result": "no", "status": "determined"}
+
+    state = {"last_ticker": "KXETHD-1", "last_side": "Yes", "last_contracts": 7}
+    out = _resolve_settled_ticket(Client(), state, fills=[], fills_available=True)
+    assert "loss_this_hour" not in out
+    assert "last_ticker" not in out
+
+
 def test_resolve_settled_ticket_marks_loss():
     class Client:
         def get_market(self, ticker):

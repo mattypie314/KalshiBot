@@ -12,7 +12,7 @@ Hourly BTC and ETH threshold scanner for Kalshi (`KXBTCD`, `KXETHD`).
 
 Pi operating manual (PDF): `docs/KalshiBot-operating-manual.pdf`. Rebuild with `python3 scripts/build_operating_manual.py`.
 
-Not financial advice. You can lose the full amount you put on a contract. Demo first. `.env` can stay dry. Live is a one-run confirm: type `LIVE` at the prompt, or pass `--confirm LIVE`.
+Not financial advice. You can lose the full amount you put on a contract. Demo first. `.env` can stay dry. Live is a one-run confirm: type `LIVE` at the prompt, or pass `--confirm LIVE` on a keyboard. Unattended live still needs both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES`.
 
 The 15-minute campaign, maker loop, dashboard, and research desk are parked on the `archive/campaign-desk` branch for later.
 
@@ -31,7 +31,7 @@ chmod +x kb
 Pick a mode from a menu, or pass it on the command line:
 
 ```bash
-./kb                 # menu: 1 scan / 2 once / 3 auth / 4 live / 5 env
+./kb                 # menu: 1 scan / 2 once / 3 auth / 4 live / 5 env / 6 eval
 ./kb scan            # also: s  or  1
 ./kb scan --asset BTC
 ./kb once            # also: o  or  2   dry-run limit payloads
@@ -41,11 +41,12 @@ Pick a mode from a menu, or pass it on the command line:
 ./kb env --demo      # write USE_DEMO=true
 ./kb auth --prod
 ./kb live --prod
+./kb eval            # also: v  or  6   local journal / scan-log report
 ```
 
 `python -m src.main …` and (after `pip install -e .`) `kalshibot` / `kb` do the same thing. No args on a TTY opens the menu; no args in a script defaults to `scan`.
 
-A **live Kalshi key** (created on kalshi.com, not demo) returns 401 on demo. Use `--prod` for that key, or `USE_DEMO=false ./kb auth`. Live does **not** require editing `LIVE_TRADING` in `.env`. On a terminal, `./kb live` asks you to type `LIVE`. Scripts can use `--confirm LIVE`. GitHub Actions stays dry.
+A **live Kalshi key** (created on kalshi.com, not demo) returns 401 on demo. Use `--prod` for that key, or `USE_DEMO=false ./kb auth`. On a terminal, `./kb live` asks you to type `LIVE` (`.env` can stay dry). Unattended systemd / CI has no TTY: both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES` are required, and `HALTED` still wins. GitHub Actions stays dry.
 
 Exit codes: `0` success or `NO_ACTIONABLE_EDGE`, `2` config/auth, `3` rate limited.
 
@@ -153,11 +154,15 @@ Logs: `journalctl -u kalshi-hourly.service -n 80 --no-pager`
 | Hard dollar cap | $2.00 | `MAX_RISK_DOLLARS` |
 | Min fade distance | 0.50% | `MIN_STRIKE_DISTANCE_PCT` |
 | Fractional Kelly | 0.25× | `KELLY_MULT` |
+| Daily filled-loss sit | $4 or 2 losses | `MAX_DAILY_LOSS_DOLLARS` / `MAX_DAILY_LOSSES` |
 
 Settlement is the 60-second average of CF Benchmarks BRTI (BTC) / ERTI (ETH). The bot prices off that index via Kalshi when the key can; Coinbase/Binance are fallbacks. Vol is still exchange-realized. A 2× typical vol day sits.
 
+Each scan appends one line to `artifacts/scan_log.jsonl` (quotes, spots, ideas — no keys). Live tickets in `artifacts/trade_log.jsonl` stay pending until a fill is confirmed; unfilled rests are not scored as wins or losses.
+
 ```bash
 pytest
+./kb eval    # local journal + historical GitHub-scan replay; does not claim edge
 ```
 
 ## Later

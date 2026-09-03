@@ -17,7 +17,7 @@ Set `BANKROLL=40` in `.env` if you override it. The code default is **$40**.
 - **Host:** a live Kalshi key needs `USE_DEMO=false` (edit `.env` or `./kb env --prod`). Demo host 401s that key.
 - **Live (keyboard):** `./kb live --prod` then type `LIVE` (or `--confirm LIVE`). `.env` can stay dry.
 - **Halted:** `HALTED=true` (the default) refuses live orders even with `--confirm LIVE`. Disable the Pi timer: `sudo systemctl disable --now kalshi-hourly.timer`.
-- **Live (unattended, only after unhalt):** systemd timer at minute 3 Eastern runs `live --prod --confirm LIVE`. Same caps.
+- **Live (unattended, only after unhalt):** systemd has no TTY. It needs `HALTED=false` **and** both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES`. `--confirm LIVE` alone does not arm a timer or GitHub Action.
 
 A contract pays $1 if you are right and $0 if you are wrong. The price (like 0.42) is what you pay per contract. That 42¢ is also the market’s implied chance.
 
@@ -40,7 +40,7 @@ How size is picked:
 4. One contract is allowed only if that one contract is still ≤ $2
 5. Do not stack four $2 tickets in one morning. Max 1 open hourly idea (2 only if different coin and opposite side).
 
-Anti-revenge: if the last live hourly ticket settled against us (or a fill reports negative pnl), the next idea cannot size bigger than last time. If last size was zero, it sits. The ticket survives the Eastern `:00` hour roll so a just-settled loss still counts. Reports and settlements are America/New_York.
+Anti-revenge: if the last live hourly ticket **filled** and settled against us (or a fill reports negative pnl), the next idea cannot size bigger than last time. If last size was zero, it sits. The ticket survives the Eastern `:00` hour roll so a just-settled loss still counts. Unfilled rests are not wins or losses. After 2 filled losses or $4 filled loss in one Eastern day, sit. Reports and settlements are America/New_York.
 
 ## The model
 
@@ -79,7 +79,8 @@ Skip unless every box is checked:
 - If the side needs a huge jump (|z| > 3.5), skip — treat as news-only, not a vol bet
 - CPI window: sit 8:15–8:45 AM ET on CPI print days
 - FOMC window: sit 1:45–2:45 PM ET on FOMC days
-- If the close-strike / buy-No bucket in `artifacts/trade_log.jsonl` is underwater (3+ settled, net red), that rule turns off
+- If the close-strike / buy-No bucket in `artifacts/trade_log.jsonl` is underwater (3+ **filled** settled, net red), that rule turns off
+- Daily sit: 2 filled losses or $4 filled loss (ET day). Caps, not a fitted edge.
 
 If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid action.
 
@@ -103,7 +104,7 @@ If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid
 - No flipping always-No to always-Yes on tight strikes — both are the same mistake
 - No firing every hour just because the timer ran. Sitting is a valid action
 - No trading through scheduled CPI/FOMC windows or 2×-vol news tape
-- No live orders without typing `LIVE`, passing `--confirm LIVE`, or setting both env safety flags
+- No live orders without typing `LIVE` on a keyboard, or setting both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES` (and `HALTED=false`)
 
 ## Operating checklist
 

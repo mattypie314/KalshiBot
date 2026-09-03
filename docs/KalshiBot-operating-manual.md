@@ -54,8 +54,10 @@ Prod is live Kalshi — real cash (`external-api.kalshi.com`). Demo is paper (`d
 - Ban close strikes. Do not fade a line inside ~0.5–0.75% of spot. A fat model number on a tight strike is still a coin-flip.
 - |z| > 2.5 needs 8% edge. |z| > 3.5 skip (news-only jump).
 - Sit out CPI 8:15–8:45 AM ET and FOMC 1:45–2:45 PM ET on those days. Sit a coin when vol is 2× typical.
-- If the last live hourly ticket settled against you, the next idea cannot size up.
-- Every live ticket is logged (strike distance, time left, fair %, Kalshi price, result). A red close-No bucket turns that rule off.
+- If the last live hourly ticket **filled** and settled against you, the next idea cannot size up.
+- After 2 filled losses or $4 filled loss in an Eastern day, sit.
+- Every live ticket is logged (strike distance, time left, fair %, Kalshi price, fill status, result). A red close-No bucket (filled only) turns that rule off.
+- `./kb eval` summarizes the journal and scan log. It does not claim the strategy is profitable.
 
 ## Your Pi layout
 
@@ -71,7 +73,7 @@ USE_DEMO=false
 SPOT_SOURCE=cfbenchmarks
 ```
 
-Keys do not belong in `.env`. Leave `LIVE_TRADING` off. The timer confirms live on the command line.
+Keys do not belong in `.env`. Leave `LIVE_TRADING` and `CONFIRM_LIVE` off unless you are unhalting the timer. Unattended live has no keyboard: both flags must be on, and `HALTED=false`.
 
 `~/.kalshi/env` may use bash `export KEY=value`. systemd cannot read that. The bot loads it in Python.
 
@@ -103,6 +105,7 @@ source .venv/bin/activate
 | `./kb env` | e / 5 | Show DEMO vs PROD |
 | `./kb env --prod` | | Write USE_DEMO=false |
 | `./kb env --demo` | | Write USE_DEMO=true |
+| `./kb eval` | v / 6 | Local journal / scan-log report (no orders) |
 | `./kb --help` | | Help |
 
 `--prod` / `--demo` also work on `scan` and `once`.
@@ -121,7 +124,9 @@ When unhalted, at minute 3 Eastern of every hour the Pi runs:
 /home/KalshiBot/.venv/bin/python -m src.main live --prod --confirm LIVE
 ```
 
-Same caps: one open idea, about $1.75, $2 max, post-only, far strikes only. If the Pi was off at :03, it does not fire late. If nothing clears 6% edge, it sits.
+That only arms if `.env` also has `HALTED=false`, `LIVE_TRADING=true`, and `CONFIRM_LIVE=YES`. `--confirm LIVE` by itself is not enough without a TTY.
+
+Same caps: one open idea, about $1.75, $2 max, post-only, far strikes only, sit after 2 filled losses or $4 filled loss in the Eastern day. If the Pi was off at :03, it does not fire late. If nothing clears 6% edge, it sits. Unfilled maker rests are not counted as wins or losses.
 
 On (real money every hour):
 

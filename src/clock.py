@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
+_ET_HUMAN = re.compile(
+    r"^(?P<date>\d{4}-\d{2}-\d{2})\s+(?P<hour>\d{1,2}):(?P<minute>\d{2})\s+"
+    r"(?P<ampm>AM|PM)\s+(?P<zone>EDT|EST|ET)$"
+)
 
 
 def use_eastern_process_tz() -> None:
@@ -77,9 +82,19 @@ def parse_ts(value: object) -> datetime | None:
         text = text[:-1] + "+00:00"
     try:
         dt = datetime.fromisoformat(text)
+        return to_et(dt)
     except ValueError:
+        pass
+    match = _ET_HUMAN.match(text)
+    if not match:
         return None
-    return to_et(dt)
+    hour = int(match.group("hour")) % 12
+    if match.group("ampm") == "PM":
+        hour += 12
+    naive = datetime.fromisoformat(
+        f"{match.group('date')}T{hour:02d}:{match.group('minute')}:00"
+    )
+    return naive.replace(tzinfo=ET)
 
 
 def same_et_hour(value: object, now: datetime | None = None) -> bool:
@@ -87,3 +102,10 @@ def same_et_hour(value: object, now: datetime | None = None) -> bool:
     if parsed is None:
         return False
     return hour_key(parsed) == hour_key(now)
+
+
+def same_et_day(value: object, now: datetime | None = None) -> bool:
+    parsed = parse_ts(value)
+    if parsed is None:
+        return False
+    return to_et(parsed).date() == to_et(now).date()

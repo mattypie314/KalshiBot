@@ -13,10 +13,22 @@ from typing import Any
 
 from src.clock import configure_logging, format_et, hour_key, same_et_hour, to_et
 from src.config import EXIT_CONFIG, EXIT_OK, EXIT_RATE_LIMITED, HourlySettings, load_settings
+from src.evaluate import run_eval
 from src.executor import execute_ideas
 from src.exposure import blocks_new_idea, open_hourly_tickets
 from src.filters import FilterConfig, FilterResult, Idea, evaluate_market, news_blackout_active
-from src.journal import append_trade, bucket_underwater, load_trades, new_trade_row, resolve_pending, write_trades
+from src.journal import (
+    append_trade,
+    bucket_underwater,
+    daily_loss_reason,
+    fill_status_from_order,
+    load_trades,
+    new_trade_row,
+    parse_count,
+    resolve_pending,
+    ticker_in_fills,
+    write_trades,
+)
 from src.kalshi_client import AuthConfigError, ForbiddenError, KalshiClient, RateLimitedError
 from src.markets import MarketDiscovery
 from src.report import format_report
@@ -104,7 +116,100 @@ def save_state(path: Path, state: dict[str, Any]) -> None:
     path.write_text(json.dumps(state, indent=2))
 
 
-def _resolve_settled_ticket(client: KalshiClient, state: dict[str, Any]) -> dict[str, Any]:
+SCAN_LOG_SECRET_KEYS = frozenset(
+    {
+        "kalshi_api_key_id",
+        "kalshi_private_key",
+        "kalshi_private_key_path",
+        "api_key_id",
+        "private_key",
+        "pem",
+    }
+)
+
+
+def scan_log_row(
+    *,
+    now: datetime,
+    spots: Any,
+    markets: list[Any],
+    ideas: list[Idea],
+    nearby: list[FilterResult],
+    avoided: list[FilterResult],
+    settings: HourlySettings,
+    action: str,
+) -> dict[str, Any]:
+    """Structured scan snapshot. No secrets, no full report markdown."""
+    return {
+        "ts": format_et(now),
+        "action": action,
+        "spots": spots.prices,
+        "spot_sources": getattr(spots, "sources", {}) or {},
+        "vol": spots.hourly_vol,
+        "vol_source": getattr(spots, "vol_source", {}) or {},
+        "markets": [
+            {
+                "ticker": market.ticker,
+                "asset": market.asset,
+                "threshold": market.threshold,
+                "yes_bid": market.yes_bid,
+                "yes_ask": market.yes_ask,
+                "no_bid": market.no_bid,
+                "no_ask": market.no_ask,
+                "yes_ask_size": market.yes_ask_size,
+                "no_ask_size": market.no_ask_size,
+                "close_time": market.close_time.isoformat(),
+                "status": market.status,
+            }
+            for market in markets
+        ],
+        "ideas": [
+            {
+                "ticker": idea.market.ticker,
+                "side": idea.side,
+                "fair": idea.fair,
+                "net_edge": idea.net_edge,
+                "entry_price": idea.entry_price,
+                "limit_price": idea.limit_price,
+                "contracts": idea.contracts,
+                "z": idea.z,
+                "distance_pct": idea.strike_distance_pct,
+                "bucket": idea.bucket,
+            }
+            for idea in ideas
+        ],
+        "nearby": [row.watch_note for row in nearby[:12]],
+        "avoided_count": len(avoided),
+        "halted": settings.halted,
+        "live_enabled": settings.live_enabled,
+    }
+
+
+def append_scan_log(path: Path, row: dict[str, Any]) -> None:
+    if SCAN_LOG_SECRET_KEYS & {str(key).lower() for key in row}:
+        raise ValueError("scan log refused: payload contains a secret key name")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as handle:
+        handle.write(json.dumps(row, default=str) + "\n")
+
+
+def _safe_fills(client: KalshiClient) -> tuple[list[dict[str, Any]], bool]:
+    if not client.can_trade:
+        return [], False
+    try:
+        return list(client.get_fills(limit=50) or []), True
+    except Exception as exc:  # noqa: BLE001
+        logger.info("fills unavailable: %s", exc)
+        return [], False
+
+
+def _resolve_settled_ticket(
+    client: KalshiClient,
+    state: dict[str, Any],
+    *,
+    fills: list[dict[str, Any]] | None = None,
+    fills_available: bool = False,
+) -> dict[str, Any]:
     """If the last live ticker has a yes/no result, mark a loss and clear the ticket."""
     ticker = str(state.get("last_ticker") or "")
     side = str(state.get("last_side") or "")
@@ -120,6 +225,11 @@ def _resolve_settled_ticket(client: KalshiClient, state: dict[str, Any]) -> dict
         return state
     lost = market_result_is_loss(market, side)
     if lost is None:
+        return state
+    filled = ticker_in_fills(fills, ticker) if fills_available else None
+    if filled is False:
+        state.pop("last_ticker", None)
+        state.pop("last_side", None)
         return state
     if lost:
         state["loss_this_hour"] = True
@@ -178,9 +288,16 @@ def run_scan(
         private_key_path=settings.kalshi_private_key_path,
         trading_base_url=settings.trading_base_url,
     )
-    state = _resolve_settled_ticket(client, state)
+    fills, fills_available = _safe_fills(client)
+    state = _resolve_settled_ticket(client, state, fills=fills, fills_available=fills_available)
     journal_path = artifacts / "trade_log.jsonl"
-    trades = resolve_pending(load_trades(journal_path), client.get_market, market_result_is_loss)
+    trades = resolve_pending(
+        load_trades(journal_path),
+        client.get_market,
+        market_result_is_loss,
+        fills=fills,
+        fills_available=fills_available,
+    )
     write_trades(journal_path, trades)
     state["kill_close_no"] = bucket_underwater(trades, "close_no")
     state["kill_close_yes"] = bucket_underwater(trades, "close_yes")
@@ -208,6 +325,7 @@ def run_scan(
                 assets,
                 max_per_asset=settings.max_markets_per_asset,
                 spots=spots.prices,
+                min_distance_pct=settings.min_strike_distance_pct,
             )
             settlements = discovery.next_settlements(markets)
         except RateLimitedError as exc:
@@ -259,6 +377,16 @@ def run_scan(
         ideas.sort(key=lambda i: i.net_edge, reverse=True)
         extra = ideas[settings.max_ideas_per_run :]
         ideas = ideas[: settings.max_ideas_per_run]
+        sit_day = daily_loss_reason(
+            trades,
+            now,
+            max_dollars=settings.max_daily_loss_dollars,
+            max_losses=settings.max_daily_losses,
+        )
+        if sit_day:
+            for idea in ideas:
+                extra.append(idea)
+            ideas = []
         open_tickets = open_hourly_tickets(client, state)
         kept: list[Idea] = []
         for idea in ideas:
@@ -275,11 +403,16 @@ def run_scan(
             kept.append(idea)
         ideas = kept
         for idea in extra:
+            note = (
+                f"{idea.side} held back ({sit_day})"
+                if sit_day
+                else f"{idea.side} net {idea.net_edge:.1%} held back (max {settings.max_ideas_per_run} idea/run)"
+            )
             nearby.append(
                 FilterResult(
                     market=idea.market,
                     nearby=True,
-                    watch_note=f"{idea.side} net {idea.net_edge:.1%} held back (max {settings.max_ideas_per_run} idea/run)",
+                    watch_note=note,
                 )
             )
         report = format_report(
@@ -298,12 +431,15 @@ def run_scan(
             "spots": spots.prices,
             "vol": spots.hourly_vol,
             "spot_source": spots.source,
+            "spot_sources": spots.sources,
+            "vol_source": spots.vol_source,
             "settlement_note": spots.note,
             "markets": [m.ticker for m in markets],
             "actionable": [i.market.ticker for i in ideas],
             "report": report,
         }
         (artifacts / "last_run.json").write_text(json.dumps(scan_blob, indent=2, default=str))
+        scan_action = "scan"
 
         if not ideas:
             return EXIT_OK
@@ -357,6 +493,7 @@ def run_scan(
                 return EXIT_CONFIG
             if live and placed.get("placed"):
                 idea = ideas[0]
+                order = placed["placed"][0] if placed.get("placed") else {}
                 state["hour_key"] = _hour_key(now)
                 state["last_contracts"] = idea.contracts
                 state["last_ticker"] = idea.market.ticker
@@ -377,6 +514,12 @@ def run_scan(
                         risk_dollars=idea.risk_dollars,
                         hourly_vol=spots.hourly_vol.get(idea.market.asset) or 0.0,
                         source=spots.source,
+                        order_id=str(order.get("order_id") or ""),
+                        client_order_id=str(
+                            (placed.get("orders") or [{}])[0].get("client_order_id") or ""
+                        ),
+                        fill_status=fill_status_from_order(order),
+                        filled_contracts=parse_count(order.get("fill_count")),
                     ),
                 )
                 save_state(Path(settings.state_path), state)
@@ -488,6 +631,9 @@ MODE_ALIASES = {
     "5": "env",
     "e": "env",
     "env": "env",
+    "6": "eval",
+    "v": "eval",
+    "eval": "eval",
 }
 
 MODE_MENU = """\
@@ -497,6 +643,7 @@ KalshiBot — pick a mode
   3  auth   test key + PEM
   4  live   real limits (type LIVE — no .env edit)
   5  env    show / set DEMO vs PROD in .env
+  6  eval   local journal / scan-log report (no orders)
 
 Mode [scan]: """
 
@@ -549,17 +696,22 @@ def live_is_armed(
     isatty: bool | None = None,
     prompt: Callable[[str], str] | None = None,
 ) -> bool:
-    """Arm live for this run only. Env flags, --confirm LIVE, or a TTY LIVE prompt."""
+    """Arm live for this run only.
+
+    Unattended (no TTY, including systemd and GitHub Actions) requires both
+    LIVE_TRADING=true and CONFIRM_LIVE=YES, and HALTED must be false.
+    A keyboard session may type LIVE or pass --confirm LIVE without those env flags.
+    """
     if settings.halted:
         return False
     if settings.live_enabled:
-        return True
-    if _typed_live(confirm):
         return True
     if isatty is None:
         isatty = sys.stdin.isatty()
     if not isatty:
         return False
+    if _typed_live(confirm):
+        return True
     where = " on DEMO" if settings.use_demo else " on PROD"
     reply = (prompt or input)(f"Type LIVE to place live limits{where} (anything else aborts): ")
     return _typed_live(reply)
@@ -611,7 +763,7 @@ def cli() -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Kalshi hourly BTC/ETH threshold scanner. "
-        "Run with no args for a mode menu. Shortcuts: s/o/a/l or 1-4."
+        "Run with no args for a mode menu. Shortcuts: s/o/a/l/e/v or 1-6."
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -639,6 +791,8 @@ def main(argv: list[str] | None = None) -> int:
 
     envp = sub.add_parser("env", help="Show or set demo vs prod in .env")
     _add_host_flags(envp)
+
+    sub.add_parser("eval", help="Summarize local journal and scan log (no orders)")
 
     args = parser.parse_args(normalize_argv(argv))
     configure_logging()
@@ -686,6 +840,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_scan(settings, asset=None, place=True, force_live=True, armed=True)
     if args.command == "env":
         return run_env(settings, prod=bool(args.prod), demo=bool(args.demo))
+    if args.command == "eval":
+        return run_eval(settings)
     return EXIT_CONFIG
 
 

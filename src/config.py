@@ -94,6 +94,10 @@ class HourlySettings(BaseSettings):
     min_minutes_left: float = 3
     max_spread: float = 0.06
     min_visible_depth_contracts: int = 5
+    # Sit the rest of the Eastern day after this much settled, filled loss.
+    # Safety cap, not a fitted edge. Two $2 tickets = $4.
+    max_daily_loss_dollars: float = 4.00
+    max_daily_losses: int = 2
 
     spot_source: str = "cfbenchmarks"
     hourly_vol_fallback_btc: float = 0.004
@@ -102,6 +106,7 @@ class HourlySettings(BaseSettings):
     request_timeout_seconds: float = 20.0
     artifacts_dir: str = "artifacts"
     state_path: str = "artifacts/hourly_state.json"
+    scan_log_path: str = "artifacts/scan_log.jsonl"
 
     @field_validator("confirm_live", mode="before")
     @classmethod

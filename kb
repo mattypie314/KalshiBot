@@ -5,6 +5,7 @@
 #                 ./kb auth     (a / 3)
 #                 ./kb live     (l / 4)
 #                 ./kb env      (e / 5)   show/set USE_DEMO in .env
+#                 ./kb eval     (v / 6)   journal / scan-log report
 root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 export PYTHONPATH="${PYTHONPATH:-$root}"
 cd "$root" || exit 1
