@@ -291,6 +291,20 @@ class KalshiClient:
         """Kalshi CF Benchmarks passthrough. Requires a signed live key."""
         return self.get_json("/cfbenchmarks/values", params={"id": index_id}, auth=True)
 
+    def get_cf_history(
+        self,
+        index_id: str,
+        *,
+        timestamp: str,
+        timespan: str = "HOUR",
+    ) -> dict[str, Any]:
+        """Historical BRTI/ERTI ticks via Kalshi's CF Benchmarks passthrough."""
+        return self.get_json(
+            "/cfbenchmarks/history/values",
+            params={"id": index_id, "timespan": timespan, "timestamp": timestamp},
+            auth=True,
+        )
+
     def get_market(self, ticker: str) -> dict[str, Any]:
         """Fresh public quote for one ticker. Used to requote before a live post."""
         data = self.get_json(f"/markets/{ticker}", auth=False)

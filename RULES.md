@@ -83,6 +83,7 @@ Skip unless every box is checked:
 - FOMC window: sit 1:45–2:45 PM ET on FOMC days
 - If the close-strike / buy-No bucket in `artifacts/trade_log.jsonl` is underwater (3+ **filled** settled, net red), that rule turns off
 - Daily sit: 2 filled losses or $4 filled loss (ET day). Caps, not a fitted edge.
+- Paper tape (`./kb scan` / `./kb once` → `artifacts/paper_log.jsonl`) is a counterfactual. Default assumed-maker-fill at the printed limit. PROXY / missing BRTI/ERTI = sit/unscored. Settle vs official 60s BRTI/ERTI average. Do not retune these rules from paper PnL.
 
 If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid action.
 
@@ -116,3 +117,4 @@ If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid
 - Need 6%+ net edge after fees. Far strikes only. One open hourly idea
 - One limit per run, rest if you can, skip if you cannot. Log strike distance, time left, fair %, Kalshi price, result
 - Re-check after spot or time moves; short-hour edges die fast
+- Paper: `./kb scan` then `./kb eval` / `./kb paper`. Assumed maker fill, not live. Live stays off until you type LIVE.

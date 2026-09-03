@@ -60,6 +60,9 @@ def test_eval_report_states_insufficient_data():
     assert "Insufficient live data" in text
     assert "Still actionable under current rules: 0" in text
     assert "Not financial advice" in text
+    assert "Not live profitability" in text
+    assert "assumed-maker-fill" in text
+    assert "paper_log.jsonl" in text
 
 
 def test_scan_log_row_has_no_secret_keys():

@@ -31,7 +31,7 @@ chmod +x kb
 Pick a mode from a menu, or pass it on the command line:
 
 ```bash
-./kb                 # menu: 1 scan / 2 once / 3 auth / 4 live / 5 env / 6 eval
+./kb                 # menu: 1 scan / 2 once / 3 auth / 4 live / 5 env / 6 eval / 7 paper
 ./kb scan            # also: s  or  1
 ./kb scan --asset BTC
 ./kb once            # also: o  or  2   dry-run limit payloads
@@ -41,7 +41,8 @@ Pick a mode from a menu, or pass it on the command line:
 ./kb env --demo      # write USE_DEMO=true
 ./kb auth --prod
 ./kb live --prod
-./kb eval            # also: v  or  6   local journal / scan-log report
+./kb eval            # also: v  or  6   paper PnL + live journal / scan-log (no orders)
+./kb paper           # also: p  or  7   same report; paper tape is listed separately
 ```
 
 `python -m src.main …` and (after `pip install -e .`) `kalshibot` / `kb` do the same thing. No args on a TTY opens the menu; no args in a script defaults to `scan`.
@@ -163,9 +164,27 @@ Settlement is the 60-second average of CF Benchmarks BRTI (BTC) / ERTI (ETH). Th
 
 Each scan appends one line to `artifacts/scan_log.jsonl` (quotes, spots, strike distance, time left, model %, Kalshi price — no keys). Live tickets in `artifacts/trade_log.jsonl` record those fields plus fill status and settlement result (`yes`/`no`). Rows stay pending until a fill is confirmed; unfilled rests are not scored as wins or losses.
 
+## Paper PnL (dry-scan journal)
+
+`./kb scan` and `./kb once` do **not** place orders. When they print an actionable idea they append a **paper** ticket to `artifacts/paper_log.jsonl` — never to the live fill log.
+
+Default fill model is **assumed-maker-fill**: the ticket is scored at the printed maker limit (“if we got that quote”). That is not a real Kalshi fill. Set `PAPER_FILL_MODEL=unfilled` for a stricter tape that leaves them unscored.
+
+PROXY / missing BRTI/ERTI ideas are logged as **sit/unscored**. They are not paper fills.
+
+After that contract’s hour, `scan` / `once` / `eval` / `paper` settle pending tickets against the official CF Benchmarks 60-second average (BRTI for BTC, ERTI for ETH) — not Coinbase last tick. Unsettled rows stay pending until that print is available.
+
+```bash
+./kb scan            # dry report; writes a paper row if an idea prints
+./kb eval            # paper PnL is a separate section from live
+./kb paper           # same report
+```
+
+`./kb eval` reports paper n tickets, wins/losses, assumed-fill PnL, pending, and sit/unscored. This is **not live profitability**. Live stays dual-gated and off (`HALTED=true`, `LIVE_TRADING=false`, `CONFIRM_LIVE=NO`). Do not retune the 6% edge, close-strike, or size caps from this tape.
+
 ```bash
 pytest
-./kb eval    # local journal + historical GitHub-scan replay; does not claim edge
+./kb eval    # paper tape + local live journal + historical GitHub-scan replay; does not claim edge
 ```
 
 ## Later

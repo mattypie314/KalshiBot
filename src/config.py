@@ -113,6 +113,21 @@ class HourlySettings(BaseSettings):
     artifacts_dir: str = "artifacts"
     state_path: str = "artifacts/hourly_state.json"
     scan_log_path: str = "artifacts/scan_log.jsonl"
+    # Counterfactual dry-scan tape. Never mixed with live fills in trade_log.jsonl.
+    paper_log_path: str = "artifacts/paper_log.jsonl"
+    # assumed-maker-fill: score at the printed maker limit ("if we got that quote").
+    # unfilled: leave tickets unscored until/unless a real fill exists (stricter).
+    paper_fill_model: str = "assumed-maker-fill"
+
+    @field_validator("paper_fill_model", mode="before")
+    @classmethod
+    def _paper_fill_model(cls, value: object) -> str:
+        text = str(value or "assumed-maker-fill").strip().lower().replace("_", "-")
+        if text in {"assumed-maker-fill", "assumed", "maker", "default"}:
+            return "assumed-maker-fill"
+        if text in {"unfilled", "none", "strict"}:
+            return "unfilled"
+        return "assumed-maker-fill"
 
     @field_validator("confirm_live", mode="before")
     @classmethod

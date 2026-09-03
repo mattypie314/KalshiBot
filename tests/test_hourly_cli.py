@@ -13,6 +13,9 @@ def test_normalize_expands_shortcuts():
     assert normalize_argv(["5"]) == ["env"]
     assert normalize_argv(["eval"]) == ["eval"]
     assert normalize_argv(["6"]) == ["eval"]
+    assert normalize_argv(["paper"]) == ["paper"]
+    assert normalize_argv(["p"]) == ["paper"]
+    assert normalize_argv(["7"]) == ["paper"]
     assert normalize_argv(["1", "--asset", "BTC"]) == ["scan", "--asset", "BTC"]
     assert normalize_argv(["scan", "--asset", "ETH"]) == ["scan", "--asset", "ETH"]
 
@@ -222,6 +225,27 @@ def test_eval_prints_insufficient_data(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Insufficient live data" in out
     assert "Still actionable under current rules: 0" in out
+    assert "Not live profitability" in out
+    assert "paper_log.jsonl" in out
+    assert "assumed-maker-fill" in out
+
+
+def test_paper_alias_prints_paper_section(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "src.main.load_settings",
+        lambda: HourlySettings(
+            _env_file=None,
+            artifacts_dir=str(tmp_path),
+            scan_log_path=str(tmp_path / "scan_log.jsonl"),
+            paper_log_path=str(tmp_path / "paper_log.jsonl"),
+        ),
+    )
+    assert main(["paper"]) == 0
+    out = capsys.readouterr().out
+    assert "Paper journal" in out
+    assert "This is not live profitability" in out
+    assert "Sit / unscored" in out
 
 
 def test_env_show_prints_nano_path(monkeypatch, tmp_path, capsys):
@@ -247,6 +271,9 @@ def test_default_bankroll_is_forty(monkeypatch):
     assert settings.require_settlement_index is True
     assert settings.require_maker is True
     assert settings.news_pause is False
+    assert settings.paper_fill_model == "assumed-maker-fill"
+    assert settings.paper_log_path == "artifacts/paper_log.jsonl"
+    assert settings.live_enabled is False
 
 
 def test_apply_kalshi_shell_env_reads_export_and_home(tmp_path, monkeypatch):

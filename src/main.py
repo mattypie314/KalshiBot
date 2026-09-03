@@ -15,6 +15,11 @@ from src.clock import configure_logging, format_et, hour_key, same_et_hour, to_e
 from src.config import EXIT_CONFIG, EXIT_OK, EXIT_RATE_LIMITED, HourlySettings, load_settings
 from src.evaluate import run_eval
 from src.executor import execute_ideas
+from src.paper import (
+    describe_paper_append,
+    record_printed_ideas,
+    try_settle_paper,
+)
 from src.exposure import blocks_new_idea, open_hourly_tickets
 from src.filters import FilterConfig, FilterResult, Idea, evaluate_market, news_blackout_active
 from src.journal import (
@@ -451,7 +456,19 @@ def run_scan(
             "report": report,
         }
         (artifacts / "last_run.json").write_text(json.dumps(scan_blob, indent=2, default=str))
-        scan_action = "scan"
+
+        try_settle_paper(settings, client)
+        if ideas and not force_live:
+            written = record_printed_ideas(
+                Path(settings.paper_log_path),
+                ideas,
+                sources=spots.sources,
+                default_source=spots.source,
+                fill_model=settings.paper_fill_model,
+                hourly_vol=spots.hourly_vol,
+            )
+            for row in written:
+                print(describe_paper_append(row))
 
         if not ideas:
             return EXIT_OK
@@ -646,6 +663,9 @@ MODE_ALIASES = {
     "6": "eval",
     "v": "eval",
     "eval": "eval",
+    "7": "paper",
+    "p": "paper",
+    "paper": "paper",
 }
 
 MODE_MENU = """\
@@ -655,7 +675,8 @@ KalshiBot — pick a mode
   3  auth   test key + PEM
   4  live   real limits (type LIVE — no .env edit)
   5  env    show / set DEMO vs PROD in .env
-  6  eval   local journal / scan-log report (no orders)
+  6  eval   local journal / paper / scan-log report (no orders)
+  7  paper  paper PnL only (alias of eval)
 
 Mode [scan]: """
 
@@ -775,7 +796,7 @@ def cli() -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Kalshi hourly BTC/ETH threshold scanner. "
-        "Run with no args for a mode menu. Shortcuts: s/o/a/l/e/v or 1-6."
+        "Run with no args for a mode menu. Shortcuts: s/o/a/l/e/v/p or 1-7."
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -804,7 +825,8 @@ def main(argv: list[str] | None = None) -> int:
     envp = sub.add_parser("env", help="Show or set demo vs prod in .env")
     _add_host_flags(envp)
 
-    sub.add_parser("eval", help="Summarize local journal and scan log (no orders)")
+    sub.add_parser("eval", help="Summarize paper PnL, live journal, and scan log (no orders)")
+    sub.add_parser("paper", help="Same as eval; paper PnL is listed separately from live")
 
     args = parser.parse_args(normalize_argv(argv))
     configure_logging()
@@ -852,7 +874,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_scan(settings, asset=None, place=True, force_live=True, armed=True)
     if args.command == "env":
         return run_env(settings, prod=bool(args.prod), demo=bool(args.demo))
-    if args.command == "eval":
+    if args.command in {"eval", "paper"}:
         return run_eval(settings)
     return EXIT_CONFIG
 
