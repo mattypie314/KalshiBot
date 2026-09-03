@@ -13,7 +13,9 @@ Set `BANKROLL=40` in `.env` if you override it. The code default is **$40**.
 - **Coins:** BTC and ETH only
 - **Books:** hourly threshold markets, up to 12 per coin per scan
 - **One idea per run.** Everything else is watch-only
-- **Execution:** limit orders only (prefer rest inside the spread). It does not market-buy
+- **Open tickets:** max 1 hourly crypto idea. A second is allowed only on the other coin and the opposite side. Same-direction BTC+ETH Nos sit (that was the 2026-09-02 stacked card).
+- **Loseable risk:** $1.75 preferred, $2.00 hard cap on a $40 bankroll (also 5% of `BANKROLL`)
+- **Execution:** maker / limit only. It does not lift the ask for a thin edge. It does not market-buy
 - **Host:** a live Kalshi key needs `USE_DEMO=false` (edit `.env` or `./kb env --prod`). Demo host 401s that key.
 - **Live (keyboard):** `./kb live --prod` then type `LIVE` (or `--confirm LIVE`). `.env` can stay dry.
 - **Halted:** `HALTED=true` (the default) refuses live orders even with `--confirm LIVE`. Disable the Pi timer: `sudo systemctl disable --now kalshi-hourly.timer`.
@@ -44,7 +46,7 @@ Anti-revenge: if the last live hourly ticket **filled** and settled against us (
 
 ## The model
 
-1. Pull spot from CF Benchmarks BRTI (BTC) / ERTI (ETH) via Kalshi. Coinbase/Binance are fallbacks only
+1. Pull spot from CF Benchmarks BRTI (BTC) / ERTI (ETH) via Kalshi — the 60-second average Kalshi settles on. Coinbase/Binance are **display proxies only**, not settlement truth. Without BRTI/ERTI the coin sits (`REQUIRE_SETTLEMENT_INDEX=true`).
 2. Pull hourly vol from recent 1-minute candles (~last 4 hours). Fallback if that fails: BTC 0.4%/hour, ETH 0.5%/hour. If realized vol is 2× typical, sit (news tape)
 3. Measure how far the line is from spot, in typical remaining-hour moves (z-score)
 4. Turn that into a fair probability that price finishes above the line
@@ -74,7 +76,7 @@ Skip unless every box is checked:
 - If it would have to lift the ask, visible size must be ≥ 5 contracts
 - Net edge ≥ 6% after fees. No 4% tight-book exception. No edge = sit
 - Ban close strikes: skip if the line is inside 0.50% of spot, or inside 1.5× a normal 1-hour move. A fat model edge on a tight strike is not a reason to fade it.
-- If realized vol is 2× typical, sit the coin (headline / war-tape days)
+- If realized vol is 2× typical, sit the coin (headline / war-tape days). Operator hook: `NEWS_PAUSE=true` sits everything without scraping headlines.
 - If |z| > 2.5 (fat-tail / long-shot), need net edge ≥ 8%
 - If the side needs a huge jump (|z| > 3.5), skip — treat as news-only, not a vol bet
 - CPI window: sit 8:15–8:45 AM ET on CPI print days
@@ -88,8 +90,9 @@ If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid
 
 - Score both Yes and No; keep the higher net-edge side
 - Prefer a maker limit: one tick inside the spread, or on the bid if the book is only 1¢ wide
+- Do not cross for a 6% edge. If a maker rest is impossible, sit (`REQUIRE_MAKER=true`)
 - Fresh-quote before the POST. If Kalshi rejects `post only cross`, step one tick more passive and retry. Never lift / take
-- Order type: GTC, `post_only` when resting inside
+- Order type: GTC, always `post_only`
 - Yes = bid on the Yes book at the limit
 - No = ask on the Yes book at 1 − No limit (same book, other side)
 - Before a new live order, cancel leftover hourly rests that are no longer the chosen ticker

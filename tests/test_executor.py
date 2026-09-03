@@ -72,7 +72,25 @@ def test_dry_run_never_calls_create_order(tmp_path: Path):
     assert isinstance(out["orders"][0]["count"], str)
     assert out["orders"][0]["side"] == "bid"
     assert out["orders"][0]["price"] == "0.5100"
+    assert out["orders"][0]["post_only"] is True
     assert len(out["orders"][0]["client_order_id"]) == 36
+
+
+def test_live_refuses_to_cross_non_maker(tmp_path: Path):
+    idea = _idea()
+    idea.post_maker = False
+    client = MagicMock()
+    out = execute_ideas(
+        [idea],
+        client=client,
+        artifacts_dir=tmp_path,
+        live=True,
+        confirm_live=True,
+        run_id="test-run",
+    )
+    client.create_order.assert_not_called()
+    assert out["placed"] == []
+    assert any("refused to cross" in err for err in out["errors"])
 
 
 def test_live_without_confirm_stays_dry(tmp_path: Path):

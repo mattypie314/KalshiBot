@@ -52,6 +52,9 @@ def _filter_cfg(settings: HourlySettings, state: dict[str, Any]) -> FilterConfig
         last_loss_same_hour=bool(state.get("loss_this_hour")),
         last_contracts=state.get("last_contracts"),
         news_blackout=news_blackout_active(),
+        news_pause=settings.news_pause,
+        require_settlement_index=settings.require_settlement_index,
+        require_maker=settings.require_maker,
         min_strike_distance_pct=settings.min_strike_distance_pct,
         min_strike_sigma=settings.min_strike_sigma,
         close_strike_edge=settings.close_strike_edge,
@@ -168,18 +171,26 @@ def scan_log_row(
                 "ticker": idea.market.ticker,
                 "side": idea.side,
                 "fair": idea.fair,
+                "model_pct": idea.fair,
                 "net_edge": idea.net_edge,
+                "kalshi_price": idea.entry_price,
                 "entry_price": idea.entry_price,
                 "limit_price": idea.limit_price,
                 "contracts": idea.contracts,
                 "z": idea.z,
                 "distance_pct": idea.strike_distance_pct,
+                "minutes_left": idea.minutes_left,
                 "bucket": idea.bucket,
+                "fill_status": None,
+                "settlement_result": None,
             }
             for idea in ideas
         ],
         "nearby": [row.watch_note for row in nearby[:12]],
         "avoided_count": len(avoided),
+        "settlement_ok": {
+            asset: spots.settlement_ok(asset) for asset in getattr(spots, "prices", {})
+        },
         "halted": settings.halted,
         "live_enabled": settings.live_enabled,
     }
@@ -366,6 +377,7 @@ def run_scan(
                 now=now,
                 cfg=cfg,
                 vol_fallback=vol_fallback.get(market.asset),
+                settlement_index=spots.settlement_ok(market.asset),
             )
             if result.idea:
                 ideas.append(result.idea)

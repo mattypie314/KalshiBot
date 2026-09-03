@@ -79,3 +79,4 @@ def test_scan_log_row_has_no_secret_keys():
     assert "kalshi_api_key_id" not in keys
     assert row["halted"] is True
     assert row["live_enabled"] is False
+    assert "settlement_ok" in row

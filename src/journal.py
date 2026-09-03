@@ -94,6 +94,7 @@ def new_trade_row(
         "distance_pct": round(distance, 6),
         "minutes_left": round(minutes_left, 2),
         "fair": round(fair, 4),
+        "model_pct": round(fair, 4),
         "kalshi_price": round(kalshi_price, 4),
         "limit_price": round(limit_price, 4),
         "contracts": contracts,
@@ -105,6 +106,7 @@ def new_trade_row(
         "client_order_id": client_order_id,
         "fill_status": fill_status,
         "filled_contracts": filled_contracts,
+        "settlement_result": None,
         "result": "pending",
         "pnl": None,
     }
@@ -139,6 +141,9 @@ def resolve_pending(
         lost = result_is_loss(market, str(row.get("side") or ""))
         if lost is None:
             continue
+        settlement = str(market.get("result") or "").strip().lower()
+        if settlement in {"yes", "no"}:
+            row["settlement_result"] = settlement
         status = str(row.get("fill_status") or "").lower()
         filled = status in FILLED_STATUSES or (fills_available and ticker_in_fills(fills, ticker))
         if filled:

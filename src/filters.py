@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from src.clock import to_et
@@ -70,6 +70,10 @@ class FilterConfig:
     vol_widen_distance_pct: float = 0.0075
     kill_close_no: bool = False
     kill_close_yes: bool = False
+    require_settlement_index: bool = True
+    settlement_index: bool = True
+    require_maker: bool = True
+    news_pause: bool = False
 
 
 @dataclass
@@ -153,12 +157,27 @@ def evaluate_market(
     now: datetime,
     cfg: FilterConfig,
     vol_fallback: float | None = None,
+    settlement_index: bool | None = None,
 ) -> FilterResult:
     reasons: list[str] = []
+    if settlement_index is not None:
+        cfg = replace(cfg, settlement_index=settlement_index)
+    if cfg.news_pause:
+        return FilterResult(
+            market=market,
+            avoid_reasons=["NEWS_PAUSE — operator sit (headline / war tape). Not a scraped news feed"],
+        )
     if market.status not in {"open", "active"}:
         return FilterResult(market=market, avoid_reasons=["market not open"])
     if market.asset not in {"BTC", "ETH"}:
         return FilterResult(market=market, avoid_reasons=[f"asset {market.asset} not in BTC/ETH"])
+    if cfg.require_settlement_index and not cfg.settlement_index:
+        return FilterResult(
+            market=market,
+            avoid_reasons=[
+                "spot is not CF Benchmarks BRTI/ERTI — Coinbase/Binance last tick is a proxy, not settlement; sit"
+            ],
+        )
 
     secs = (market.close_time - now).total_seconds()
     hrs = hours_left(secs)
@@ -251,6 +270,9 @@ def evaluate_market(
             continue
 
         lifting = limit is None or abs(limit - ask) < 1e-9
+        if lifting and cfg.require_maker:
+            reasons.append(f"{side}: cannot rest a maker limit — will not cross for this edge")
+            continue
         if lifting and depth < cfg.min_visible_depth:
             reasons.append(f"{side}: visible depth {depth:.0f} < {cfg.min_visible_depth} and cannot rest inside spread")
             continue

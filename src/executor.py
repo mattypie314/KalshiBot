@@ -55,7 +55,7 @@ def _order_payload(idea: Idea, run_id: str) -> dict[str, Any]:
         "price": f"{yes_price:.4f}",
         "time_in_force": "good_till_canceled",
         "self_trade_prevention_type": "taker_at_cross",
-        "post_only": bool(idea.post_maker),
+        "post_only": True,
         "exchange_index": -1,
     }
 
@@ -217,7 +217,13 @@ def execute_ideas(
 
     final_orders: list[dict[str, Any]] = []
     for idea, payload in zip(ideas, orders, strict=True):
-        working = refresh_maker_payload(idea, payload, client) if idea.post_maker else payload
+        if not idea.post_maker:
+            msg = f"{idea.market.ticker}: refused to cross — not a maker rest"
+            result["errors"].append(msg)
+            print(f"LIVE skipped: {msg}", flush=True)
+            final_orders.append(payload)
+            continue
+        working = refresh_maker_payload(idea, payload, client)
         try:
             placed, working = place_post_only(create, working)
             result["placed"].append(placed)

@@ -22,6 +22,17 @@ logger = logging.getLogger(__name__)
 BINANCE_SYMBOL = {"BTC": "BTCUSDT", "ETH": "ETHUSDT"}
 COINBASE_PRODUCT = {"BTC": "BTC-USD", "ETH": "ETH-USD"}
 FALLBACK_VOL = {"BTC": 0.004, "ETH": 0.005}
+SETTLEMENT_SOURCE = "cfbenchmarks"
+PROXY_NOTE = (
+    "PROXY: exchange last tick is not the Kalshi settlement. "
+    "Official print is the 60-second CF Benchmarks average (BRTI / ERTI). "
+    "Ideas sit until that index is available."
+)
+
+
+def is_settlement_index(source: str) -> bool:
+    """True only for the CF Benchmarks passthrough. Coinbase/Binance are proxies."""
+    return str(source or "").strip().lower() == SETTLEMENT_SOURCE
 
 
 @dataclass
@@ -35,6 +46,9 @@ class SpotSnapshot:
         "Spot prefers CF Benchmarks BRTI/ERTI (Kalshi settlement). "
         "Vol is exchange-realized, not that index."
     )
+
+    def settlement_ok(self, asset: str) -> bool:
+        return is_settlement_index(self.sources.get(asset, self.source))
 
 
 def hourly_vol_from_closes(closes: list[float], seconds_per_bar: int) -> float | None:
@@ -149,11 +163,13 @@ class SpotService:
                 snap.source = uniq[0]
             else:
                 snap.source = " ".join(f"{asset}={snap.sources[asset]}" for asset in snap.sources)
-        if snap.source == "cfbenchmarks":
+        if snap.sources and all(is_settlement_index(src) for src in snap.sources.values()):
             snap.note = (
                 "Spot is CF Benchmarks BRTI/ERTI via Kalshi (settlement index). "
                 "Vol is exchange-realized."
             )
+        elif snap.sources:
+            snap.note = PROXY_NOTE
         return snap
 
     def _binance_price(self, asset: str) -> float | None:

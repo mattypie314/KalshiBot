@@ -35,11 +35,11 @@ Prod is live Kalshi — real cash (`external-api.kalshi.com`). Demo is paper (`d
 
 ## What one run does
 
-1. Pull BTC and ETH spot from CF Benchmarks BRTI/ERTI via Kalshi (the settlement index). Coinbase is the fallback; Binance often 451s in the US.
+1. Pull BTC and ETH spot from CF Benchmarks BRTI/ERTI via Kalshi (the 60-second settlement average). Coinbase is a **display proxy**, not the print. Without BRTI/ERTI the coin sits. Binance often 451s in the US.
 2. Estimate hourly vol from recent 1-minute candles (fallback: BTC 0.4%/hour, ETH 0.5%/hour). If vol is 2× typical, sit — that is a news tape, not a range day.
 3. Load open hourly above/below books (up to 12 strikes per coin).
 4. Score Yes (finishes above) and No (at or below).
-5. Fair chance from how far the line is from spot, in typical remaining-hour moves (z-score). It does not assume BTC keeps going up. Spot is a proxy. Kalshi settles on CF Benchmarks RTI (a 60-second average), not Coinbase last tick.
+5. Fair chance from how far the line is from the **settlement index**, in typical remaining-hour moves (z-score). It does not assume BTC keeps going up. Coinbase last tick is labeled PROXY and is not used as settlement truth.
 6. Edge is always vs the executable ask, never the mid. The filter uses the taker fee even if it later posts a maker limit.
 7. Keep one idea if filters pass. Everything else is watch or avoid.
 8. `scan` / `once` only print. `live` posts a post-only GTC limit. Typical ticket $1.50–$2.00, never over $2. If that price would take the book, it steps one tick more passive. It will not market-buy. Max 1 open hourly ticket (2 only if different coin and opposite side).
@@ -53,7 +53,8 @@ Prod is live Kalshi — real cash (`external-api.kalshi.com`). Demo is paper (`d
 - Need 6% net edge after fees. No 4% exception. Sitting is valid.
 - Ban close strikes. Do not fade a line inside ~0.5–0.75% of spot. A fat model number on a tight strike is still a coin-flip.
 - |z| > 2.5 needs 8% edge. |z| > 3.5 skip (news-only jump).
-- Sit out CPI 8:15–8:45 AM ET and FOMC 1:45–2:45 PM ET on those days. Sit a coin when vol is 2× typical.
+- Sit out CPI 8:15–8:45 AM ET and FOMC 1:45–2:45 PM ET on those days. Sit a coin when vol is 2× typical (war-tape hook). Set `NEWS_PAUSE=true` to sit everything without scraping headlines.
+- Maker only. If the book cannot rest a post-only limit, sit — do not lift for a 6% edge.
 - If the last live hourly ticket **filled** and settled against you, the next idea cannot size up.
 - After 2 filled losses or $4 filled loss in an Eastern day, sit.
 - Every live ticket is logged (strike distance, time left, fair %, Kalshi price, fill status, result). A red close-No bucket (filled only) turns that rule off.

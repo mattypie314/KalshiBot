@@ -36,6 +36,9 @@ jobs:
           CONFIRM_LIVE: "NO"
           HALTED: "true"
           USE_DEMO: "true"
+          REQUIRE_SETTLEMENT_INDEX: "true"
+          REQUIRE_MAKER: "true"
+          NEWS_PAUSE: "false"
           SPOT_SOURCE: coinbase
           PYTHONPATH: ${{ github.workspace }}
           KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}

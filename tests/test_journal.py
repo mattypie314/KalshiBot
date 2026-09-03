@@ -61,6 +61,8 @@ def test_resolve_pending_marks_settlement():
     assert out[0]["pnl"] == estimate_pnl(won=False, contracts=2, entry_price=0.38, risk_dollars=0.76)
     assert out[0]["bucket"] == "close_no"
     assert out[0]["fill_status"] == "filled"
+    assert out[0]["settlement_result"] == "yes"
+    assert out[0]["model_pct"] == 0.62
 
 
 def test_resolve_pending_does_not_score_unfilled_rest():

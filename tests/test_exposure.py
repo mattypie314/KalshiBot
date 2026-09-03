@@ -49,6 +49,12 @@ def _idea(asset: str, side: str, ticker: str) -> Idea:
     )
 
 
+def test_blocks_stacked_same_direction_btc_and_eth_nos():
+    """2026-09-02 losing card: BTC No + ETH No in one hour."""
+    eth_no = [{"ticker": "KXETHD-1", "side": "No", "asset": "ETH"}]
+    assert blocks_new_idea(eth_no, _idea("BTC", "No", "KXBTCD-2"))
+
+
 def test_blocks_same_direction_and_allows_opposite_other_coin():
     eth_no = [{"ticker": "KXETHD-1", "side": "No", "asset": "ETH"}]
     assert blocks_new_idea(eth_no, _idea("ETH", "No", "KXETHD-2"))
