@@ -1,5 +1,13 @@
 # KalshiBot operating manual
 
+**Halted until further notice.** `HALTED=true` refuses live orders, including `--confirm LIVE`. GitHub hourly scan cron is off. Keep the Pi timer off:
+
+```
+sudo systemctl disable --now kalshi-hourly.timer
+```
+
+Resume only on purpose: `HALTED=false`, restore the live `ExecStart` line, then enable the timer.
+
 Pi checkout: `/home/KalshiBot`  
 Not financial advice. A wrong contract can go to $0.
 
@@ -105,7 +113,9 @@ Daily use: `./kb scan` to look. `./kb live --prod` when you are at the keyboard 
 
 ## Hourly timer (unattended live)
 
-At minute 3 Eastern of every hour the Pi runs:
+**Currently halted.** Leave the timer disabled. The checked-in unit is a no-op (`ExecStart=/bin/true`) and sets `HALTED=true`.
+
+When unhalted, at minute 3 Eastern of every hour the Pi runs:
 
 ```
 /home/KalshiBot/.venv/bin/python -m src.main live --prod --confirm LIVE

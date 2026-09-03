@@ -1,12 +1,10 @@
 name: Hourly BTC/ETH scan
 
-# Scan + notify only. Do not place live orders from GitHub Actions
-# (cloud IPs are often 403'd; there is no static IP). Use a $5 VPS
-# plus systemd/cron for execution.
+# Halted until further notice. The schedule is removed so GitHub
+# does not keep firing. Do not restore the cron without setting
+# HALTED=false in the bot and re-enabling the Pi timer on purpose.
 
 on:
-  schedule:
-    - cron: "3 * * * *" # UTC cron; EST/EDT are whole hours so this is still :03 Eastern.
   workflow_dispatch:
 
 permissions:
@@ -15,6 +13,7 @@ permissions:
 
 jobs:
   scan:
+    if: false
     runs-on: ubuntu-latest
     env:
       TZ: America/New_York
@@ -35,6 +34,7 @@ jobs:
         env:
           LIVE_TRADING: "false"
           CONFIRM_LIVE: "NO"
+          HALTED: "true"
           USE_DEMO: "true"
           SPOT_SOURCE: coinbase
           PYTHONPATH: ${{ github.workspace }}

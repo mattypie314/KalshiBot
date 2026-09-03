@@ -1,5 +1,5 @@
 [Unit]
-Description=KalshiBot hourly BTC/ETH live limits (real money)
+Description=KalshiBot hourly BTC/ETH (HALTED — no live orders)
 After=network-online.target
 
 [Service]
@@ -9,11 +9,13 @@ WorkingDirectory=/home/KalshiBot
 Environment=PYTHONPATH=/home/KalshiBot
 Environment=HOME=/home/mkubit
 Environment=TZ=America/New_York
+Environment=HALTED=true
 EnvironmentFile=-/home/KalshiBot/.env
 # Keys come from ~/.kalshi/ (PEM + env). Do not EnvironmentFile that path:
 # bash `export KEY=value` is invalid for systemd and $HOME does not expand.
-# To go back to dry-run: change this line to `... -m src.main once`
-ExecStart=/home/KalshiBot/.venv/bin/python -m src.main live --prod --confirm LIVE
+# Halted until further notice. Was: ... -m src.main live --prod --confirm LIVE
+# Re-enable live only after HALTED=false and a deliberate unit edit.
+ExecStart=/bin/true
 
 [Install]
 WantedBy=multi-user.target

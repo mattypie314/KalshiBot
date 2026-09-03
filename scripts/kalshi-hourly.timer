@@ -1,5 +1,5 @@
 [Unit]
-Description=Run KalshiBot live limits at minute 3 Eastern (real money)
+Description=KalshiBot hourly timer (HALTED — keep disabled)
 
 [Timer]
 OnCalendar=*-*-* *:03:00 America/New_York
