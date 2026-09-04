@@ -1,0 +1,21 @@
+[Unit]
+Description=KalshiBot campaign desk + 15m/hourly/maker scheduler
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/home/mkubit/KalshiBot
+ExecStart=/home/mkubit/KalshiBot/deploy/kalshibot-campaign.sh
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=3
+KillMode=mixed
+TimeoutStopSec=20
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kalshibot-campaign
+
+[Install]
+WantedBy=default.target

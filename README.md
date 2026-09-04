@@ -170,6 +170,15 @@ python -m kalshibot serve
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The campaign book sits above the Crypto / Commodities / Sports Bets tabs. **Serve also runs the loops by itself** while that process is up: 15m at `:02–:04` ET each window, maker in the last 3 minutes, hourly KXBTC15M tape once an hour. Halt / DRY-LIVE on the phone still apply. The small 15m / Hourly / Maker buttons are “run now,” not the schedule.
 
+On this Pi, keep it up with the user systemd unit:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp deploy/kalshibot-campaign.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now kalshibot-campaign.service
+```
+
 ```bash
 python -m kalshibot scan --section crypto
 pytest
