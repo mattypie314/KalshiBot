@@ -24,10 +24,10 @@ def test_parse_cf_kalshi_envelope():
     assert parse_cf_index_value({"error": "nope"}) is None
     assert index_id_for("BTC") == "BRTI"
     assert index_id_for("ETH") == "ETHUSD_RTI"
-    assert index_ids_for("ETH")[0] == "ETHUSD_RTI"
-    assert "ERTI" in index_ids_for("ETH")
+    assert index_ids_for("ETH") == ("ETHUSD_RTI",)
+    assert "ERTI" not in index_ids_for("ETH")
     assert is_official_index_label("ETHUSD_RTI")
-    assert is_official_index_label("ERTI")  # legacy alias still scores paper rows
+    assert is_official_index_label("ERTI")  # legacy paper label only; not a request id
 
 
 def test_history_ticks_and_60s_average():

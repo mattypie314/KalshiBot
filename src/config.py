@@ -100,7 +100,7 @@ class HourlySettings(BaseSettings):
     max_daily_losses: int = 2
 
     spot_source: str = "cfbenchmarks"
-    # Sit unless BRTI/ERTI is the price used for fair value. Coinbase is a proxy.
+    # Sit unless BRTI / ETHUSD_RTI is the price used for fair value. Coinbase is a proxy.
     require_settlement_index: bool = True
     # Sit unless a maker/post-only rest is possible. Do not lift for a 6% edge.
     require_maker: bool = True

@@ -298,7 +298,7 @@ class KalshiClient:
         timestamp: str,
         timespan: str = "HOUR",
     ) -> dict[str, Any]:
-        """Historical BRTI/ERTI ticks via Kalshi's CF Benchmarks passthrough."""
+        """Historical BRTI / ETHUSD_RTI ticks via Kalshi's CF Benchmarks passthrough."""
         return self.get_json(
             "/cfbenchmarks/history/values",
             params={"id": index_id, "timespan": timespan, "timestamp": timestamp},

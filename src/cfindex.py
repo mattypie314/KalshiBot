@@ -7,10 +7,10 @@ from typing import Any
 
 from src.clock import parse_ts, to_et
 
-# Kalshi/CF official tickers. ETH is ETHUSD_RTI — ERTI is not a CF id
-# (2026-09-03 Pi scan: GET ?id=ERTI → Unknown id).
+# Kalshi/CF request ids. ETH must be ETHUSD_RTI — ERTI is not a CF id
+# (prod probe: GET ?id=ERTI → Unknown id / 400; ETHUSD_RTI returns ticks).
 INDEX_BY_ASSET = {"BTC": "BRTI", "ETH": "ETHUSD_RTI"}
-INDEX_FALLBACKS = {"ETH": ("ERTI",)}
+# ERTI is a human/legacy label only. Do not send it as ?id=.
 OFFICIAL_INDEX_IDS = frozenset({"BRTI", "ETHUSD_RTI", "ERTI"})
 SETTLEMENT_WINDOW_SECONDS = 60
 
@@ -62,13 +62,9 @@ def index_id_for(asset: str) -> str | None:
 
 
 def index_ids_for(asset: str) -> tuple[str, ...]:
-    """Primary CF id, then legacy aliases. ETH tries ETHUSD_RTI then ERTI."""
-    name = str(asset or "").upper()
-    primary = INDEX_BY_ASSET.get(name)
-    if not primary:
-        return ()
-    extras = tuple(item for item in INDEX_FALLBACKS.get(name, ()) if item != primary)
-    return (primary, *extras)
+    """CF request ids for an asset. ETH is ETHUSD_RTI only — never ERTI."""
+    primary = index_id_for(asset)
+    return (primary,) if primary else ()
 
 
 def official_index_label(asset: str, source: str) -> str:

@@ -52,7 +52,7 @@ Anti-revenge: if the last live hourly ticket **filled** and settled against us (
 4. Turn that into a fair probability that price finishes above the line
 5. Compare fair odds to the real ask you would pay (never the mid)
 
-Kalshi settles on the 60-second average of CF Benchmarks’ real-time index (BRTI / ERTI) in the minute before the clock time. The model prices off that index when the Kalshi passthrough works. Coinbase last tick is a fallback, not the print.
+Kalshi settles on the 60-second average of CF Benchmarks’ real-time index (BRTI / ETHUSD_RTI) in the minute before the clock time. The ETH request id is `ETHUSD_RTI`, not `ERTI`. The model prices off that index when the Kalshi passthrough works. Coinbase last tick is a fallback, not the print.
 
 - **Vol** = how jumpy price has been
 - **z-score** = how many normal hourly moves the line is away. |z| of 2.5+ is a long shot

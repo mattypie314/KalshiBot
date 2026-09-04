@@ -439,7 +439,7 @@ def format_paper_section(paper: dict[str, Any]) -> list[str]:
         "- Default fill model is **assumed-maker-fill** at the printed maker limit",
         "  (the \"if we got that quote\" case). That is not a real Kalshi fill.",
         "- PROXY / missing BRTI/ERTI rows are sit/unscored — they are not paper fills.",
-        "- Settlement is the official CF Benchmarks 60-second average (BRTI / ERTI),",
+        "- Settlement is the official CF Benchmarks 60-second average (BRTI / ETHUSD_RTI),",
         "  not Coinbase last tick. Live fills stay in `artifacts/trade_log.jsonl`.",
         f"- Tickets: {paper['n_tickets']}",
         f"- Assumed-fill settled: {paper['n_assumed_filled_settled']} "

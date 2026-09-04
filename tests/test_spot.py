@@ -43,7 +43,7 @@ def test_eth_cf_price_queries_ethusd_rti_not_erti():
     assert called[0] == "ETHUSD_RTI"
 
 
-def test_eth_cf_price_falls_back_if_primary_unknown():
+def test_eth_cf_price_does_not_request_erti():
     called: list[str] = []
 
     class Kalshi:
@@ -51,8 +51,6 @@ def test_eth_cf_price_falls_back_if_primary_unknown():
 
         def get_cf_values(self, index_id):
             called.append(index_id)
-            if index_id == "ETHUSD_RTI":
-                raise RuntimeError("Unknown id")
             return {"payload": [{"id": index_id, "value": "2513.24"}]}
 
     svc = SpotService(kalshi=Kalshi(), preferred="cfbenchmarks")
@@ -60,4 +58,5 @@ def test_eth_cf_price_falls_back_if_primary_unknown():
         assert svc._cf_price("ETH") == 2513.24
     finally:
         svc.close()
-    assert called == ["ETHUSD_RTI", "ERTI"]
+    assert called == ["ETHUSD_RTI"]
+    assert "ERTI" not in called

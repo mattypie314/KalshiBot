@@ -1,6 +1,6 @@
 """BTC/ETH last price and 1h realized vol.
 
-Price prefers CF Benchmarks BRTI/ERTI via Kalshi (the settlement index).
+Price prefers CF Benchmarks BRTI / ETHUSD_RTI via Kalshi (the settlement index).
 Vol still uses exchange candles; that is move-size, not the print.
 """
 
@@ -25,7 +25,7 @@ FALLBACK_VOL = {"BTC": 0.004, "ETH": 0.005}
 SETTLEMENT_SOURCE = "cfbenchmarks"
 PROXY_NOTE = (
     "PROXY: exchange last tick is not the Kalshi settlement. "
-    "Official print is the 60-second CF Benchmarks average (BRTI / ERTI). "
+    "Official print is the 60-second CF Benchmarks average (BRTI / ETHUSD_RTI). "
     "Ideas sit until that index is available."
 )
 
@@ -43,7 +43,7 @@ class SpotSnapshot:
     sources: dict[str, str] = field(default_factory=dict)
     vol_source: dict[str, str] = field(default_factory=dict)
     note: str = (
-        "Spot prefers CF Benchmarks BRTI/ERTI (Kalshi settlement). "
+        "Spot prefers CF Benchmarks BRTI / ETHUSD_RTI (Kalshi settlement). "
         "Vol is exchange-realized, not that index."
     )
 
@@ -174,7 +174,7 @@ class SpotService:
                 snap.source = " ".join(f"{asset}={snap.sources[asset]}" for asset in snap.sources)
         if snap.sources and all(is_settlement_index(src) for src in snap.sources.values()):
             snap.note = (
-                "Spot is CF Benchmarks BRTI/ERTI via Kalshi (settlement index). "
+                "Spot is CF Benchmarks BRTI / ETHUSD_RTI via Kalshi (settlement index). "
                 "Vol is exchange-realized."
             )
         elif snap.sources:

@@ -175,7 +175,7 @@ def evaluate_market(
         return FilterResult(
             market=market,
             avoid_reasons=[
-                "spot is not CF Benchmarks BRTI/ERTI — Coinbase/Binance last tick is a proxy, not settlement; sit"
+                "spot is not CF Benchmarks BRTI / ETHUSD_RTI — Coinbase/Binance last tick is a proxy, not settlement; sit"
             ],
         )
 

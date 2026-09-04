@@ -340,7 +340,8 @@ def test_fetch_official_print_never_uses_coinbase():
         can_trade = True
 
         def get_cf_history(self, index_id, *, timestamp, timespan):
-            assert index_id in {"BRTI", "ETHUSD_RTI", "ERTI"}
+            assert index_id in {"BRTI", "ETHUSD_RTI"}
+            assert index_id != "ERTI"
             close = datetime(2026, 9, 3, 18, 0, tzinfo=timezone.utc)
             payload = [
                 {"time": (close - timedelta(seconds=60 - i)).isoformat(), "value": str(2400 + i)}
