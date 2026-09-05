@@ -49,16 +49,17 @@ def _et(hour: int, minute: int, day: int = 28, month: int = 8, year: int = 2026)
     return datetime(year, month, day, hour, minute, tzinfo=ET)
 
 
-def test_entry_window_is_minutes_two_to_four():
-    assert in_fifteen_entry_window(_et(10, 2))
+def test_entry_window_is_minutes_three_to_five():
+    assert not in_fifteen_entry_window(_et(10, 2))
     assert in_fifteen_entry_window(_et(10, 3))
     assert in_fifteen_entry_window(_et(10, 4))
-    assert in_fifteen_entry_window(_et(10, 17))
-    assert in_fifteen_entry_window(_et(10, 32))
-    assert in_fifteen_entry_window(_et(10, 49))
+    assert in_fifteen_entry_window(_et(10, 5))
+    assert in_fifteen_entry_window(_et(10, 18))
+    assert in_fifteen_entry_window(_et(10, 33))
+    assert in_fifteen_entry_window(_et(10, 50))
     assert not in_fifteen_entry_window(_et(10, 0))
     assert not in_fifteen_entry_window(_et(10, 1))
-    assert not in_fifteen_entry_window(_et(10, 5))
+    assert not in_fifteen_entry_window(_et(10, 6))
     assert not in_fifteen_entry_window(_et(10, 12))
 
 
@@ -389,3 +390,43 @@ def test_cli_normalize_and_live_gates():
     assert live_is_armed(prompt, confirm="LIVE", isatty=True) is True
     assert live_is_armed(prompt, confirm="LIVE", isatty=False) is False
     assert main(["live", "--confirm", "LIVE"]) == EXIT_CONFIG
+
+
+def test_pass_fail_rejects_overbought_rsi_on_yes():
+    from src.indicators import TapeReading
+
+    tape = TapeReading(
+        rsi=82.0,
+        adx=40.0,
+        bb_mid=100.0,
+        bb_upper=101.0,
+        bb_lower=99.0,
+        bb_bandwidth=0.02,
+        percent_b=0.9,
+        bars=40,
+    )
+    decision = pass_fail(
+        model_yes=0.62, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4, tape=tape
+    )
+    assert not decision.passed
+    assert "RSI overbought" in (decision.fail_reason or "")
+
+
+def test_pass_fail_rejects_adx_chop():
+    from src.indicators import TapeReading
+
+    tape = TapeReading(
+        rsi=50.0,
+        adx=12.0,
+        bb_mid=100.0,
+        bb_upper=101.0,
+        bb_lower=99.0,
+        bb_bandwidth=0.02,
+        percent_b=0.5,
+        bars=40,
+    )
+    decision = pass_fail(
+        model_yes=0.62, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4, tape=tape
+    )
+    assert not decision.passed
+    assert "ADX chop" in (decision.fail_reason or "")

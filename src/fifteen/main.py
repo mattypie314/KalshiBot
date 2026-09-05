@@ -41,6 +41,7 @@ from src.markets import HourlyMarket, MarketDiscovery
 from src.model import fair_prob, hours_left, model_z
 from src.paper import FILL_ASSUMED_MAKER, record_printed_ideas, try_settle_paper
 from src.sizer import size_idea
+from src.indicators import read_tape
 from src.spot import SpotService
 
 logger = logging.getLogger(__name__)
@@ -194,7 +195,7 @@ def collect_ideas(
     if fifteen_working(state, now):
         return [], ["already working a 15m ticket this window"], None
     if not in_fifteen_entry_window(now):
-        notes.append(f"outside entry window (minute {now.minute % 15}; want 2-4)")
+        notes.append(f"outside entry window (minute {now.minute % 15}; want 3-5)")
 
     spots_svc = SpotService(
         preferred=settings.spot_source,
@@ -211,66 +212,77 @@ def collect_ideas(
                 "ETH": settings.hourly_vol_fallback_eth,
             },
         )
+
+        markets = MarketDiscovery(client).discover_fifteen(
+            assets,
+            now=now,
+            max_per_asset=settings.max_markets_per_asset,
+            spots=spots.prices,
+            require_exchange_index=CRYPTO_SHARD,
+        )
+        if not markets:
+            notes.append("no live KXBTC15M/KXETH15M books")
+            return [], notes, spots
+        if not in_fifteen_entry_window(now):
+            return [], notes, spots
+
+        candidates: list[Idea] = []
+        tape_cache: dict[str, Any] = {}
+        for market in markets:
+            spot = spots.prices.get(market.asset)
+            vol = spots.hourly_vol.get(market.asset) or vol_fallback(settings, market.asset)
+            if not spot:
+                notes.append(f"{market.asset}: no spot")
+                continue
+            if settings.require_settlement_index and not spots.settlement_ok(market.asset):
+                notes.append(f"{market.asset}: PROXY spot — sit")
+                continue
+            secs = (market.close_time - now).total_seconds()
+            hrs = hours_left(secs)
+            if hrs is None:
+                continue
+            if market.asset not in tape_cache:
+                try:
+                    candles = spots_svc.ohlc_1m(market.asset, limit=60)
+                    tape_cache[market.asset] = read_tape(candles)
+                except Exception as exc:  # noqa: BLE001
+                    logger.info("tape read failed for %s: %s", market.asset, exc)
+                    tape_cache[market.asset] = None
+            tape = tape_cache[market.asset]
+            decision = pass_fail(
+                model_yes=fair_prob(spot, market.threshold, vol, hrs),
+                yes_bid=market.yes_bid,
+                yes_ask=market.yes_ask,
+                secs_left=secs,
+                sigma=model_z(spot, market.threshold, vol, hrs),
+                tape=tape,
+            )
+            if not decision.passed:
+                notes.append(f"{market.ticker}: {decision.line}")
+                continue
+            if market.spread > settings.max_spread + 1e-12 and abs(decision.edge) <= market.spread:
+                notes.append(f"{market.ticker}: spread wider than edge")
+                continue
+            idea = idea_from_pass(
+                market,
+                decision,
+                spot=spot,
+                vol=vol,
+                bankroll=bankroll,
+                room=pot_room,
+                settings=settings,
+                now=now,
+            )
+            if idea is None:
+                notes.append(f"{market.ticker}: PASS but size/room failed")
+                continue
+            candidates.append(idea)
+
+        candidates.sort(key=lambda i: abs(i.net_edge), reverse=True)
+        return candidates[: settings.max_ideas_per_run], notes, spots
     finally:
         spots_svc.close()
 
-    markets = MarketDiscovery(client).discover_fifteen(
-        assets,
-        now=now,
-        max_per_asset=settings.max_markets_per_asset,
-        spots=spots.prices,
-        require_exchange_index=CRYPTO_SHARD,
-    )
-    if not markets:
-        notes.append("no live KXBTC15M/KXETH15M books")
-        return [], notes, spots
-    if not in_fifteen_entry_window(now):
-        return [], notes, spots
-
-    candidates: list[Idea] = []
-    for market in markets:
-        spot = spots.prices.get(market.asset)
-        vol = spots.hourly_vol.get(market.asset) or vol_fallback(settings, market.asset)
-        if not spot:
-            notes.append(f"{market.asset}: no spot")
-            continue
-        if settings.require_settlement_index and not spots.settlement_ok(market.asset):
-            notes.append(f"{market.asset}: PROXY spot — sit")
-            continue
-        secs = (market.close_time - now).total_seconds()
-        hrs = hours_left(secs)
-        if hrs is None:
-            continue
-        decision = pass_fail(
-            model_yes=fair_prob(spot, market.threshold, vol, hrs),
-            yes_bid=market.yes_bid,
-            yes_ask=market.yes_ask,
-            secs_left=secs,
-            sigma=model_z(spot, market.threshold, vol, hrs),
-        )
-        if not decision.passed:
-            notes.append(f"{market.ticker}: {decision.line}")
-            continue
-        if market.spread > settings.max_spread + 1e-12 and abs(decision.edge) <= market.spread:
-            notes.append(f"{market.ticker}: spread wider than edge")
-            continue
-        idea = idea_from_pass(
-            market,
-            decision,
-            spot=spot,
-            vol=vol,
-            bankroll=bankroll,
-            room=pot_room,
-            settings=settings,
-            now=now,
-        )
-        if idea is None:
-            notes.append(f"{market.ticker}: PASS but size/room failed")
-            continue
-        candidates.append(idea)
-
-    candidates.sort(key=lambda i: abs(i.net_edge), reverse=True)
-    return candidates[: settings.max_ideas_per_run], notes, spots
 
 
 def append_scan_log(

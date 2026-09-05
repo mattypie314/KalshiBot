@@ -1,6 +1,8 @@
-"""15m edge loop: first 2–4 minutes of each ET window, Pass/Fail vs mid, one idea.
+"""15m edge loop: minutes 3–5 of each ET window, Pass/Fail vs mid + tape gate, one idea.
 
-Maker (last 3 min 74–93¢) and the hourly scanner stay separate.
+Waits through the first couple minutes so a micro-trend can form, then
+requires Pass vs mid plus a BB/RSI/ADX tape check. Maker (last 3 min
+74–93¢) and the hourly scanner stay separate.
 """
 
 from __future__ import annotations
@@ -11,9 +13,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from src.indicators import TapeReading, tape_fail_reason
+
 ET = ZoneInfo("America/New_York")
 
-ENTRY_OFFSETS = frozenset({2, 3, 4})
+ENTRY_OFFSETS = frozenset({3, 4, 5})
 MIN_EDGE = 0.04
 MIN_TIME_SECONDS = 8 * 60
 DECIDED_SIGMA = 2.0
@@ -228,8 +232,9 @@ def pass_fail(
     secs_left: float,
     sigma: float,
     news: str | None = None,
+    tape: TapeReading | None = None,
 ) -> FifteenDecision:
-    """Pass/Fail vs the live mid. Fail means skip — do not scalp it."""
+    """Pass/Fail vs the live mid, then optional 1m BB/RSI/ADX tape gate."""
     if yes_bid <= 0 or yes_ask <= 0 or yes_ask < yes_bid:
         return FifteenDecision(
             passed=False,
@@ -308,10 +313,35 @@ def pass_fail(
             spread=spread,
             fail_reason="under 8 minutes",
         )
+    tape_reason = tape_fail_reason(side, tape)
+    if tape_reason:
+        return FifteenDecision(
+            passed=False,
+            line=f"FAIL {fair_vs_mid} · {tape_reason}",
+            side=side,
+            join_price=join,
+            model_yes=model_yes,
+            model_prob=model_prob,
+            mid=mid,
+            edge=edge,
+            spread=spread,
+            fail_reason=tape_reason,
+        )
     sign = "+" if edge >= 0 else ""
+    tape_note = ""
+    if tape is not None and tape.ok:
+        bits = []
+        if tape.adx is not None:
+            bits.append(f"ADX {tape.adx:.0f}")
+        if tape.rsi is not None:
+            bits.append(f"RSI {tape.rsi:.0f}")
+        if tape.bb_bandwidth is not None:
+            bits.append(f"BBw {tape.bb_bandwidth:.4f}")
+        if bits:
+            tape_note = " · " + " ".join(bits)
     return FifteenDecision(
         passed=True,
-        line=f"PASS {fair_vs_mid} · edge {sign}{_cents(edge)}",
+        line=f"PASS {fair_vs_mid} · edge {sign}{_cents(edge)}{tape_note}",
         side=side,
         join_price=join,
         model_yes=model_yes,

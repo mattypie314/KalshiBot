@@ -46,6 +46,17 @@ Always confirm series tickers against live Kalshi listings; names drift.
 
 ---
 
+## 3b. Tape gate (1m BB / RSI / ADX)
+
+Before a Pass becomes a ticket, the 15m bot reads ~60 one-minute candles:
+
+- **ADX < 25** → range-bound chop → sit.
+- **Tight Bollinger bandwidth** → low-vol chop → sit (wait for expansion/breakout).
+- **RSI ≥ 70** against a Yes / **RSI ≤ 30** against a No → short-term reversal risk → sit.
+- Entry waits until minutes **3–5** of the window so a micro-trend can form.
+- Crowd lean is the Kalshi mid itself (same role as checking an implied-probability board).
+- Size stays a few percent of the pot — never the whole bankroll on one 15m flip.
+
 ## 4. Two strategies (do not mix blindly)
 
 ### A. Edge loop (primary — early window)
@@ -53,7 +64,7 @@ Always confirm series tickers against live Kalshi listings; names drift.
 This is the directional / mispricing pass.
 
 **When to look**
-- First **2–4 minutes** of each 15m window, **or**
+- Minutes **3–5** of each 15m window, **or**
 - Spot jumped hard vs a stale mid (about half-sigma); re-check **once**.
 
 **Windows (ET)** start at `:00`, `:15`, `:30`, `:45`.
@@ -150,7 +161,7 @@ Writes go through signed Kalshi REST V2 order endpoints (or the sanctioned MCP p
 
 ## 9. Timing & cadence
 
-- Prefer watches at the **start** of each 15m window (first 2–4 minutes), not the end — unless running the last-minute maker submodule.
+- Prefer watches at the **start** of each 15m window (minutes 3–5), not the end — unless running the last-minute maker submodule.
 - Suggested dry cadence if automated: every 15m at `:01` / `:16` / `:31` / `:46` ET on weekdays (or first minute of each window). Adjust to Matt’s waking hours.
 - Stay quiet on sit-only runs unless Matt asked for noisy updates.
 
