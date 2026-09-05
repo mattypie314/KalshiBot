@@ -41,7 +41,8 @@ from src.markets import HourlyMarket, MarketDiscovery
 from src.model import fair_prob, hours_left, model_z
 from src.paper import FILL_ASSUMED_MAKER, record_printed_ideas, try_settle_paper
 from src.sizer import size_idea
-from src.indicators import read_tape
+from src.data_fetcher import signals_for_asset
+from src.indicators import read_tape, tape_from_15m_signals
 from src.spot import SpotService
 
 logger = logging.getLogger(__name__)
@@ -242,12 +243,31 @@ def collect_ideas(
             if hrs is None:
                 continue
             if market.asset not in tape_cache:
+                tape = None
+                # Prefer finalized 15m CCXT+pandas-ta signals (RSI/MACD/BB/ADX).
                 try:
-                    candles = spots_svc.ohlc_1m(market.asset, limit=60)
-                    tape_cache[market.asset] = read_tape(candles)
+                    payload = signals_for_asset(market.asset)
+                    tape = tape_from_15m_signals(payload)
+                    if tape is not None:
+                        logger.info(
+                            "15m tape %s RSI=%.1f ADX=%.1f MACDh=%.4f BBw=%s",
+                            market.asset,
+                            tape.rsi or 0,
+                            tape.adx or 0,
+                            tape.macd_hist or 0,
+                            f"{tape.bb_bandwidth:.4f}" if tape.bb_bandwidth is not None else "?",
+                        )
                 except Exception as exc:  # noqa: BLE001
-                    logger.info("tape read failed for %s: %s", market.asset, exc)
-                    tape_cache[market.asset] = None
+                    logger.info("15m CCXT tape failed for %s: %s", market.asset, exc)
+                # Fallback: local 1m OHLC math if CCXT/pandas-ta unavailable.
+                if tape is None:
+                    try:
+                        candles = spots_svc.ohlc_1m(market.asset, limit=60)
+                        tape = read_tape(candles)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.info("1m tape read failed for %s: %s", market.asset, exc)
+                        tape = None
+                tape_cache[market.asset] = tape
             tape = tape_cache[market.asset]
             decision = pass_fail(
                 model_yes=fair_prob(spot, market.threshold, vol, hrs),

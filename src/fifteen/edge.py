@@ -337,6 +337,8 @@ def pass_fail(
             bits.append(f"RSI {tape.rsi:.0f}")
         if tape.bb_bandwidth is not None:
             bits.append(f"BBw {tape.bb_bandwidth:.4f}")
+        if tape.macd_hist is not None:
+            bits.append(f"MACDh {tape.macd_hist:.4f}")
         if bits:
             tape_note = " · " + " ".join(bits)
     return FifteenDecision(

@@ -19,7 +19,7 @@ class Candle:
 
 @dataclass(frozen=True)
 class TapeReading:
-    """Latest BB / RSI / ADX snapshot used to gate 15m entries."""
+    """Latest BB / RSI / ADX (/ optional MACD) snapshot used to gate 15m entries."""
 
     rsi: float | None
     adx: float | None
@@ -29,6 +29,10 @@ class TapeReading:
     bb_bandwidth: float | None
     percent_b: float | None
     bars: int
+    macd_hist: float | None = None
+    macd_line: float | None = None
+    macd_signal: float | None = None
+    source: str = "1m"
 
     @property
     def ok(self) -> bool:
@@ -45,6 +49,8 @@ BB_STD = 2.0
 BB_TIGHT_BANDWIDTH = 0.0015
 ADX_PERIOD = 14
 ADX_TREND_MIN = 25.0
+# Require MACD histogram to agree with side when 15m signals are present.
+MACD_HIST_EPS = 0.0
 
 
 def sma(values: list[float], period: int) -> float | None:
@@ -195,6 +201,43 @@ def read_tape(candles: list[Candle]) -> TapeReading:
     )
 
 
+
+def tape_from_15m_signals(payload: dict | None) -> TapeReading | None:
+    """Map a DataFetcher 15m payload onto TapeReading for the existing gate."""
+    if not isinstance(payload, dict) or not payload:
+        return None
+    try:
+        rsi_v = float(payload.get("rsi_14") or 0)
+        adx_v = float(payload.get("adx_14") or 0)
+        bb_mid = float(payload.get("bb_middle") or 0)
+        bb_upper = float(payload.get("bb_upper") or 0)
+        bb_lower = float(payload.get("bb_lower") or 0)
+        bandwidth = payload.get("bb_bandwidth")
+        if bandwidth is None and bb_mid > 0:
+            bandwidth = (bb_upper - bb_lower) / bb_mid
+        percent_b = payload.get("percent_b")
+        if percent_b is None:
+            width = bb_upper - bb_lower
+            close_px = float(payload.get("close_price") or 0)
+            percent_b = (close_px - bb_lower) / width if width > 1e-12 else 0.5
+        return TapeReading(
+            rsi=rsi_v,
+            adx=adx_v,
+            bb_mid=bb_mid or None,
+            bb_upper=bb_upper or None,
+            bb_lower=bb_lower or None,
+            bb_bandwidth=float(bandwidth) if bandwidth is not None else None,
+            percent_b=float(percent_b) if percent_b is not None else None,
+            bars=max(1, int(payload.get("bars") or 1)),
+            macd_hist=float(payload.get("macd_hist") or 0),
+            macd_line=float(payload.get("macd_line") or 0),
+            macd_signal=float(payload.get("macd_signal") or 0),
+            source="15m",
+        )
+    except (TypeError, ValueError):
+        return None
+
+
 def tape_fail_reason(
     side: str,
     tape: TapeReading | None,
@@ -203,13 +246,15 @@ def tape_fail_reason(
     rsi_hi: float = RSI_OVERBOUGHT,
     rsi_lo: float = RSI_OVERSOLD,
     bb_tight: float = BB_TIGHT_BANDWIDTH,
+    macd_eps: float = MACD_HIST_EPS,
 ) -> str | None:
-    """Return a sit reason when the 1m tape disagrees with a Pass, else None.
+    """Return a sit reason when the tape disagrees with a Pass, else None.
 
     Rules (ultra-short crypto binaries):
     - ADX < 25 → range-bound chop, sit.
     - Bollinger bandwidth very tight → low-vol chop, sit (wait for expansion).
     - RSI ≥ 70 against a Yes / RSI ≤ 30 against a No → short-term reversal risk.
+    - MACD histogram against the side (when present from 15m CCXT signals) → sit.
     Missing tape data does not fail (fail-open) so a candle outage cannot freeze the bot.
     """
     if tape is None or not tape.ok:
@@ -224,4 +269,9 @@ def tape_fail_reason(
             return f"RSI overbought ({tape.rsi:.1f}≥{rsi_hi:g})"
         if side_l in {"no", "n"} and tape.rsi <= rsi_lo:
             return f"RSI oversold ({tape.rsi:.1f}≤{rsi_lo:g})"
+    if tape.macd_hist is not None:
+        if side_l in {"yes", "y"} and tape.macd_hist < -abs(macd_eps):
+            return f"MACD hist against Yes ({tape.macd_hist:.4f})"
+        if side_l in {"no", "n"} and tape.macd_hist > abs(macd_eps):
+            return f"MACD hist against No ({tape.macd_hist:.4f})"
     return None

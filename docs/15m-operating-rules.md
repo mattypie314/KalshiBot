@@ -53,6 +53,8 @@ Before a Pass becomes a ticket, the 15m bot reads ~60 one-minute candles:
 - **ADX < 25** → range-bound chop → sit.
 - **Tight Bollinger bandwidth** → low-vol chop → sit (wait for expansion/breakout).
 - **RSI ≥ 70** against a Yes / **RSI ≤ 30** against a No → short-term reversal risk → sit.
+- **MACD histogram** against the side (from the last *closed* 15m candle via CCXT) → sit.
+- Signals prefer Binance 15m OHLCV + pandas-ta; 1m local math is the fallback.
 - Entry waits until minutes **3–5** of the window so a micro-trend can form.
 - Crowd lean is the Kalshi mid itself (same role as checking an implied-probability board).
 - Size stays a few percent of the pot — never the whole bankroll on one 15m flip.
