@@ -69,7 +69,7 @@ def spot_source_label(asset: str, source: str) -> str:
 
 
 def is_scoreable_source(label: str, raw_source: str = "") -> bool:
-    if str(label or "").strip().upper() in {"BRTI", "ERTI"}:
+    if str(label or "").strip().upper() in {"BRTI", "ERTI", "ETHUSD_RTI"}:
         return True
     return is_settlement_index(raw_source)
 
@@ -111,7 +111,7 @@ def new_paper_row(
     hourly_vol: float = 0.0,
 ) -> dict[str, Any]:
     raw = str(spot_source or "").strip()
-    if raw.upper() in {"BRTI", "ERTI"}:
+    if raw.upper() in {"BRTI", "ERTI", "ETHUSD_RTI"}:
         label = raw.upper()
     elif raw.upper() == "PROXY":
         label = "PROXY"
@@ -169,7 +169,7 @@ def new_paper_row(
         "fill_status": fill_status,
         "filled_contracts": filled,
         "settlement_print": None,
-        "settlement_index": index_id_for(asset),
+        "settlement_index": "ETHUSD_RTI" if label == "ETHUSD_RTI" else index_id_for(asset),
         "settlement_result": None,
         "result": result,
         "pnl": None if result == RESULT_PENDING else 0.0,

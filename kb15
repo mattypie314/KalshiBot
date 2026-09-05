@@ -1,0 +1,18 @@
+#!/bin/sh
+# Dedicated 15-minute BTC/ETH bot. Does not touch hourly ./kb.
+#                 ./kb15              → menu
+#                 ./kb15 scan
+#                 ./kb15 once
+#                 ./kb15 live
+#                 ./kb15 env
+#                 ./kb15 eval / paper
+# Also: ./kb fifteen scan
+root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+export PYTHONPATH="${PYTHONPATH:-$root}"
+cd "$root" || exit 1
+if [ -x "$root/.venv/bin/python" ]; then
+  py="$root/.venv/bin/python"
+else
+  py="python3"
+fi
+exec "$py" -m src.fifteen "$@"

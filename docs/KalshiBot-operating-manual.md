@@ -8,7 +8,7 @@ sudo systemctl disable --now kalshi-hourly.timer
 
 Resume only on purpose: `HALTED=false`, restore the live `ExecStart` line, then enable the timer.
 
-Pi checkout: `/home/KalshiBot`  
+Pi checkout: `/home/KalshiBot` (hourly). 15m sibling: `/home/KalshiBot15` — see `docs/15m.md`.  
 Not financial advice. A wrong contract can go to $0.
 
 ## What this bot is

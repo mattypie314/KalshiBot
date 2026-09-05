@@ -8,6 +8,8 @@ from typing import Any
 from src.clock import parse_ts, to_et
 
 INDEX_BY_ASSET = {"BTC": "BRTI", "ETH": "ERTI"}
+# 15m ETH prints on ETHUSD_RTI. Hourly still uses ERTI. Never mix them.
+FIFTEEN_INDEX_BY_ASSET = {"BTC": "BRTI", "ETH": "ETHUSD_RTI"}
 SETTLEMENT_WINDOW_SECONDS = 60
 
 
@@ -57,6 +59,11 @@ def index_id_for(asset: str) -> str | None:
     return INDEX_BY_ASSET.get(str(asset or "").upper())
 
 
+def fifteen_index_id_for(asset: str) -> str | None:
+    """15m settlement ids. ETH is ETHUSD_RTI — never ERTI."""
+    return FIFTEEN_INDEX_BY_ASSET.get(str(asset or "").upper())
+
+
 def official_index_label(asset: str, source: str) -> str:
     """BRTI / ERTI when the print is the settlement index; otherwise PROXY."""
     if str(source or "").strip().lower() == "cfbenchmarks":
@@ -64,8 +71,19 @@ def official_index_label(asset: str, source: str) -> str:
     return "PROXY"
 
 
+def fifteen_official_index_label(asset: str, source: str) -> str:
+    """BRTI / ETHUSD_RTI for 15m. Coinbase/Binance stay PROXY."""
+    if str(source or "").strip().lower() == "cfbenchmarks":
+        return fifteen_index_id_for(asset) or "PROXY"
+    return "PROXY"
+
+
 def is_official_index_label(label: str) -> bool:
     return str(label or "").strip().upper() in set(INDEX_BY_ASSET.values())
+
+
+def is_official_fifteen_index_label(label: str) -> bool:
+    return str(label or "").strip().upper() in set(FIFTEEN_INDEX_BY_ASSET.values())
 
 
 def _tick_time(item: dict[str, Any]) -> datetime | None:
