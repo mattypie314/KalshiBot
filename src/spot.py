@@ -35,6 +35,16 @@ def is_settlement_index(source: str) -> bool:
     return str(source or "").strip().lower() == SETTLEMENT_SOURCE
 
 
+@dataclass(frozen=True)
+class Candle:
+    """One exchange bar. Vol still uses close; 15m regime uses high/low/close."""
+
+    high: float
+    low: float
+    close: float
+    open: float = 0.0
+
+
 @dataclass
 class SpotSnapshot:
     prices: dict[str, float] = field(default_factory=dict)
@@ -42,6 +52,7 @@ class SpotSnapshot:
     source: str = "unknown"
     sources: dict[str, str] = field(default_factory=dict)
     vol_source: dict[str, str] = field(default_factory=dict)
+    candles: dict[str, list[Candle]] = field(default_factory=dict)
     note: str = (
         "Spot prefers CF Benchmarks BRTI/ERTI (Kalshi settlement). "
         "Vol is exchange-realized, not that index."
@@ -125,7 +136,7 @@ class SpotService:
                 return price, name
         return None, "none"
 
-    def _vol(self, asset: str, fallback: float) -> tuple[float, str]:
+    def _vol(self, asset: str, fallback: float) -> tuple[float, str, list[Candle]]:
         preferred = self.preferred if self.preferred in {"coinbase", "binance"} else "coinbase"
         order = [preferred, "coinbase", "binance"]
         seen: set[str] = set()
@@ -135,9 +146,11 @@ class SpotService:
             seen.add(name)
             try:
                 if name == "binance":
-                    vol = self._binance_vol(asset)
+                    candles = self._binance_candles(asset)
+                    vol = hourly_vol_from_closes([bar.close for bar in candles], 60)
                 else:
-                    vol = self._coinbase_vol(asset)
+                    candles = self._coinbase_candles(asset)
+                    vol = hourly_vol_from_closes([bar.close for bar in candles], 60)
             except Exception as exc:  # noqa: BLE001
                 text = str(exc)
                 if "451" in text:
@@ -146,8 +159,8 @@ class SpotService:
                     logger.info("%s vol failed for %s: %s", name, asset, exc)
                 continue
             if vol is not None:
-                return min(0.05, max(0.001, vol)), f"{name}-realized"
-        return fallback, "fallback"
+                return min(0.05, max(0.001, vol)), f"{name}-realized", candles
+        return fallback, "fallback", []
 
     def snapshot(
         self,
@@ -161,9 +174,13 @@ class SpotService:
             if price:
                 snap.prices[asset] = price
                 snap.sources[asset] = src
-            vol, vol_src = self._vol(asset, fallbacks.get(asset, FALLBACK_VOL.get(asset, 0.004)))
+            vol, vol_src, candles = self._vol(
+                asset, fallbacks.get(asset, FALLBACK_VOL.get(asset, 0.004))
+            )
             snap.hourly_vol[asset] = vol
             snap.vol_source[asset] = vol_src
+            if candles:
+                snap.candles[asset] = candles
         if snap.sources:
             uniq = list(dict.fromkeys(snap.sources.values()))
             if len(uniq) == 1:
@@ -193,7 +210,7 @@ class SpotService:
         response.raise_for_status()
         return float(response.json()["price"])
 
-    def _binance_vol(self, asset: str) -> float | None:
+    def _binance_candles(self, asset: str) -> list[Candle]:
         symbol = BINANCE_SYMBOL[asset]
         response = self._http.get(
             "https://api.binance.com/api/v3/klines",
@@ -201,8 +218,22 @@ class SpotService:
         )
         response.raise_for_status()
         rows = response.json()
-        closes = [float(row[4]) for row in rows if row and len(row) > 4]
-        return hourly_vol_from_closes(closes, 60)
+        candles: list[Candle] = []
+        for row in rows:
+            if not row or len(row) <= 4:
+                continue
+            candles.append(
+                Candle(
+                    open=float(row[1]),
+                    high=float(row[2]),
+                    low=float(row[3]),
+                    close=float(row[4]),
+                )
+            )
+        return candles
+
+    def _binance_vol(self, asset: str) -> float | None:
+        return hourly_vol_from_closes([bar.close for bar in self._binance_candles(asset)], 60)
 
     def _coinbase_price(self, asset: str) -> float | None:
         product = COINBASE_PRODUCT[asset]
@@ -210,7 +241,7 @@ class SpotService:
         response.raise_for_status()
         return float(response.json()["data"]["amount"])
 
-    def _coinbase_vol(self, asset: str) -> float | None:
+    def _coinbase_candles(self, asset: str) -> list[Candle]:
         product = COINBASE_PRODUCT[asset]
         end = int(time.time())
         start = end - self.vol_lookback_minutes * 60
@@ -225,6 +256,20 @@ class SpotService:
         response.raise_for_status()
         rows = response.json()
         if not isinstance(rows, list):
-            return None
-        closes = [float(r[4]) for r in reversed(rows) if r and len(r) > 4 and r[4]]
-        return hourly_vol_from_closes(closes, 60)
+            return []
+        candles: list[Candle] = []
+        for row in reversed(rows):
+            if not row or len(row) <= 4 or not row[4]:
+                continue
+            candles.append(
+                Candle(
+                    low=float(row[1]),
+                    high=float(row[2]),
+                    open=float(row[3]),
+                    close=float(row[4]),
+                )
+            )
+        return candles
+
+    def _coinbase_vol(self, asset: str) -> float | None:
+        return hourly_vol_from_closes([bar.close for bar in self._coinbase_candles(asset)], 60)

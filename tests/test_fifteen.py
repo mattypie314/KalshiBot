@@ -31,8 +31,10 @@ from src.fifteen.edge import (
     revenge_until_after_loss,
     strike_decided,
 )
-from src.fifteen.main import live_is_armed, main, normalize_argv
+from src.fifteen.main import collect_ideas, live_is_armed, main, normalize_argv
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
+from src.fifteen.regime import CHOP_VETO_PHRASE
+from src.spot import SpotSnapshot
 from src.filters import Idea
 from src.markets import (
     FIFTEEN_BY_ASSET,
@@ -389,3 +391,169 @@ def test_cli_normalize_and_live_gates():
     assert live_is_armed(prompt, confirm="LIVE", isatty=True) is True
     assert live_is_armed(prompt, confirm="LIVE", isatty=False) is False
     assert main(["live", "--confirm", "LIVE"]) == EXIT_CONFIG
+
+
+def _pass_market(now: datetime, ticker: str = "KXBTC15M-TEST-T64000") -> HourlyMarket:
+    close = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0) + timedelta(
+        minutes=15
+    )
+    return HourlyMarket(
+        ticker=ticker,
+        event_ticker="KXBTC15M-TEST",
+        series_ticker="KXBTC15M",
+        asset="BTC",
+        title="BTC 15m",
+        yes_sub_title="$64,000 or above",
+        threshold=64000.0,
+        strike_type="greater",
+        close_time=close,
+        status="active",
+        yes_bid=0.54,
+        yes_ask=0.56,
+        no_bid=0.44,
+        no_ask=0.46,
+        yes_bid_size=10,
+        yes_ask_size=10,
+        no_bid_size=10,
+        no_ask_size=10,
+        rules_primary="CF Benchmarks BRTI",
+        rules_secondary="",
+        settlement_source="CF Benchmarks",
+        exchange_index=2,
+    )
+
+
+class _FakeSpotService:
+    def __init__(self, candles, **_kwargs):
+        self._candles = candles
+
+    def snapshot(self, assets, fallbacks=None):
+        return SpotSnapshot(
+            prices={"BTC": 65000.0},
+            hourly_vol={"BTC": 0.004},
+            sources={"BTC": "cfbenchmarks"},
+            source="cfbenchmarks",
+            candles={"BTC": list(self._candles)},
+        )
+
+    def close(self):
+        return None
+
+
+def _patch_collect(monkeypatch, candles, market):
+    monkeypatch.setattr(
+        "src.fifteen.main.SpotService",
+        lambda **kwargs: _FakeSpotService(candles),
+    )
+
+    class Discovery:
+        def __init__(self, client):
+            self.client = client
+
+        def discover_fifteen(self, assets, **kwargs):
+            return [market]
+
+    monkeypatch.setattr("src.fifteen.main.MarketDiscovery", Discovery)
+
+
+def test_collect_ideas_chops_veto_after_pass(monkeypatch):
+    from tests.test_regime import choppy_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, choppy_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert ideas == []
+    assert any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_collect_ideas_trend_still_passes(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert len(ideas) == 1
+    assert ideas[0].market.ticker == market.ticker
+    assert not any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_collect_ideas_live_path_skips_chop_veto(monkeypatch):
+    from tests.test_regime import choppy_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, choppy_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=False,
+    )
+    assert len(ideas) == 1
+    assert not any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_run_scan_live_does_not_pass_chop_veto(monkeypatch, tmp_path):
+    seen: dict = {}
+
+    def fake_collect(*args, **kwargs):
+        seen["apply_chop_veto"] = kwargs.get("apply_chop_veto")
+        return [], ["sit"], None
+
+    class Client:
+        can_trade = False
+
+        def get_balance(self):
+            return {"total_value": 5}
+
+        def get_fills(self, limit=50):
+            return []
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: Client())
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = FifteenSettings(
+        _env_file=None,
+        artifacts_dir=str(tmp_path),
+        state_path=str(tmp_path / "fifteen_state.json"),
+        pot_path=str(tmp_path / "fifteen_pot.json"),
+        trade_log_path=str(tmp_path / "fifteen_trade_log.jsonl"),
+        paper_log_path=str(tmp_path / "fifteen_paper_log.jsonl"),
+        scan_log_path=str(tmp_path / "fifteen_scan_log.jsonl"),
+        halted=False,
+        chop_veto=True,
+    )
+    assert run_scan(settings, asset=None, place=True, force_live=True, armed=False) == 0
+    assert seen["apply_chop_veto"] is False
+    assert run_scan(settings, asset=None, place=False, force_live=False) == 0
+    assert seen["apply_chop_veto"] is True
