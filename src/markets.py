@@ -173,6 +173,20 @@ def in_current_or_next_hour(close: datetime, now: datetime | None = None) -> boo
     return close <= next_hour_end + timedelta(seconds=1)
 
 
+def in_current_or_next_15m(close: datetime, now: datetime | None = None) -> bool:
+    """Keep closes at the end of this Eastern 15m window or the next one."""
+    now = to_et(now)
+    if close.tzinfo is None:
+        close = close.replace(tzinfo=timezone.utc)
+    close = to_et(close)
+    if close <= now:
+        return False
+    minute = (now.minute // 15) * 15
+    this_end = now.replace(minute=minute, second=0, microsecond=0) + timedelta(minutes=15)
+    next_end = this_end + timedelta(minutes=15)
+    return close <= next_end + timedelta(seconds=1)
+
+
 def is_fifteen_series(series_ticker: str) -> bool:
     return str(series_ticker or "").upper().endswith("15M")
 
@@ -323,6 +337,45 @@ class MarketDiscovery:
         spots = spots or {}
         for asset in wanted:
             subset = [m for m in hourly if m.asset == asset]
+            spot = spots.get(asset)
+            if spot and subset:
+                subset = rank_hourly_markets(
+                    subset,
+                    spot,
+                    max_per_asset,
+                    min_distance_pct=min_distance_pct,
+                    watch_slots=watch_slots,
+                )
+            else:
+                subset = subset[:max_per_asset]
+            out.extend(subset)
+        return out
+
+    def discover_fifteen(
+        self,
+        assets: list[str],
+        *,
+        now: datetime | None = None,
+        max_per_asset: int = 8,
+        spots: dict[str, float] | None = None,
+        min_distance_pct: float = 0.0,
+        watch_slots: int = 2,
+    ) -> list[HourlyMarket]:
+        """Discover live KXBTC15M / KXETH15M books in the current or next 15m window."""
+        now = now or to_et()
+        wanted = {a.upper() for a in assets}
+        series = tuple(s for a in wanted for s in FIFTEEN_BY_ASSET.get(a, ()))
+        loaded = self._load_series(
+            series or FIFTEEN_SERIES,
+            now,
+            used_15m=False,
+            require_hour_window=False,
+        )
+        fifteen = [m for m in loaded if in_current_or_next_15m(m.close_time, now)]
+        out: list[HourlyMarket] = []
+        spots = spots or {}
+        for asset in wanted:
+            subset = [m for m in fifteen if m.asset == asset]
             spot = spots.get(asset)
             if spot and subset:
                 subset = rank_hourly_markets(

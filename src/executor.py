@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Daily BTC/ETH threshold books this scanner trades. Not 15m campaign rests.
 HOURLY_SERIES = frozenset({"KXBTCD", "KXETHD"})
+FIFTEEN_SERIES = frozenset({"KXBTC15M", "KXETH15M"})
 TICK = 0.01
 MAX_CROSS_RETRIES = 3
 
@@ -36,6 +37,15 @@ def is_hourly_rest(row: dict[str, Any]) -> bool:
     if series in HOURLY_SERIES or series_code(ticker) in HOURLY_SERIES:
         return True
     return str(row.get("client_order_id") or "").startswith("hourly-")
+
+
+def is_fifteen_rest(row: dict[str, Any]) -> bool:
+    """True for 15m BTC/ETH rests only — never cancels hourly KXBTCD/KXETHD."""
+    ticker = str(row.get("ticker") or row.get("market_ticker") or "")
+    series = str(row.get("series_ticker") or "")
+    if series in FIFTEEN_SERIES or series_code(ticker) in FIFTEEN_SERIES:
+        return True
+    return str(row.get("client_order_id") or "").startswith("fifteen-")
 
 
 def _order_payload(idea: Idea, run_id: str) -> dict[str, Any]:
@@ -163,6 +173,7 @@ def execute_ideas(
     run_id: str | None = None,
     cancel_stale: bool = True,
     keep_tickers: set[str] | None = None,
+    rest_filter: Any | None = None,
 ) -> dict[str, Any]:
     run_id = run_id or uuid.uuid4().hex[:12]
     dest = Path(artifacts_dir)
@@ -194,9 +205,10 @@ def execute_ideas(
         except Exception as exc:  # noqa: BLE001
             logger.warning("Could not list resting orders: %s", exc)
             resting = []
+        pred = rest_filter or is_hourly_rest
         for row in resting:
             row = unwrap_order(row)
-            if not is_hourly_rest(row):
+            if not pred(row):
                 continue
             order_id = str(row.get("order_id") or "")
             ticker = str(row.get("ticker") or row.get("market_ticker") or "")

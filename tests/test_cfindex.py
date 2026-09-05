@@ -21,7 +21,8 @@ def test_parse_cf_kalshi_envelope():
     assert parse_cf_index_value({"payload": {"value": 2395.1}}) == 2395.1
     assert parse_cf_index_value({"error": "nope"}) is None
     assert index_id_for("BTC") == "BRTI"
-    assert index_id_for("ETH") == "ERTI"
+    assert index_id_for("ETH") == "ETHUSD_RTI"
+    assert "ERTI" in __import__("src.cfindex", fromlist=["index_ids_for"]).index_ids_for("ETH")
 
 
 def test_history_ticks_and_60s_average():

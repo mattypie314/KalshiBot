@@ -7,7 +7,13 @@ from typing import Any
 
 from src.clock import parse_ts, to_et
 
-INDEX_BY_ASSET = {"BTC": "BRTI", "ETH": "ERTI"}
+# BTC print is BRTI. ETH settlement id that works is ETHUSD_RTI (ERTI is a fallback alias).
+INDEX_BY_ASSET = {"BTC": "BRTI", "ETH": "ETHUSD_RTI"}
+INDEX_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "BTC": ("BRTI",),
+    "ETH": ("ETHUSD_RTI", "ERTI"),
+}
+OFFICIAL_INDEX_IDS = frozenset({"BRTI", "ETHUSD_RTI", "ERTI"})
 SETTLEMENT_WINDOW_SECONDS = 60
 
 
@@ -53,19 +59,28 @@ def parse_cf_index_value(blob: object) -> float | None:
     return None
 
 
+def index_ids_for(asset: str) -> tuple[str, ...]:
+    key = str(asset or "").upper()
+    if key in INDEX_FALLBACKS:
+        return INDEX_FALLBACKS[key]
+    primary = INDEX_BY_ASSET.get(key)
+    return (primary,) if primary else ()
+
+
 def index_id_for(asset: str) -> str | None:
-    return INDEX_BY_ASSET.get(str(asset or "").upper())
+    ids = index_ids_for(asset)
+    return ids[0] if ids else None
 
 
 def official_index_label(asset: str, source: str) -> str:
-    """BRTI / ERTI when the print is the settlement index; otherwise PROXY."""
+    """BRTI / ETHUSD_RTI when the print is the settlement index; otherwise PROXY."""
     if str(source or "").strip().lower() == "cfbenchmarks":
         return index_id_for(asset) or "PROXY"
     return "PROXY"
 
 
 def is_official_index_label(label: str) -> bool:
-    return str(label or "").strip().upper() in set(INDEX_BY_ASSET.values())
+    return str(label or "").strip().upper() in OFFICIAL_INDEX_IDS
 
 
 def _tick_time(item: dict[str, Any]) -> datetime | None:
