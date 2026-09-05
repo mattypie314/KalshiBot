@@ -11,10 +11,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.cashout import manage_open_cashouts
 from src.clock import configure_logging, format_et, hour_key, same_et_hour, to_et
 from src.config import EXIT_CONFIG, EXIT_OK, EXIT_RATE_LIMITED, HourlySettings, load_settings
 from src.evaluate import run_eval
-from src.executor import execute_ideas
+from src.executor import CRYPTO_SHARD, execute_ideas, is_hourly_rest
 from src.paper import (
     describe_paper_append,
     record_printed_ideas,
@@ -320,6 +321,36 @@ def run_scan(
     if "hour_key" not in state:
         state["hour_key"] = _hour_key(to_et())
     save_state(Path(settings.state_path), state)
+
+    # Lock near-certain wins before scanning for new entries.
+    live_cashout = bool(
+        force_live
+        and (armed or settings.live_enabled)
+        and not settings.halted
+        and client.can_trade
+    )
+    last_ticker = str(state.get("last_ticker") or "")
+    last_side = str(state.get("last_side") or "")
+    if last_ticker and last_side:
+        cashouts = manage_open_cashouts(
+            client,
+            [
+                {
+                    "ticker": last_ticker,
+                    "side": last_side,
+                    "contracts": state.get("last_contracts") or 1,
+                }
+            ],
+            live=live_cashout,
+            exchange_index=CRYPTO_SHARD,
+            rest_filter=is_hourly_rest,
+        )
+        if any(r.get("action") == "cashed_out" for r in cashouts):
+            state.pop("last_ticker", None)
+            state.pop("last_side", None)
+            state.pop("last_contracts", None)
+            save_state(Path(settings.state_path), state)
+
     spots_svc = SpotService(preferred=settings.spot_source, kalshi=client)
     try:
         try:
