@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from src.cfindex import index_id_for, parse_cf_index_value
+from src.indicators import Candle
 
 logger = logging.getLogger(__name__)
 
@@ -228,3 +229,80 @@ class SpotService:
             return None
         closes = [float(r[4]) for r in reversed(rows) if r and len(r) > 4 and r[4]]
         return hourly_vol_from_closes(closes, 60)
+
+    def ohlc_1m(self, asset: str, *, limit: int = 60) -> list[Candle]:
+        """Oldest→newest 1m OHLC for BB/RSI/ADX. Prefers Binance, then Coinbase."""
+        asset = str(asset or "").upper()
+        limit = max(30, min(int(limit), 120))
+        preferred = self.preferred if self.preferred in {"coinbase", "binance"} else "binance"
+        order = [preferred, "binance", "coinbase"]
+        seen: set[str] = set()
+        for name in order:
+            if name in seen:
+                continue
+            seen.add(name)
+            try:
+                if name == "binance":
+                    rows = self._binance_ohlc(asset, limit=limit)
+                else:
+                    rows = self._coinbase_ohlc(asset, limit=limit)
+            except Exception as exc:  # noqa: BLE001
+                logger.info("%s ohlc failed for %s: %s", name, asset, exc)
+                continue
+            if rows:
+                return rows
+        return []
+
+    def _binance_ohlc(self, asset: str, *, limit: int) -> list[Candle]:
+        symbol = BINANCE_SYMBOL[asset]
+        response = self._http.get(
+            "https://api.binance.com/api/v3/klines",
+            params={"symbol": symbol, "interval": "1m", "limit": limit},
+        )
+        response.raise_for_status()
+        out: list[Candle] = []
+        for row in response.json() or []:
+            if not row or len(row) < 5:
+                continue
+            out.append(
+                Candle(
+                    open=float(row[1]),
+                    high=float(row[2]),
+                    low=float(row[3]),
+                    close=float(row[4]),
+                )
+            )
+        return out
+
+    def _coinbase_ohlc(self, asset: str, *, limit: int) -> list[Candle]:
+        product = COINBASE_PRODUCT[asset]
+        end = int(time.time())
+        start = end - limit * 60
+        response = self._http.get(
+            f"https://api.exchange.coinbase.com/products/{product}/candles",
+            params={
+                "granularity": 60,
+                "start": datetime.fromtimestamp(start, tz=timezone.utc).isoformat(),
+                "end": datetime.fromtimestamp(end, tz=timezone.utc).isoformat(),
+            },
+        )
+        response.raise_for_status()
+        rows = response.json()
+        if not isinstance(rows, list):
+            return []
+        # Coinbase returns newest-first: [time, low, high, open, close, volume]
+        ordered = list(reversed(rows))
+        out: list[Candle] = []
+        for row in ordered:
+            if not row or len(row) < 5:
+                continue
+            out.append(
+                Candle(
+                    open=float(row[3]),
+                    high=float(row[2]),
+                    low=float(row[1]),
+                    close=float(row[4]),
+                )
+            )
+        return out[-limit:]
+
