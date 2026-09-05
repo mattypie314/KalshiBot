@@ -235,6 +235,7 @@ def format_fifteen_report(
     settlements: list[str],
     pot: dict[str, Any],
     phase: Any,
+    halted: bool = True,
 ) -> str:
     body = format_report(
         now=now,
@@ -253,7 +254,8 @@ def format_fifteen_report(
         f"- Window: {fifteen_window_key(now)}  phase={getattr(phase, 'name', '?')}  "
         f"into={getattr(phase, 'minutes_into', 0):.1f}m  left={getattr(phase, 'minutes_left', 0):.1f}m\n"
         f"- Pot: ${float(pot.get('pot') or 0):.2f}  (start ${float(pot.get('start') or 5):.2f}; "
-        f"ask ${float(pot.get('ask_at') or 10):.0f}; halted={bool(pot.get('halted'))})\n"
+        f"ask ${float(pot.get('ask_at') or 10):.0f}; pot_halted={bool(pot.get('halted'))} "
+        f"HALTED={halted})\n"
         f"- Settlement: BTC BRTI / ETH ETHUSD_RTI (never ERTI). 60s average before window end.\n"
         f"- Vol lookback: TEMPORARY HEURISTIC — "
         f"{getattr(spots, 'vol_source', {})} (shorter than hourly 4h).\n"
@@ -516,6 +518,7 @@ def run_scan(
             settlements=settlements,
             pot=pot,
             phase=phase,
+            halted=settings.halted,
         )
         print(report)
 

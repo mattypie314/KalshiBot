@@ -177,7 +177,11 @@ class SpotService:
                 "Vol is exchange-realized."
             )
         elif snap.sources:
-            snap.note = PROXY_NOTE
+            snap.note = (
+                f"PROXY: exchange last tick is not the Kalshi settlement. "
+                f"Official print is the 60-second CF Benchmarks average ({labels or 'BRTI / ERTI'}). "
+                "Ideas sit until that index is available."
+            )
         return snap
 
     def _binance_price(self, asset: str) -> float | None:
