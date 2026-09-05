@@ -41,7 +41,7 @@ def is_hourly_rest(row: dict[str, Any]) -> bool:
 
 
 def is_fifteen_rest(row: dict[str, Any]) -> bool:
-    """True for KXBTC15M / KXETH15M rests only. Never matches hourly books."""
+    """True for KXBTC15M / KXETH15M rests only — never cancels hourly KXBTCD/KXETHD."""
     ticker = str(row.get("ticker") or row.get("market_ticker") or "")
     series = str(row.get("series_ticker") or "")
     if series in FIFTEEN_SERIES or series_code(ticker) in FIFTEEN_SERIES:
@@ -174,6 +174,7 @@ def execute_ideas(
     run_id: str | None = None,
     cancel_stale: bool = True,
     keep_tickers: set[str] | None = None,
+    rest_filter: Any | None = None,
     rest_matcher: Any = None,
     exchange_index: int = -1,
 ) -> dict[str, Any]:
@@ -182,7 +183,7 @@ def execute_ideas(
     dest.mkdir(parents=True, exist_ok=True)
 
     go_live = bool(live and confirm_live)
-    match_rest = rest_matcher or is_hourly_rest
+    pred = rest_filter or rest_matcher or is_hourly_rest
     orders = [_order_payload(idea, run_id, exchange_index=exchange_index) for idea in ideas]
     result: dict[str, Any] = {
         "run_id": run_id,
@@ -210,7 +211,7 @@ def execute_ideas(
             resting = []
         for row in resting:
             row = unwrap_order(row)
-            if not match_rest(row):
+            if not pred(row):
                 continue
             order_id = str(row.get("order_id") or "")
             ticker = str(row.get("ticker") or row.get("market_ticker") or "")

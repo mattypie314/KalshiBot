@@ -796,7 +796,7 @@ def cli() -> None:
 def main(argv: list[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     if raw and raw[0].lower() in {"fifteen", "15m", "15"}:
-        from src.fifteen import main as fifteen_main
+        from src.fifteen.main import main as fifteen_main
 
         return fifteen_main(raw[1:])
 

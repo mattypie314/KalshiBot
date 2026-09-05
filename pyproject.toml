@@ -20,7 +20,7 @@ dev = ["pytest>=8.0.0"]
 [project.scripts]
 kalshibot = "src.main:cli"
 kb = "src.main:cli"
-kb15 = "src.fifteen:cli"
+kb15 = "src.fifteen.main:cli"
 
 [tool.setuptools.packages.find]
 include = ["src*"]

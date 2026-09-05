@@ -14,7 +14,7 @@ Pi operating manual (PDF): `docs/KalshiBot-operating-manual.pdf`. Rebuild with `
 
 Not financial advice. You can lose the full amount you put on a contract. Demo first. `.env` can stay dry. Live is a one-run confirm: type `LIVE` at the prompt, or pass `--confirm LIVE` on a keyboard. Unattended live still needs both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES`.
 
-A dedicated **15-minute BTC/ETH** bot (`KXBTC15M` / `KXETH15M`, own $5 pot) lives in this repo as `python -m src.fifteen` / `./kb15` / `./kb fifteen`. It does not change hourly. Pi path: `/home/KalshiBot15`. Rules and ops: `docs/15m.md`. systemd `kalshi-15m.timer` ships **disabled**.
+A dedicated **15-minute BTC/ETH** edge-loop bot (`KXBTC15M` / `KXETH15M`, own $5 pot) lives in-tree as `python -m src.fifteen` / `./kb15` / `./kb fifteen`. It does not change hourly. Pi path: `/home/KalshiBot15`. Rules: `docs/15m.md` and `docs/15m-operating-rules.md`. systemd `kalshi-15m.timer` ships **disabled**. ETH settlement id for 15m is **`ETHUSD_RTI`** (hourly still uses ERTI).
 
 The older campaign desk (maker loop / dashboard / research) stays parked on `archive/campaign-desk`.
 
@@ -198,6 +198,28 @@ After that contract’s hour, `scan` / `once` / `eval` / `paper` settle pending 
 pytest
 ./kb eval    # paper tape + local live journal + historical GitHub-scan replay; does not claim edge
 ```
+
+
+## 15m BTC/ETH bot (`./kb15`)
+
+Sibling bot for Kalshi **15-minute** BTC/ETH threshold books (`KXBTC15M` / `KXETH15M`) only. It does **not** trade or cancel hourly `KXBTCD` / `KXETHD` rests. Operating rules: [`docs/15m-operating-rules.md`](docs/15m-operating-rules.md).
+
+```bash
+chmod +x kb15
+./kb15              # scan (paper on Pass)
+./kb15 scan         # also: s / 1
+./kb15 once         # dry-run maker payloads (o / 2)
+./kb15 auth         # key check (a / 3)
+./kb15 live         # dual-gated live; type LIVE or --confirm LIVE (l / 4)
+./kb15 eval         # paper + pot summary (v / 6)
+./kb15 paper        # same as eval (p / 7)
+```
+
+Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, entry ET minutes **:02–:04** of each 15m window, Pass needs ≥**4¢** model-vs-mid with spread ≤ edge, sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.
+
+ETH settlement index id is **`ETHUSD_RTI`** (fallback `ERTI`). Missing/PROXY index → sit.
+
+v1 ships the early-window edge loop only. Last-minute maker and auto flatten/TP rests are deferred.
 
 ## Later
 

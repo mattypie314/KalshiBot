@@ -1,17 +1,30 @@
-"""Settings for the dedicated BTC/ETH 15-minute bot.
-
-Hourly knobs stay in HourlySettings. This file is the 15m checkout's .env.
-"""
+"""Settings for the 15m BTC/ETH bot. Separate artifacts from the hourly scanner."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from pydantic import field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from src.config import DEFAULT_BASE_URL, _env_files, _strip_secret, apply_kalshi_shell_env
+from src.config import (
+    DEFAULT_BASE_URL,
+    EXIT_CONFIG,
+    EXIT_OK,
+    EXIT_RATE_LIMITED,
+    _env_files,
+    _strip_secret,
+    apply_kalshi_shell_env,
+)
+
+__all__ = [
+    "EXIT_OK",
+    "EXIT_CONFIG",
+    "EXIT_RATE_LIMITED",
+    "FifteenSettings",
+    "load_fifteen_settings",
+]
 
 
 class FifteenSettings(BaseSettings):
@@ -20,6 +33,7 @@ class FifteenSettings(BaseSettings):
         extra="ignore",
         env_ignore_empty=True,
         case_sensitive=False,
+        populate_by_name=True,
     )
 
     kalshi_api_key_id: str = ""
@@ -32,69 +46,42 @@ class FifteenSettings(BaseSettings):
     confirm_live: str = "NO"
     halted: bool = True
 
-    # Own $5 pot — not hourly BANKROLL / hourly_pot.
-    fifteen_pot_start: float = 5.00
-    fifteen_pot_ask: float = 10.00
-    min_risk_dollars: float = 0.10
-    max_risk_dollars: float = 1.50
-    preferred_risk_dollars: float = 0.85
-    max_risk_pct: float = 0.05
+    pot_start: float = Field(default=5.00, validation_alias=AliasChoices("FIFTEEN_POT_START", "POT_START"))
+    pot_double: float = Field(default=10.00, validation_alias=AliasChoices("FIFTEEN_POT_DOUBLE", "POT_DOUBLE"))
+    bankroll: float = Field(default=5.00, validation_alias=AliasChoices("FIFTEEN_BANKROLL"))
+    min_net_edge: float = Field(default=0.04, validation_alias=AliasChoices("FIFTEEN_MIN_NET_EDGE", "MIN_NET_EDGE"))
+    max_risk_pct: float = 0.40
+    max_risk_dollars: float = Field(default=2.00, validation_alias=AliasChoices("FIFTEEN_MAX_RISK_DOLLARS"))
+    preferred_risk_dollars: float = Field(default=1.50, validation_alias=AliasChoices("FIFTEEN_PREFERRED_RISK_DOLLARS"))
     kelly_mult: float = 0.25
 
     assets: str = "BTC,ETH"
-    series: str = "KXBTC15M,KXETH15M"
-    exchange_index: int = 2
     max_markets_per_asset: int = 8
-    max_ideas_per_window: int = 1
+    max_ideas_per_run: int = Field(default=1, validation_alias=AliasChoices("FIFTEEN_MAX_IDEAS_PER_RUN", "MAX_IDEAS_PER_RUN"))
+    min_minutes_left: float = Field(default=8.0, validation_alias=AliasChoices("FIFTEEN_MIN_MINUTES_LEFT", "MIN_MINUTES_LEFT"))
+    max_spread: float = 0.10
+    spot_source: str = "cfbenchmarks"
     require_settlement_index: bool = True
     require_maker: bool = True
     news_pause: bool = False
-
-    # Edge loop: first 2–4 minutes of :00/:15/:30/:45 ET (timer fires at :01).
-    edge_loop_min_into: float = 1.0
-    edge_loop_max_into: float = 4.0
-    # Hard skip under this many minutes unless last-minute maker is decided.
-    min_minutes_left: float = 8.0
-    mid_tolerance: float = 0.04
-    vol_pause_mult: float = 2.0
-    max_daily_losses: int = 3
-    half_sigma_recheck: bool = True
-
-    last_minute_maker: bool = True
-    last_minute_minutes: float = 3.0
-    last_minute_min_price: float = 0.74
-    last_minute_max_price: float = 0.93
-    last_minute_min_risk: float = 0.10
-    last_minute_max_risk: float = 0.75
-    stack_last_minute_with_edge: bool = False
-
-    stop_frac_of_risk: float = 0.25
-    stop_frac_from_fill: float = 0.10
-    stop_dollar_cap: float = 0.40
-    take_profit_cents: float = 0.02
-
-    spot_source: str = "cfbenchmarks"
-    # TEMPORARY HEURISTIC: 90m of 1m bars, still expressed as hourly-equivalent vol
-    # so the existing zero-drift model can scale by sqrt(hours_left). Hourly still
-    # uses ~4h. Revisit if 15m fair values look systematically off.
-    fifteen_vol_lookback_minutes: int = 90
-    fifteen_vol_fallback_btc: float = 0.004
-    fifteen_vol_fallback_eth: float = 0.005
+    hourly_vol_fallback_btc: float = 0.004
+    hourly_vol_fallback_eth: float = 0.005
 
     request_timeout_seconds: float = 20.0
     artifacts_dir: str = "artifacts"
-    pot_path: str = "artifacts/fifteen_pot.json"
-    state_path: str = "artifacts/fifteen_state.json"
-    last_run_path: str = "artifacts/last_run.json"
-    scan_log_path: str = "artifacts/fifteen_scan_log.jsonl"
-    paper_log_path: str = "artifacts/fifteen_paper_log.jsonl"
-    trade_log_path: str = "artifacts/fifteen_trade_log.jsonl"
+    state_path: str = Field(default="artifacts/fifteen_state.json", validation_alias=AliasChoices("FIFTEEN_STATE_PATH"))
+    scan_log_path: str = Field(default="artifacts/fifteen_scan_log.jsonl", validation_alias=AliasChoices("FIFTEEN_SCAN_LOG_PATH"))
+    paper_log_path: str = Field(default="artifacts/fifteen_paper_log.jsonl", validation_alias=AliasChoices("FIFTEEN_PAPER_LOG_PATH"))
+    trade_log_path: str = Field(default="artifacts/fifteen_trade_log.jsonl", validation_alias=AliasChoices("FIFTEEN_TRADE_LOG_PATH"))
+    pot_path: str = Field(default="artifacts/fifteen_pot.json", validation_alias=AliasChoices("FIFTEEN_POT_PATH"))
     paper_fill_model: str = "assumed-maker-fill"
 
     @field_validator("paper_fill_model", mode="before")
     @classmethod
     def _paper_fill_model(cls, value: object) -> str:
         text = str(value or "assumed-maker-fill").strip().lower().replace("_", "-")
+        if text in {"assumed-maker-fill", "assumed", "maker", "default"}:
+            return "assumed-maker-fill"
         if text in {"unfilled", "none", "strict"}:
             return "unfilled"
         return "assumed-maker-fill"
@@ -108,12 +95,6 @@ class FifteenSettings(BaseSettings):
     @classmethod
     def _clean_key_fields(cls, value: object) -> str:
         return _strip_secret(value)
-
-    @field_validator("series", mode="before")
-    @classmethod
-    def _series(cls, value: object) -> str:
-        text = str(value or "KXBTC15M,KXETH15M").upper()
-        return text
 
     @model_validator(mode="after")
     def default_kalshi_key_files(self) -> FifteenSettings:
@@ -131,17 +112,11 @@ class FifteenSettings(BaseSettings):
             id_file = home / "key_id"
         if id_file.is_file() and (not self.kalshi_api_key_id or path == str(pem)):
             self.kalshi_api_key_id = id_file.read_text().strip()
-        if self.kalshi_base_url and "tra>" in self.kalshi_base_url:
-            self.kalshi_base_url = DEFAULT_BASE_URL
         return self
 
     @property
     def asset_list(self) -> list[str]:
         return [part.strip().upper() for part in self.assets.split(",") if part.strip()]
-
-    @property
-    def series_list(self) -> list[str]:
-        return [part.strip().upper() for part in self.series.split(",") if part.strip()]
 
     @property
     def live_enabled(self) -> bool:

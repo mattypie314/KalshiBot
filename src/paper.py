@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 from src.cfindex import (
     average_settlement_window,
+    fifteen_index_id_for,
     history_query_timestamp,
     index_id_for,
     official_index_label,
@@ -169,7 +170,7 @@ def new_paper_row(
         "fill_status": fill_status,
         "filled_contracts": filled,
         "settlement_print": None,
-        "settlement_index": "ETHUSD_RTI" if label == "ETHUSD_RTI" else index_id_for(asset),
+        "settlement_index": label if label in {"BRTI", "ERTI", "ETHUSD_RTI"} else index_id_for(asset),
         "settlement_result": None,
         "result": result,
         "pnl": None if result == RESULT_PENDING else 0.0,
@@ -276,27 +277,33 @@ def fetch_official_print(
     asset: str,
     close_time: datetime | str,
 ) -> float | None:
-    """Official 60s BRTI/ERTI average. Never Coinbase / Binance last tick."""
-    index_id = index_id_for(asset)
+    """Official 60s BRTI/ERTI (hourly) or ETHUSD_RTI (15m) average. Never Coinbase last tick."""
+    ids: list[str] = []
+    for candidate in (index_id_for(asset), fifteen_index_id_for(asset)):
+        if candidate and candidate not in ids:
+            ids.append(candidate)
     getter = getattr(client, "get_cf_history", None)
-    if not index_id or getter is None:
+    if not ids or getter is None:
         return None
     if hasattr(client, "can_trade") and not client.can_trade:
         return None
     close = parse_ts(close_time) if not isinstance(close_time, datetime) else close_time
     if close is None:
         return None
-    for timespan in ("MINUTE", "HOUR"):
-        stamp = history_query_timestamp(close, timespan=timespan)
-        try:
-            blob = getter(index_id, timestamp=stamp, timespan=timespan)
-        except Exception as exc:  # noqa: BLE001
-            logger.info("CF history %s %s failed: %s", index_id, timespan, exc)
+    for index_id in ids:
+        if not index_id:
             continue
-        ticks = parse_cf_history_ticks(blob)
-        average = average_settlement_window(ticks, close)
-        if average:
-            return average
+        for timespan in ("MINUTE", "HOUR"):
+            stamp = history_query_timestamp(close, timespan=timespan)
+            try:
+                blob = getter(index_id, timestamp=stamp, timespan=timespan)
+            except Exception as exc:  # noqa: BLE001
+                logger.info("CF history %s %s failed: %s", index_id, timespan, exc)
+                continue
+            ticks = parse_cf_history_ticks(blob)
+            average = average_settlement_window(ticks, close)
+            if average:
+                return average
     return None
 
 

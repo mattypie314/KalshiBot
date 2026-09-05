@@ -1,371 +1,353 @@
-"""Dedicated 15m BTC/ETH bot: settlement id, skips, pot, gates, maker, series."""
+"""15m BTC/ETH edge-loop: windows, pass/fail, pot, gates, cancel isolation."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from src.cfindex import fifteen_index_id_for, index_id_for
-from src.clock import fifteen_window_key
-from src.config import EXIT_CONFIG
 from src.executor import execute_ideas, is_fifteen_rest, is_hourly_rest
-from src.fifteen import HALTED_MESSAGE, live_is_armed, main, parse_total_value
-from src.fifteen_config import FifteenSettings
-from src.fifteen_filters import (
-    FifteenFilterConfig,
-    classify_phase,
-    evaluate_fifteen_market,
-    live_mid,
-    model_near_mid,
-    should_stop_ticket,
-    should_take_profit,
-    spread_wider_than_edge,
+from src.fifteen.config import EXIT_CONFIG, FifteenSettings
+from src.fifteen.edge import (
+    CPI_DATES,
+    enough_room,
+    fifteen_session_date,
+    fifteen_stake,
+    fifteen_stopped,
+    fifteen_window_id,
+    fifteen_window_start,
+    fifteen_working,
+    half_sigma_move,
+    in_fifteen_entry_window,
+    in_fifteen_revenge,
+    in_fifteen_settlement,
+    news_blackout,
+    next_et_midnight,
+    pass_fail,
+    record_fifteen_result,
+    revenge_until_after_loss,
+    strike_decided,
 )
-from src.fifteen_pot import apply_pnl, empty_pot, load_pot, pot_should_halt, remaining_room
-from src.filters import Idea, maker_limit
+from src.fifteen.main import live_is_armed, main, normalize_argv
+from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
+from src.filters import Idea
 from src.markets import (
+    FIFTEEN_BY_ASSET,
     FIFTEEN_SERIES,
     HourlyMarket,
     MarketDiscovery,
-    fifteen_market_from_api,
-    is_btc_eth_fifteen_series,
+    in_current_or_next_15m,
 )
 
 ET = ZoneInfo("America/New_York")
 
 
-def _close(minutes: float = 13) -> datetime:
-    return datetime.now(timezone.utc) + timedelta(minutes=minutes)
+def _et(hour: int, minute: int, day: int = 28, month: int = 8, year: int = 2026) -> datetime:
+    return datetime(year, month, day, hour, minute, tzinfo=ET)
 
 
-def _market(**kwargs) -> HourlyMarket:
-    defaults = dict(
-        ticker="KXBTC15M-26SEP051200-T78099.99",
-        event_ticker="KXBTC15M-26SEP051200",
-        series_ticker="KXBTC15M",
-        asset="BTC",
-        title="BTC 15m up/down",
-        yes_sub_title="Up",
-        threshold=78099.99,
-        strike_type="greater",
-        close_time=_close(13),
-        status="active",
-        yes_bid=0.40,
-        yes_ask=0.42,
-        no_bid=0.58,
-        no_ask=0.60,
-        yes_bid_size=20,
-        yes_ask_size=20,
-        no_bid_size=20,
-        no_ask_size=20,
-        rules_primary="CF Benchmarks BRTI 60-second average.",
-        rules_secondary="",
-        settlement_source="CF Benchmarks BRTI",
-        exchange_index=2,
+def test_entry_window_is_minutes_two_to_four():
+    assert in_fifteen_entry_window(_et(10, 2))
+    assert in_fifteen_entry_window(_et(10, 3))
+    assert in_fifteen_entry_window(_et(10, 4))
+    assert in_fifteen_entry_window(_et(10, 17))
+    assert in_fifteen_entry_window(_et(10, 32))
+    assert in_fifteen_entry_window(_et(10, 49))
+    assert not in_fifteen_entry_window(_et(10, 0))
+    assert not in_fifteen_entry_window(_et(10, 1))
+    assert not in_fifteen_entry_window(_et(10, 5))
+    assert not in_fifteen_entry_window(_et(10, 12))
+
+
+def test_settlement_and_window_id():
+    assert in_fifteen_settlement(_et(10, 0))
+    assert in_fifteen_settlement(_et(10, 15))
+    assert not in_fifteen_settlement(_et(10, 2))
+    assert fifteen_window_start(_et(10, 17)) == _et(10, 15)
+    assert "10:15:00" in fifteen_window_id(_et(10, 17))
+
+
+def test_pass_when_fair_clears_mid_by_four_cents():
+    decision = pass_fail(
+        model_yes=0.62, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4
     )
-    defaults.update(kwargs)
-    return HourlyMarket(**defaults)
+    assert decision.passed
+    assert decision.side == "yes"
+    assert decision.join_price == 0.54
+    assert decision.line.startswith("PASS")
 
 
-def _edge_cfg(**kwargs) -> FifteenFilterConfig:
-    defaults = dict(
-        mid_tolerance=0.04,
-        min_minutes_left=8.0,
-        edge_loop_min_into=0.0,
-        edge_loop_max_into=20.0,
-        last_minute_maker=False,
-        require_settlement_index=True,
-        require_maker=True,
-        pot_room=5.0,
-        shard2_cash=5.0,
-        bankroll=40.0,
-        preferred_risk_dollars=0.85,
-        max_risk_dollars=1.50,
-        min_risk_dollars=0.10,
+def test_pass_no_joins_yes_ask():
+    decision = pass_fail(
+        model_yes=0.38, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4
     )
-    defaults.update(kwargs)
-    return FifteenFilterConfig(**defaults)
+    assert decision.passed
+    assert decision.side == "no"
+    assert decision.join_price == 0.56
 
 
-def test_hourly_eth_index_stays_erti():
-    assert index_id_for("ETH") == "ERTI"
-    assert index_id_for("BTC") == "BRTI"
-
-
-def test_fifteen_eth_index_is_ethusd_rti_never_erti():
-    assert fifteen_index_id_for("ETH") == "ETHUSD_RTI"
-    assert fifteen_index_id_for("ETH") != "ERTI"
-    assert fifteen_index_id_for("BTC") == "BRTI"
-
-
-def test_series_filter_excludes_hourly():
-    assert is_btc_eth_fifteen_series("KXBTC15M")
-    assert is_btc_eth_fifteen_series("KXETH15M")
-    assert not is_btc_eth_fifteen_series("KXBTCD")
-    assert not is_btc_eth_fifteen_series("KXETHD")
-    assert not is_fifteen_rest({"ticker": "KXBTCD-26SEP0512-T78099.99"})
-    assert is_hourly_rest({"ticker": "KXBTCD-26SEP0512-T78099.99"})
-    assert is_fifteen_rest({"ticker": "KXBTC15M-26SEP051200"})
-    hourly = fifteen_market_from_api(
-        {
-            "ticker": "KXBTCD-26SEP0512-T78099.99",
-            "series_ticker": "KXBTCD",
-            "status": "active",
-            "close_time": (datetime.now(timezone.utc) + timedelta(minutes=12)).isoformat(),
-            "floor_strike": 78099.99,
-            "strike_type": "greater",
-            "yes_bid_dollars": "0.40",
-            "yes_ask_dollars": "0.42",
-        },
-        {"event_ticker": "KXBTCD-26SEP0512", "series_ticker": "KXBTCD", "title": "BTC hourly"},
+def test_fail_within_four_cents_and_wide_spread():
+    tight = pass_fail(
+        model_yes=0.56, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4
     )
-    assert hourly is None
+    assert not tight.passed
+    assert "FAIL" in tight.line
+    wide = pass_fail(
+        model_yes=0.60, yes_bid=0.48, yes_ask=0.58, secs_left=12 * 60, sigma=0.4
+    )
+    assert not wide.passed
+    assert "spread" in wide.line.lower()
 
 
-def test_discover_fifteen_does_not_request_hourly_series():
-    requested: list[str] = []
+def test_fail_under_eight_minutes_unless_decided():
+    early = pass_fail(
+        model_yes=0.70, yes_bid=0.54, yes_ask=0.56, secs_left=6 * 60, sigma=0.4
+    )
+    assert not early.passed
+    decided = pass_fail(
+        model_yes=0.98, yes_bid=0.90, yes_ask=0.92, secs_left=5 * 60, sigma=2.4
+    )
+    assert decided.passed
+    assert strike_decided(0.98, 0.4)
+    assert strike_decided(0.50, 2.0)
+
+
+def test_fail_news_and_calendar_blackout():
+    decision = pass_fail(
+        model_yes=0.70,
+        yes_bid=0.54,
+        yes_ask=0.56,
+        secs_left=12 * 60,
+        sigma=0.4,
+        news="CPI",
+    )
+    assert not decision.passed
+    assert "CPI" in decision.line
+    assert (2026, 9, 11) in CPI_DATES
+    assert news_blackout(datetime(2026, 9, 11, 8, 30, tzinfo=ET)) == "CPI"
+    assert news_blackout(datetime(2026, 9, 11, 10, 0, tzinfo=ET)) is None
+    assert news_blackout(datetime(2026, 9, 16, 14, 0, tzinfo=ET)) == "FOMC"
+    with patch.dict("os.environ", {"NEWS_BLACKOUT": "1"}):
+        assert news_blackout(_et(10, 3)) == "NEWS_BLACKOUT"
+
+
+def test_revenge_and_three_loss_session_stop():
+    loss_at = _et(10, 8)
+    state: dict = {}
+    assert record_fifteen_result(state, -0.40, loss_at) is None
+    assert in_fifteen_revenge(state, _et(10, 17))
+    assert in_fifteen_revenge(state, _et(10, 29))
+    assert not in_fifteen_revenge(state, _et(10, 32))
+    assert revenge_until_after_loss(loss_at) == _et(10, 30)
+
+    state = {}
+    assert record_fifteen_result(state, -0.2, loss_at) is None
+    assert record_fifteen_result(state, -0.2, loss_at + timedelta(minutes=30)) is None
+    msg = record_fifteen_result(state, -0.2, loss_at + timedelta(minutes=60))
+    assert msg is not None
+    assert "15m" in msg and "stopped" in msg.lower()
+    assert fifteen_stopped(state, loss_at + timedelta(minutes=61))
+    assert not fifteen_stopped(state, next_et_midnight(loss_at))
+    assert fifteen_session_date(loss_at) == "2026-08-28"
+
+
+def test_win_resets_streak_and_working_blocks_window():
+    now = _et(10, 8)
+    state: dict = {}
+    record_fifteen_result(state, -0.2, now)
+    record_fifteen_result(state, -0.2, now)
+    record_fifteen_result(state, 0.10, now)
+    assert int(state.get("fifteen_loss_streak") or 0) == 0
+
+    wid = fifteen_window_id(_et(10, 3))
+    working = {
+        "tickets": [{"status": "open", "loop": "fifteen", "window_id": wid}],
+        "rests": [],
+    }
+    assert fifteen_working(working, _et(10, 3))
+    working["tickets"][0]["status"] = "flat"
+    assert not fifteen_working(working, _et(10, 3))
+    working["rests"] = [{"status": "open", "loop": "fifteen", "window_id": wid}]
+    assert fifteen_working(working, _et(10, 3))
+
+
+def test_size_room_and_half_sigma():
+    assert fifteen_stake(100.0, 100.0) == pytest.approx(4.0)
+    assert fifteen_stake(100.0, 2.0) == pytest.approx(2.0)
+    assert enough_room(3.0, 100.0)
+    assert not enough_room(2.0, 100.0)
+    assert not half_sigma_move(100.0, 100.0, 0.0045)
+    assert half_sigma_move(100.5, 100.0, 0.0045)
+
+
+def test_pot_double_ask_and_empty_stop(tmp_path: Path):
+    path = tmp_path / "fifteen_pot.json"
+    pot = load_pot(path)
+    assert pot.balance == pytest.approx(5.0)
+    assert pot.room == pytest.approx(5.0)
+    msg = credit_pot(pot, 5.5)
+    assert pot.ask_to_continue
+    assert msg is not None
+    save_pot(pot, path)
+    reloaded = load_pot(path)
+    assert reloaded.balance == pytest.approx(10.5)
+    set_open_risk(reloaded, 2.0)
+    assert reloaded.room == pytest.approx(8.5)
+    empty_msg = credit_pot(reloaded, -20.0)
+    assert reloaded.stopped
+    assert empty_msg is not None
+
+
+def test_fifteen_series_and_window_filter():
+    assert set(FIFTEEN_SERIES) == {"KXBTC15M", "KXETH15M"}
+    assert FIFTEEN_BY_ASSET["BTC"] == ("KXBTC15M",)
+    assert FIFTEEN_BY_ASSET["ETH"] == ("KXETH15M",)
+    now = _et(10, 3)
+    assert in_current_or_next_15m(_et(10, 15), now)
+    assert in_current_or_next_15m(_et(10, 30), now)
+    assert not in_current_or_next_15m(_et(11, 0), now)
+
+
+def test_discover_fifteen_only_loads_15m_series():
+    now = _et(10, 3)
+    close = _et(10, 15)
 
     class Client:
         def open_events(self, series, limit=20):
-            requested.append(str(series))
-            if str(series) in {"KXBTCD", "KXETHD"}:
+            series = str(series).upper()
+            if series in {"KXBTCD", "KXETHD"}:
                 raise AssertionError("hourly series must not be requested")
-            return []
+            if not series.endswith("15M"):
+                return []
+            return [
+                {
+                    "event_ticker": f"{series}-TEST",
+                    "series_ticker": series,
+                    "title": "BTC above" if "BTC" in series else "ETH above",
+                    "markets": [
+                        {
+                            "ticker": f"{series}-TEST-T64000",
+                            "event_ticker": f"{series}-TEST",
+                            "series_ticker": series,
+                            "status": "active",
+                            "close_time": close.isoformat(),
+                            "yes_bid_dollars": "0.54",
+                            "yes_ask_dollars": "0.56",
+                            "no_bid_dollars": "0.44",
+                            "no_ask_dollars": "0.46",
+                            "floor_strike": 64000,
+                            "strike_type": "greater",
+                            "yes_sub_title": "$64,000 or above",
+                            "title": series,
+                            "rules_primary": "CF Benchmarks BRTI",
+                        }
+                    ],
+                }
+            ]
 
-    found = MarketDiscovery(Client()).discover_fifteen(["BTC", "ETH"])
-    assert found == []
-    assert set(requested) <= set(FIFTEEN_SERIES)
-
-
-def test_hard_skip_under_8m_unless_last_minute():
-    now = datetime(2026, 9, 5, 16, 8, tzinfo=ET)  # 7m left in 16:00–16:15
-    cfg = FifteenFilterConfig(min_minutes_left=8, last_minute_maker=False)
-    phase = classify_phase(now, cfg)
-    assert phase.allow_edge is False
-    assert "under 8" in phase.skip_reason
-
-    last = FifteenFilterConfig(min_minutes_left=8, last_minute_maker=True, last_minute_minutes=3)
-    late = datetime(2026, 9, 5, 16, 13, tzinfo=ET)
-    phase_last = classify_phase(late, last)
-    assert phase_last.allow_last_minute is True
-
-
-def test_hard_skip_spread_wider_than_edge_and_near_mid():
-    assert spread_wider_than_edge(0.06, 0.03) is True
-    assert spread_wider_than_edge(0.02, 0.05) is False
-    assert model_near_mid(0.51, 0.50, 0.04) is True
-    assert model_near_mid(0.60, 0.50, 0.04) is False
-    assert live_mid(0.40, 0.42) == 0.41
-
-    market = _market(yes_bid=0.48, yes_ask=0.52, no_bid=0.48, no_ask=0.52, threshold=78100.0)
-    result = evaluate_fifteen_market(
-        market,
-        spot=78100.0,
-        hourly_vol=0.004,
-        now=datetime.now(timezone.utc),
-        cfg=_edge_cfg(),
-        settlement_index=True,
-    )
-    assert result.idea is None
-    assert any("within" in r and "mid" in r for r in result.avoid_reasons)
+    found = MarketDiscovery(Client()).discover_fifteen(["BTC"], now=now)
+    assert found
+    assert all(m.series_ticker.endswith("15M") for m in found)
+    assert all(in_current_or_next_15m(m.close_time, now) for m in found)
 
 
-def test_hard_skip_news_revenge_three_losses():
-    market = _market(threshold=77000.0, yes_bid=0.20, yes_ask=0.22, no_bid=0.78, no_ask=0.80)
-    now = datetime.now(timezone.utc)
-    news = evaluate_fifteen_market(
-        market, spot=78120.0, hourly_vol=0.010, now=now, cfg=_edge_cfg(vol_pause_mult=2.0), vol_fallback=0.004
-    )
-    assert news.idea is None
-    assert any("news candle" in r.lower() or "vol" in r.lower() for r in news.avoid_reasons)
-
-    revenge = evaluate_fifteen_market(
-        market, spot=78120.0, hourly_vol=0.004, now=now, cfg=_edge_cfg(revenge=True), vol_fallback=0.004
-    )
-    assert revenge.idea is None
-    assert any("revenge" in r.lower() for r in revenge.avoid_reasons)
-
-    three = evaluate_fifteen_market(
-        market,
-        spot=78120.0,
-        hourly_vol=0.004,
-        now=now,
-        cfg=_edge_cfg(daily_losses=3, max_daily_losses=3),
-        vol_fallback=0.004,
-    )
-    assert three.idea is None
-    assert any("three 15m losses" in r for r in three.avoid_reasons)
-
-
-def test_one_idea_per_window():
-    market = _market(threshold=77000.0, yes_bid=0.20, yes_ask=0.22, no_bid=0.78, no_ask=0.80)
-    result = evaluate_fifteen_market(
-        market,
-        spot=78120.0,
-        hourly_vol=0.004,
-        now=datetime.now(timezone.utc),
-        cfg=_edge_cfg(idea_this_window=True),
-        vol_fallback=0.004,
-    )
-    assert result.idea is None
-    assert any("one idea per 15m window" in r for r in result.avoid_reasons)
-
-
-def test_proxy_index_sits_the_coin():
-    market = _market(threshold=77000.0, yes_bid=0.20, yes_ask=0.22, no_bid=0.78, no_ask=0.80)
-    result = evaluate_fifteen_market(
-        market,
-        spot=78120.0,
-        hourly_vol=0.004,
-        now=datetime.now(timezone.utc),
-        cfg=_edge_cfg(),
-        settlement_index=False,
-    )
-    assert result.idea is None
-    assert any("ETHUSD_RTI" in r or "proxy" in r.lower() for r in result.avoid_reasons)
-
-
-def test_pot_empty_sets_halted(tmp_path: Path):
-    path = tmp_path / "fifteen_pot.json"
-    pot = load_pot(path, start=5.0, ask=10.0)
-    assert pot["pot"] == 5.0
-    assert pot_should_halt(pot) is False
-    apply_pnl(pot, -5.0)
-    assert pot["pot"] == 0.0
-    assert pot["halted"] is True
-    assert pot_should_halt(pot) is True
-    assert remaining_room(pot) == 0.0
-    apply_pnl(empty_pot(start=5, ask=10), 5.5)
-    grown = empty_pot(start=5, ask=10)
-    apply_pnl(grown, 5.5)
-    assert grown["pot"] == 10.5
-    assert grown["halted"] is False
-    assert grown["ask_notified"] is True
-
-
-def test_dual_live_gates_and_confirm_live_cannot_override_halted(monkeypatch, capsys):
-    monkeypatch.setenv("HALTED", "true")
-    monkeypatch.setenv("LIVE_TRADING", "true")
-    monkeypatch.setenv("CONFIRM_LIVE", "YES")
-    monkeypatch.setattr("src.fifteen.load_fifteen_settings", lambda: FifteenSettings(_env_file=None, halted=True))
-    monkeypatch.setattr("src.fifteen.probe_balance", lambda *a, **k: (True, {"balance": 40}))
-    called = {"scan": False}
-
-    def _scan(*args, **kwargs):
-        called["scan"] = True
-        return 0
-
-    monkeypatch.setattr("src.fifteen.run_scan", _scan)
-    assert main(["live", "--confirm", "LIVE"]) == EXIT_CONFIG
-    assert called["scan"] is False
-    assert "HALTED" in capsys.readouterr().err
-    assert "cannot override" in HALTED_MESSAGE
-
-    dry = FifteenSettings(_env_file=None, halted=False, live_trading=False, confirm_live="NO")
-    assert live_is_armed(dry, confirm="LIVE", isatty=False) is False
-    assert live_is_armed(dry, confirm="LIVE", isatty=True) is True
-    env = FifteenSettings(_env_file=None, halted=False, live_trading=True, confirm_live="YES")
-    assert live_is_armed(env, confirm="", isatty=False) is True
-    one = FifteenSettings(_env_file=None, halted=False, live_trading=True, confirm_live="NO")
-    assert live_is_armed(one, confirm="", isatty=False) is False
-    halted = FifteenSettings(_env_file=None, halted=True, live_trading=True, confirm_live="YES")
-    assert halted.live_enabled is False
-    assert live_is_armed(halted, confirm="LIVE", isatty=False) is False
-
-
-def test_halted_defaults_true_for_fifteen():
-    settings = FifteenSettings(_env_file=None, kalshi_api_key_id="", kalshi_private_key_path="/tmp/not-pem")
-    assert settings.halted is True
-    assert settings.live_enabled is False
-    assert settings.fifteen_pot_start == 5.0
-    assert settings.max_risk_dollars == 1.50
-    assert settings.series == "KXBTC15M,KXETH15M"
-    assert settings.exchange_index == 2
-    assert settings.require_maker is True
-    assert settings.require_settlement_index is True
+def test_rest_filters_do_not_cross_bots():
+    assert is_fifteen_rest({"ticker": "KXBTC15M-26SEP051015-T64000"})
+    assert is_fifteen_rest({"series_ticker": "KXETH15M"})
+    assert not is_fifteen_rest({"ticker": "KXBTCD-26SEP0510-T64000"})
+    assert is_hourly_rest({"ticker": "KXBTCD-26SEP0510-T64000"})
+    assert not is_hourly_rest({"ticker": "KXBTC15M-26SEP051015-T64000"})
 
 
 def _idea() -> Idea:
+    market = HourlyMarket(
+        ticker="KXBTC15M-26SEP051015-T64000",
+        event_ticker="KXBTC15M-26SEP051015",
+        series_ticker="KXBTC15M",
+        asset="BTC",
+        title="BTC 15m",
+        yes_sub_title="$64,000 or above",
+        threshold=64000.0,
+        strike_type="greater",
+        close_time=_et(10, 15),
+        status="active",
+        yes_bid=0.54,
+        yes_ask=0.56,
+        no_bid=0.44,
+        no_ask=0.46,
+        yes_bid_size=10,
+        yes_ask_size=10,
+        no_bid_size=10,
+        no_ask_size=10,
+        rules_primary="",
+        rules_secondary="",
+        settlement_source="CF Benchmarks",
+        exchange_index=2,
+    )
     return Idea(
-        market=_market(),
+        market=market,
         side="Yes",
-        entry_price=0.42,
-        limit_price=0.41,
-        fair=0.55,
-        gross_edge=0.10,
+        entry_price=0.54,
+        limit_price=0.54,
+        fair=0.62,
+        gross_edge=0.08,
         net_edge=0.08,
-        fee_per_contract=0.01,
-        fee_total=0.01,
-        z=0.2,
+        fee_per_contract=0.02,
+        fee_total=0.02,
+        z=0.4,
         hours_left=0.2,
         contracts=2,
-        risk_dollars=0.84,
-        max_loss=0.84,
-        rationale=["unit"],
+        risk_dollars=1.08,
+        max_loss=1.08,
+        rationale=["unit test"],
         post_maker=True,
     )
 
 
-def test_post_only_never_crosses_and_does_not_cancel_hourly(tmp_path: Path):
-    assert maker_limit("Yes", 0.40, 0.42) == 0.41
-    assert maker_limit("Yes", 0.41, 0.42) == 0.41
-    idea = _idea()
-    idea.post_maker = False
-    client = MagicMock()
-    out = execute_ideas(
-        [idea],
-        client=client,
-        artifacts_dir=tmp_path,
-        live=True,
-        confirm_live=True,
-        rest_matcher=is_fifteen_rest,
-        exchange_index=2,
-    )
-    client.create_order.assert_not_called()
-    assert any("refused to cross" in err for err in out["errors"])
-
+def test_fifteen_live_cancel_skips_hourly_rests(tmp_path: Path):
     client = MagicMock()
     client.get_orders.return_value = [
-        {"order_id": "hourly-rest", "ticker": "KXBTCD-26SEP0512-T78099.99"},
-        {"order_id": "fifteen-rest", "ticker": "KXETH15M-26SEP051200"},
+        {
+            "order_id": "hourly-1",
+            "ticker": "KXBTCD-26SEP0510-T64000",
+            "client_order_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        },
+        {
+            "order_id": "fifteen-1",
+            "ticker": "KXBTC15M-26SEP050945-T64000",
+            "client_order_id": "ffffffff-1111-2222-3333-444444444444",
+        },
     ]
-    client.create_order.return_value = {"order": {"order_id": "new-15", "fill_count": "0.00"}}
+    client.create_order.return_value = {
+        "order": {"order_id": "new-15", "fill_count": "0.00", "remaining_count": "2.00"}
+    }
     out = execute_ideas(
         [_idea()],
         client=client,
         artifacts_dir=tmp_path,
         live=True,
         confirm_live=True,
-        rest_matcher=is_fifteen_rest,
-        exchange_index=2,
+        cancel_stale=True,
+        rest_filter=is_fifteen_rest,
     )
-    canceled = {row["order_id"] for row in out["canceled"]}
-    assert canceled == {"fifteen-rest"}
-    assert out["orders"][0]["post_only"] is True
-    assert out["orders"][0]["exchange_index"] == 2
+    canceled = {row["order_id"] for row in out.get("canceled", [])}
+    assert canceled == {"fifteen-1"}
 
 
-def test_ticket_stop_and_tp_helpers():
-    assert should_take_profit(fill_price=0.80, bid=0.82) is True
-    assert should_take_profit(fill_price=0.80, bid=0.99) is True
-    assert should_take_profit(fill_price=0.80, bid=0.81) is False
-    assert should_stop_ticket(fill_price=0.80, mark=0.70, risk_dollars=1.00) is True
-    assert should_stop_ticket(fill_price=0.80, mark=0.79, risk_dollars=1.00) is False
+def test_cli_normalize_and_live_gates():
+    assert normalize_argv(["s"]) == ["scan"]
+    assert normalize_argv(["o"]) == ["once"]
+    assert normalize_argv(["l"]) == ["live"]
+    assert normalize_argv([]) == ["scan"]
 
-
-def test_parse_total_value_and_window_key():
-    assert parse_total_value({"total_value": 12.5}) == 12.5
-    assert parse_total_value({"balance": 2500}) == 25.0
-    now = datetime(2026, 9, 5, 16, 7, tzinfo=ET)
-    assert fifteen_window_key(now).startswith("2026-09-05T16:00:00")
-
-
-def test_kb_fifteen_dispatch(monkeypatch):
-    monkeypatch.setattr("src.fifteen.main", lambda argv: 0 if argv == ["scan"] else 7)
-    from src.main import main as hourly_main
-
-    assert hourly_main(["fifteen", "scan"]) == 0
+    halted = FifteenSettings(halted=True, live_trading=True, confirm_live="YES")
+    assert live_is_armed(halted, confirm="LIVE", isatty=True) is False
+    env = FifteenSettings(halted=False, live_trading=True, confirm_live="YES")
+    assert live_is_armed(env, confirm="", isatty=False) is True
+    prompt = FifteenSettings(halted=False, live_trading=False, confirm_live="NO")
+    assert live_is_armed(prompt, confirm="LIVE", isatty=True) is True
+    assert live_is_armed(prompt, confirm="LIVE", isatty=False) is False
+    assert main(["live", "--confirm", "LIVE"]) == EXIT_CONFIG

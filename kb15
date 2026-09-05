@@ -1,11 +1,13 @@
 #!/bin/sh
-# Dedicated 15-minute BTC/ETH bot. Does not touch hourly ./kb.
-#                 ./kb15              → menu
-#                 ./kb15 scan
-#                 ./kb15 once
-#                 ./kb15 live
-#                 ./kb15 env
-#                 ./kb15 eval / paper
+# 15m BTC/ETH edge-loop bot (package: src/fifteen/). Sibling to ./kb hourly.
+# Does not cancel or trade hourly KXBTCD / KXETHD rests.
+#   ./kb15          → scan
+#   ./kb15 scan     (s / 1)
+#   ./kb15 once     (o / 2)
+#   ./kb15 auth     (a / 3)
+#   ./kb15 live     (l / 4)
+#   ./kb15 eval     (v / 6)
+#   ./kb15 paper    (p / 7)
 # Also: ./kb fifteen scan
 root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 export PYTHONPATH="${PYTHONPATH:-$root}"
