@@ -238,7 +238,7 @@ def test_brti_erti_settlement_math():
         risk_dollars=1.64,
     )
     settle_paper_row(eth, settlement_print=2395.10)
-    assert eth["spot_source"] == "ETHUSD_RTI"
+    assert eth["spot_source"] == "ERTI"
     assert eth["settlement_result"] == "no"
     assert eth["result"] == "win"
     assert eth["pnl"] == paper_pnl(won=True, contracts=4, fill_price=0.41, risk_dollars=1.64)

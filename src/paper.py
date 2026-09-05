@@ -14,10 +14,9 @@ from typing import Any, Callable
 
 from src.cfindex import (
     average_settlement_window,
+    fifteen_index_id_for,
     history_query_timestamp,
     index_id_for,
-    index_ids_for,
-    is_official_index_label,
     official_index_label,
     official_yes,
     parse_cf_history_ticks,
@@ -71,7 +70,7 @@ def spot_source_label(asset: str, source: str) -> str:
 
 
 def is_scoreable_source(label: str, raw_source: str = "") -> bool:
-    if is_official_index_label(label):
+    if str(label or "").strip().upper() in {"BRTI", "ERTI", "ETHUSD_RTI"}:
         return True
     return is_settlement_index(raw_source)
 
@@ -113,7 +112,7 @@ def new_paper_row(
     hourly_vol: float = 0.0,
 ) -> dict[str, Any]:
     raw = str(spot_source or "").strip()
-    if is_official_index_label(raw):
+    if raw.upper() in {"BRTI", "ERTI", "ETHUSD_RTI"}:
         label = raw.upper()
     elif raw.upper() == "PROXY":
         label = "PROXY"
@@ -171,7 +170,7 @@ def new_paper_row(
         "fill_status": fill_status,
         "filled_contracts": filled,
         "settlement_print": None,
-        "settlement_index": index_id_for(asset),
+        "settlement_index": label if label in {"BRTI", "ERTI", "ETHUSD_RTI"} else index_id_for(asset),
         "settlement_result": None,
         "result": result,
         "pnl": None if result == RESULT_PENDING else 0.0,
@@ -278,8 +277,11 @@ def fetch_official_print(
     asset: str,
     close_time: datetime | str,
 ) -> float | None:
-    """Official 60s BRTI/ETHUSD_RTI average. Never Coinbase / Binance last tick."""
-    ids = index_ids_for(asset) or ((index_id_for(asset),) if index_id_for(asset) else ())
+    """Official 60s BRTI/ERTI (hourly) or ETHUSD_RTI (15m) average. Never Coinbase last tick."""
+    ids: list[str] = []
+    for candidate in (index_id_for(asset), fifteen_index_id_for(asset)):
+        if candidate and candidate not in ids:
+            ids.append(candidate)
     getter = getattr(client, "get_cf_history", None)
     if not ids or getter is None:
         return None

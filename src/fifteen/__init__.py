@@ -27,6 +27,7 @@ __all__ = [
     "CPI_DATES",
     "FOMC_DATES",
     "FifteenDecision",
+    "cli",
     "enough_room",
     "fifteen_session_date",
     "fifteen_stake",
@@ -38,6 +39,7 @@ __all__ = [
     "in_fifteen_entry_window",
     "in_fifteen_revenge",
     "in_fifteen_settlement",
+    "main",
     "news_blackout",
     "next_et_midnight",
     "pass_fail",
@@ -45,3 +47,11 @@ __all__ = [
     "revenge_until_after_loss",
     "strike_decided",
 ]
+
+
+def __getattr__(name: str):
+    if name in {"main", "cli"}:
+        from src.fifteen.main import cli, main
+
+        return main if name == "main" else cli
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

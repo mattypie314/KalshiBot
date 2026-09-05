@@ -1,0 +1,24 @@
+[Unit]
+Description=KalshiBot 15-minute BTC/ETH (DISABLED / HALTED — no live orders)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=mkubit
+WorkingDirectory=/home/KalshiBot15
+Environment=PYTHONPATH=/home/KalshiBot15
+Environment=HOME=/home/mkubit
+Environment=TZ=America/New_York
+Environment=HALTED=true
+EnvironmentFile=-/home/KalshiBot15/.env
+# Keys come from ~/.kalshi/ (PEM + env). Do not EnvironmentFile that path:
+# bash `export KEY=value` is invalid for systemd and $HOME does not expand.
+# Separate checkout from hourly /home/KalshiBot. Do not touch kalshi-hourly.timer.
+# This unit ships disabled. Unattended live needs HALTED=false AND
+# LIVE_TRADING=true AND CONFIRM_LIVE=YES in /home/KalshiBot15/.env.
+# --confirm LIVE alone will not arm (no TTY).
+# Was / will be: ... -m src.fifteen live --prod --confirm LIVE
+ExecStart=/home/KalshiBot15/.venv/bin/python -m src.fifteen scan
+
+[Install]
+WantedBy=multi-user.target

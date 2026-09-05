@@ -10,8 +10,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.cfindex import FIFTEEN_INDEX_BY_ASSET, fifteen_index_id_for
 from src.clock import configure_logging, format_et, to_et
-from src.executor import execute_ideas, is_fifteen_rest
+from src.executor import CRYPTO_SHARD, execute_ideas, is_fifteen_rest
 from src.fees import taker_fee_dollars
 from src.filters import Idea
 from src.fifteen.config import (
@@ -193,7 +194,13 @@ def collect_ideas(
     if not in_fifteen_entry_window(now):
         notes.append(f"outside entry window (minute {now.minute % 15}; want 2-4)")
 
-    spots_svc = SpotService(preferred=settings.spot_source, kalshi=client)
+    spots_svc = SpotService(
+        preferred=settings.spot_source,
+        kalshi=client,
+        index_id_fn=fifteen_index_id_for,
+        vol_lookback_minutes=60,
+        settlement_labels=dict(FIFTEEN_INDEX_BY_ASSET),
+    )
     try:
         spots = spots_svc.snapshot(
             assets,
@@ -210,6 +217,7 @@ def collect_ideas(
         now=now,
         max_per_asset=settings.max_markets_per_asset,
         spots=spots.prices,
+        require_exchange_index=CRYPTO_SHARD,
     )
     if not markets:
         notes.append("no live KXBTC15M/KXETH15M books")
@@ -411,6 +419,7 @@ def run_scan(
         confirm_live=go_live,
         cancel_stale=True,
         rest_filter=is_fifteen_rest,
+        exchange_index=CRYPTO_SHARD,
     )
     if go_live and result.get("placed"):
         set_open_risk(pot, sum(i.risk_dollars for i in ideas))

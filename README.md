@@ -14,7 +14,9 @@ Pi operating manual (PDF): `docs/KalshiBot-operating-manual.pdf`. Rebuild with `
 
 Not financial advice. You can lose the full amount you put on a contract. Demo first. `.env` can stay dry. Live is a one-run confirm: type `LIVE` at the prompt, or pass `--confirm LIVE` on a keyboard. Unattended live still needs both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES`.
 
-The old campaign desk (dashboard / sports research) stays on `archive/campaign-desk`. The **15m BTC/ETH edge-loop bot** lives in-tree as `./kb15` (see below).
+A dedicated **15-minute BTC/ETH** edge-loop bot (`KXBTC15M` / `KXETH15M`, own $5 pot) lives in-tree as `python -m src.fifteen` / `./kb15` / `./kb fifteen`. It does not change hourly. Pi path: `/home/KalshiBot15`. Rules: `docs/15m.md` and `docs/15m-operating-rules.md`. systemd `kalshi-15m.timer` ships **disabled**. ETH settlement id for 15m is **`ETHUSD_RTI`** (hourly still uses ERTI).
+
+The older campaign desk (maker loop / dashboard / research) stays parked on `archive/campaign-desk`.
 
 ## What this does
 
@@ -46,6 +48,16 @@ Pick a mode from a menu, or pass it on the command line:
 ```
 
 `python -m src.main …` and (after `pip install -e .`) `kalshibot` / `kb` do the same thing. No args on a TTY opens the menu; no args in a script defaults to `scan`.
+
+15m (separate pot, artifacts, and `.env` on the Pi):
+
+```bash
+./kb15 scan            # also: python -m src.fifteen scan   or   ./kb fifteen scan
+./kb15 once
+./kb15 eval
+```
+
+See `docs/15m.md`. Do not enable `kalshi-15m.timer` until armed. Do not touch `kalshi-hourly.timer`.
 
 A **live Kalshi key** (created on kalshi.com, not demo) returns 401 on demo. Use `--prod` for that key, or `USE_DEMO=false ./kb auth`. On a terminal, `./kb live` asks you to type `LIVE` (`.env` can stay dry). Unattended systemd / CI has no TTY: both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES` are required, and `HALTED` still wins. GitHub Actions stays dry.
 

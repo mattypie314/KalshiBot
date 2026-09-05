@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from src.cfindex import index_id_for, index_ids_for, parse_cf_index_value
+from src.cfindex import index_id_for, parse_cf_index_value
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +71,18 @@ class SpotService:
         http: httpx.Client | None = None,
         preferred: str = "cfbenchmarks",
         kalshi: Any | None = None,
+        index_id_fn: Any = None,
+        vol_lookback_minutes: int = 240,
+        settlement_labels: dict[str, str] | None = None,
     ) -> None:
         self._owns = http is None
         self._http = http or httpx.Client(timeout=15.0, headers={"User-Agent": "KalshiHourly/0.1"})
         self.preferred = preferred.lower()
         self._kalshi = kalshi
+        self._index_id_fn = index_id_fn or index_id_for
+        # Hourly default is ~4h of 1m bars. 15m passes a shorter lookback.
+        self.vol_lookback_minutes = max(20, int(vol_lookback_minutes))
+        self._settlement_labels = settlement_labels or {"BTC": "BRTI", "ETH": "ERTI"}
 
     def close(self) -> None:
         if self._owns:
@@ -84,21 +91,14 @@ class SpotService:
     def _cf_price(self, asset: str) -> float | None:
         if self._kalshi is None or not getattr(self._kalshi, "can_trade", False):
             return None
+        index_id = self._index_id_fn(asset)
+        if not index_id:
+            return None
         getter = getattr(self._kalshi, "get_cf_values", None)
         if getter is None:
             return None
-        for index_id in index_ids_for(asset) or ((index_id_for(asset),) if index_id_for(asset) else ()):
-            if not index_id:
-                continue
-            try:
-                blob = getter(index_id)
-            except Exception as exc:  # noqa: BLE001
-                logger.info("CF index %s failed for %s: %s", index_id, asset, exc)
-                continue
-            parsed = parse_cf_index_value(blob)
-            if parsed:
-                return parsed
-        return None
+        blob = getter(index_id)
+        return parse_cf_index_value(blob)
 
     def _price(self, asset: str) -> tuple[float | None, str]:
         order = ["cfbenchmarks", self.preferred, "coinbase", "binance"]
@@ -170,13 +170,18 @@ class SpotService:
                 snap.source = uniq[0]
             else:
                 snap.source = " ".join(f"{asset}={snap.sources[asset]}" for asset in snap.sources)
+        labels = "/".join(self._settlement_labels.get(a, a) for a in assets if a in self._settlement_labels)
         if snap.sources and all(is_settlement_index(src) for src in snap.sources.values()):
             snap.note = (
-                "Spot is CF Benchmarks BRTI/ERTI via Kalshi (settlement index). "
+                f"Spot is CF Benchmarks {labels or 'BRTI/ERTI'} via Kalshi (settlement index). "
                 "Vol is exchange-realized."
             )
         elif snap.sources:
-            snap.note = PROXY_NOTE
+            snap.note = (
+                f"PROXY: exchange last tick is not the Kalshi settlement. "
+                f"Official print is the 60-second CF Benchmarks average ({labels or 'BRTI / ERTI'}). "
+                "Ideas sit until that index is available."
+            )
         return snap
 
     def _binance_price(self, asset: str) -> float | None:
@@ -192,7 +197,7 @@ class SpotService:
         symbol = BINANCE_SYMBOL[asset]
         response = self._http.get(
             "https://api.binance.com/api/v3/klines",
-            params={"symbol": symbol, "interval": "1m", "limit": 240},
+            params={"symbol": symbol, "interval": "1m", "limit": self.vol_lookback_minutes},
         )
         response.raise_for_status()
         rows = response.json()
@@ -208,7 +213,7 @@ class SpotService:
     def _coinbase_vol(self, asset: str) -> float | None:
         product = COINBASE_PRODUCT[asset]
         end = int(time.time())
-        start = end - 4 * 3600
+        start = end - self.vol_lookback_minutes * 60
         response = self._http.get(
             f"https://api.exchange.coinbase.com/products/{product}/candles",
             params={

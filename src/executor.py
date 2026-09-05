@@ -20,6 +20,7 @@ HOURLY_SERIES = frozenset({"KXBTCD", "KXETHD"})
 FIFTEEN_SERIES = frozenset({"KXBTC15M", "KXETH15M"})
 TICK = 0.01
 MAX_CROSS_RETRIES = 3
+CRYPTO_SHARD = 2
 
 
 def series_code(ticker: str) -> str:
@@ -40,7 +41,7 @@ def is_hourly_rest(row: dict[str, Any]) -> bool:
 
 
 def is_fifteen_rest(row: dict[str, Any]) -> bool:
-    """True for 15m BTC/ETH rests only — never cancels hourly KXBTCD/KXETHD."""
+    """True for KXBTC15M / KXETH15M rests only — never cancels hourly KXBTCD/KXETHD."""
     ticker = str(row.get("ticker") or row.get("market_ticker") or "")
     series = str(row.get("series_ticker") or "")
     if series in FIFTEEN_SERIES or series_code(ticker) in FIFTEEN_SERIES:
@@ -48,7 +49,7 @@ def is_fifteen_rest(row: dict[str, Any]) -> bool:
     return str(row.get("client_order_id") or "").startswith("fifteen-")
 
 
-def _order_payload(idea: Idea, run_id: str) -> dict[str, Any]:
+def _order_payload(idea: Idea, run_id: str, *, exchange_index: int = -1) -> dict[str, Any]:
     """Kalshi V2 CreateOrder: count and price are strings. Side is bid/ask on the Yes book."""
     side = idea.side.lower()
     if side == "yes":
@@ -66,7 +67,7 @@ def _order_payload(idea: Idea, run_id: str) -> dict[str, Any]:
         "time_in_force": "good_till_canceled",
         "self_trade_prevention_type": "taker_at_cross",
         "post_only": True,
-        "exchange_index": -1,
+        "exchange_index": exchange_index,
     }
 
 
@@ -174,13 +175,16 @@ def execute_ideas(
     cancel_stale: bool = True,
     keep_tickers: set[str] | None = None,
     rest_filter: Any | None = None,
+    rest_matcher: Any = None,
+    exchange_index: int = -1,
 ) -> dict[str, Any]:
     run_id = run_id or uuid.uuid4().hex[:12]
     dest = Path(artifacts_dir)
     dest.mkdir(parents=True, exist_ok=True)
 
     go_live = bool(live and confirm_live)
-    orders = [_order_payload(idea, run_id) for idea in ideas]
+    pred = rest_filter or rest_matcher or is_hourly_rest
+    orders = [_order_payload(idea, run_id, exchange_index=exchange_index) for idea in ideas]
     result: dict[str, Any] = {
         "run_id": run_id,
         "ts": format_et(),
@@ -205,7 +209,6 @@ def execute_ideas(
         except Exception as exc:  # noqa: BLE001
             logger.warning("Could not list resting orders: %s", exc)
             resting = []
-        pred = rest_filter or is_hourly_rest
         for row in resting:
             row = unwrap_order(row)
             if not pred(row):
