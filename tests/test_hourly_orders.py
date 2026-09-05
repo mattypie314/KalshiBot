@@ -47,6 +47,29 @@ def test_hourly_get_orders_merges_crypto_shard_when_default_page_has_rows():
     assert "01a04101-4770-71f5-b74b-86c14e3ef01f" in ids
 
 
+def test_get_positions_merges_crypto_shard():
+    def handler(request: httpx.Request) -> httpx.Response:
+        idx = request.url.params.get("exchange_index")
+        if idx == "2":
+            return httpx.Response(
+                200,
+                json={
+                    "market_positions": [
+                        {"ticker": "KXBTCD-1", "position_fp": "2.00", "exchange_index": 2}
+                    ]
+                },
+            )
+        return httpx.Response(200, json={"market_positions": []})
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    client = KalshiClient("https://external-api.kalshi.com/trade-api/v2", client=http)
+    try:
+        rows = client.get_positions(count_filter="position")
+    finally:
+        client.close()
+    assert any(row["ticker"] == "KXBTCD-1" for row in rows)
+
+
 def test_sign_path_includes_trade_api_prefix_and_drops_query():
     assert (
         sign_path_from_url("https://demo-api.kalshi.co/trade-api/v2", "/portfolio/balance?x=1")

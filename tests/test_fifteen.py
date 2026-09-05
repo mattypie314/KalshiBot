@@ -337,6 +337,44 @@ def test_fifteen_live_cancel_skips_hourly_rests(tmp_path: Path):
     assert canceled == {"fifteen-1"}
 
 
+def test_fifteen_once_manages_open_positions(monkeypatch, tmp_path):
+    called: dict = {}
+
+    def fake_manage(*args, **kwargs):
+        called["live"] = kwargs.get("live")
+        called["series"] = set(kwargs.get("series") or [])
+        return {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []}
+
+    class Client:
+        can_trade = False
+
+        def get_balance(self):
+            return {"total_value": 5}
+
+        def get_fills(self, limit=50):
+            return []
+
+    monkeypatch.setattr("src.fifteen.main.manage_open_positions", fake_manage)
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", lambda *a, **k: ([], ["sit"], None))
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: Client())
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    from src.fifteen.main import run_scan
+
+    settings = FifteenSettings(
+        _env_file=None,
+        artifacts_dir=str(tmp_path),
+        state_path=str(tmp_path / "fifteen_state.json"),
+        pot_path=str(tmp_path / "fifteen_pot.json"),
+        trade_log_path=str(tmp_path / "fifteen_trade_log.jsonl"),
+        paper_log_path=str(tmp_path / "fifteen_paper_log.jsonl"),
+        scan_log_path=str(tmp_path / "fifteen_scan_log.jsonl"),
+        halted=True,
+    )
+    assert run_scan(settings, asset=None, place=True, force_live=False) == 0
+    assert called["live"] is False
+    assert "KXBTC15M" in called["series"]
+
+
 def test_cli_normalize_and_live_gates():
     assert normalize_argv(["s"]) == ["scan"]
     assert normalize_argv(["o"]) == ["once"]
