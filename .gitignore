@@ -14,4 +14,11 @@ build/
 artifacts/last_run.json
 artifacts/hourly_state.json
 artifacts/paper_log.jsonl
+artifacts/trade_log.jsonl
+artifacts/scan_log.jsonl
+artifacts/fifteen_pot.json
+artifacts/fifteen_state.json
+artifacts/fifteen_paper_log.jsonl
+artifacts/fifteen_trade_log.jsonl
+artifacts/fifteen_scan_log.jsonl
 

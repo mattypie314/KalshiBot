@@ -59,6 +59,40 @@ def hour_key(now: datetime | None = None) -> str:
     return local.isoformat()
 
 
+def fifteen_window_start(now: datetime | None = None) -> datetime:
+    """Floor to the :00 / :15 / :30 / :45 ET 15-minute window."""
+    local = to_et(now)
+    minute = (local.minute // 15) * 15
+    return local.replace(minute=minute, second=0, microsecond=0)
+
+
+def fifteen_window_end(now: datetime | None = None) -> datetime:
+    from datetime import timedelta
+
+    return fifteen_window_start(now) + timedelta(minutes=15)
+
+
+def fifteen_window_key(now: datetime | None = None) -> str:
+    return fifteen_window_start(now).isoformat()
+
+
+def minutes_into_15m(now: datetime | None = None) -> float:
+    local = to_et(now)
+    return max(0.0, (local - fifteen_window_start(local)).total_seconds() / 60.0)
+
+
+def minutes_left_in_15m(now: datetime | None = None) -> float:
+    local = to_et(now)
+    return max(0.0, (fifteen_window_end(local) - local).total_seconds() / 60.0)
+
+
+def same_et_15m_window(value: object, now: datetime | None = None) -> bool:
+    parsed = parse_ts(value)
+    if parsed is None:
+        return False
+    return fifteen_window_key(parsed) == fifteen_window_key(now)
+
+
 def format_et(now: datetime | None = None) -> str:
     local = to_et(now)
     hour = local.strftime("%I").lstrip("0") or "12"

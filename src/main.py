@@ -794,6 +794,12 @@ def cli() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw and raw[0].lower() in {"fifteen", "15m", "15"}:
+        from src.fifteen import main as fifteen_main
+
+        return fifteen_main(raw[1:])
+
     parser = argparse.ArgumentParser(
         description="Kalshi hourly BTC/ETH threshold scanner. "
         "Run with no args for a mode menu. Shortcuts: s/o/a/l/e/v/p or 1-7."

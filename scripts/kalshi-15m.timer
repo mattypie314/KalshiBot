@@ -1,0 +1,12 @@
+[Unit]
+Description=KalshiBot 15-minute timer (ship DISABLED — do not enable until armed)
+# Do not enable this timer by default. Hourly kalshi-hourly.timer is a
+# different unit under /home/KalshiBot — leave it alone.
+
+[Timer]
+OnCalendar=*-*-* *:01,16,31,46:00 America/New_York
+# Do not catch up after downtime — a late fire would use a stale window.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

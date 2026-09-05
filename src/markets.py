@@ -157,6 +157,25 @@ def settlement_label(event: dict[str, Any], market: dict[str, Any]) -> str:
     return "unknown (see market rules)"
 
 
+def in_current_or_next_15m(close: datetime, now: datetime | None = None) -> bool:
+    """Keep closes at the end of this Eastern 15-minute window or the next one."""
+    from src.clock import fifteen_window_end, to_et
+
+    now = to_et(now)
+    if close.tzinfo is None:
+        close = close.replace(tzinfo=timezone.utc)
+    close = to_et(close)
+    if close <= now:
+        return False
+    this_end = fifteen_window_end(now)
+    next_end = this_end + timedelta(minutes=15)
+    return close <= next_end + timedelta(seconds=1)
+
+
+def is_btc_eth_fifteen_series(series_ticker: str) -> bool:
+    return str(series_ticker or "").upper() in FIFTEEN_SERIES
+
+
 def in_current_or_next_hour(close: datetime, now: datetime | None = None) -> bool:
     """Keep closes at the end of this Eastern hour or the next one.
 
@@ -337,6 +356,41 @@ class MarketDiscovery:
             out.extend(subset)
         return out
 
+    def discover_fifteen(
+        self,
+        assets: list[str],
+        *,
+        now: datetime | None = None,
+        max_per_asset: int = 8,
+        spots: dict[str, float] | None = None,
+        require_exchange_index: int = 2,
+    ) -> list[HourlyMarket]:
+        """Load only KXBTC15M / KXETH15M in the current or next 15m window.
+
+        Hourly discover() is unchanged and still ignores 15m fallback.
+        """
+        now = now or to_et()
+        wanted = {a.upper() for a in assets}
+        series = tuple(s for a in wanted for s in FIFTEEN_BY_ASSET.get(a, ()))
+        found = self._load_fifteen_series(series or FIFTEEN_SERIES, now)
+        out: list[HourlyMarket] = []
+        spots = spots or {}
+        for asset in wanted:
+            subset = [m for m in found if m.asset == asset]
+            if require_exchange_index is not None:
+                subset = [
+                    m
+                    for m in subset
+                    if m.exchange_index is None or m.exchange_index == require_exchange_index
+                ]
+            spot = spots.get(asset)
+            if spot and subset:
+                subset = rank_hourly_markets(subset, spot, max_per_asset, min_distance_pct=0.0, watch_slots=2)
+            else:
+                subset = subset[:max_per_asset]
+            out.extend(subset)
+        return out
+
     def next_settlements(self, markets: list[HourlyMarket]) -> list[str]:
         seen: dict[str, HourlyMarket] = {}
         for market in markets:
@@ -379,3 +433,99 @@ class MarketDiscovery:
                             continue
                     found.append(market)
         return found
+
+    def _load_fifteen_series(
+        self,
+        series_tickers: tuple[str, ...],
+        now: datetime,
+    ) -> list[HourlyMarket]:
+        found: list[HourlyMarket] = []
+        for series in series_tickers:
+            if not is_btc_eth_fifteen_series(series):
+                continue
+            try:
+                events = self.client.open_events(series, limit=20)
+            except Exception as exc:  # noqa: BLE001 — public scan should survive one bad series
+                logger.warning("Events failed for %s: %s", series, exc)
+                continue
+            for event in events:
+                for raw in event.get("markets") or []:
+                    market = fifteen_market_from_api(raw, event)
+                    if market is None:
+                        continue
+                    if not in_current_or_next_15m(market.close_time, now):
+                        continue
+                    found.append(market)
+        return found
+
+
+def fifteen_market_from_api(
+    market: dict[str, Any],
+    event: dict[str, Any],
+) -> HourlyMarket | None:
+    """Parse a BTC/ETH 15m up/down book. Rejects hourly and other series."""
+    series = str(
+        market.get("series_ticker")
+        or event.get("series_ticker")
+        or str(event.get("event_ticker") or "").split("-", 1)[0]
+    ).upper()
+    if not is_btc_eth_fifteen_series(series):
+        return None
+    parsed = market_from_api(market, event, used_15m_fallback=False)
+    if parsed is None:
+        parsed = _fifteen_updown_from_api(market, event, series)
+    if parsed is None:
+        return None
+    if parsed.series_ticker not in FIFTEEN_SERIES:
+        return None
+    return parsed
+
+
+def _fifteen_updown_from_api(
+    market: dict[str, Any],
+    event: dict[str, Any],
+    series: str,
+) -> HourlyMarket | None:
+    """15m books that are plain up/down (no dollar floor strike)."""
+    status = str(market.get("status") or "").lower()
+    if status not in {"open", "active"}:
+        return None
+    close = parse_close_time(market.get("close_time") or event.get("strike_date") or event.get("close_time"))
+    if close is None:
+        return None
+    asset = asset_from_text(series, event.get("title") or "", market.get("title") or "")
+    if asset not in {"BTC", "ETH"}:
+        return None
+    yes_bid, yes_ask, no_bid, no_ask = _quote(market)
+    floor = parse_dollars(market.get("floor_strike"))
+    custom = market.get("custom_strike") or {}
+    if floor is None:
+        floor = parse_dollars(custom.get("floor_strike"))
+    threshold = floor if floor is not None else 0.0
+    extra = {"atm_updown": floor is None}
+    return HourlyMarket(
+        ticker=str(market.get("ticker") or ""),
+        event_ticker=str(market.get("event_ticker") or event.get("event_ticker") or ""),
+        series_ticker=series,
+        asset=asset,
+        title=str(event.get("title") or market.get("title") or ""),
+        yes_sub_title=str(market.get("yes_sub_title") or market.get("subtitle") or "Up"),
+        threshold=threshold,
+        strike_type="greater",
+        close_time=close,
+        status=status,
+        yes_bid=yes_bid,
+        yes_ask=yes_ask,
+        no_bid=no_bid,
+        no_ask=no_ask,
+        yes_bid_size=parse_dollars(market.get("yes_bid_size_fp")) or 0.0,
+        yes_ask_size=parse_dollars(market.get("yes_ask_size_fp")) or 0.0,
+        no_bid_size=parse_dollars(market.get("no_bid_size_fp")) or 0.0,
+        no_ask_size=parse_dollars(market.get("no_ask_size_fp")) or 0.0,
+        rules_primary=str(market.get("rules_primary") or ""),
+        rules_secondary=str(market.get("rules_secondary") or ""),
+        settlement_source=settlement_label(event, market),
+        exchange_index=market.get("exchange_index") if isinstance(market.get("exchange_index"), int) else None,
+        used_15m_fallback=False,
+        extra=extra,
+    )

@@ -1,6 +1,8 @@
 # KalshiBot rules (bankroll $40)
 
-These are the live rules of KalshiBot: hourly BTC and ETH “above/below this dollar line” contracts only (`KXBTCD`, `KXETHD`). Not sports. Not 15-minute scalps.
+These are the live rules of **hourly** KalshiBot: BTC and ETH “above/below this dollar line” contracts only (`KXBTCD`, `KXETHD`). Not sports.
+
+A separate 15-minute BTC/ETH bot (`KXBTC15M` / `KXETH15M`, own $5 pot, shard 2) is documented in `docs/15m.md`. Hourly must not load those books. Standing 15m one-liner: Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one idea per window, $0.10–$1.50 risk, own $5 pot (separate from hourly) — quit at $0, ask at $10, flat is fine.
 
 This is **not financial advice**. A wrong contract can go to $0.
 
@@ -101,7 +103,7 @@ If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid
 
 ## What it will not do
 
-- No sports, no parlays, no 15-minute campaign loop (that code is parked)
+- No sports, no parlays. 15m BTC/ETH is a **separate** bot (`./kb15`); this hourly process still does not trade it
 - No taking the mid as a fill price
 - No stacking many ideas in one morning (max 1 open hourly ticket; 2 only if different coin and opposite side)
 - No sizing up after a loss to “win it back”
