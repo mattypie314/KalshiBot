@@ -220,7 +220,7 @@ Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1
 
 ETH settlement index id is **`ETHUSD_RTI`** (fallback `ERTI`). Missing/PROXY index → sit.
 
-v1 ships the early-window edge loop only. Last-minute maker and auto flatten/TP rests are deferred.
+v1 ships the early-window edge loop plus **99¢ early cash-out** (both bots flatten a filled ticket when the held-side bid is already ≥ 99¢ instead of waiting for close). Last-minute maker and the wider stop/TP suite remain deferred.
 
 ## Later
 

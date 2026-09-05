@@ -12,6 +12,7 @@ from typing import Any
 
 from src.cfindex import FIFTEEN_INDEX_BY_ASSET, fifteen_index_id_for
 from src.clock import configure_logging, format_et, to_et
+from src.cashout import manage_open_cashouts
 from src.executor import CRYPTO_SHARD, execute_ideas, is_fifteen_rest
 from src.fees import taker_fee_dollars
 from src.filters import Idea
@@ -340,6 +341,30 @@ def run_scan(
         try_settle_paper(settings, client)
     except Exception as exc:  # noqa: BLE001
         logger.info("paper settle skipped: %s", exc)
+
+    # Manage opens before new entries: lock a near-certain win at 99¢.
+    go_live_early = bool(force_live and armed and not settings.halted and not pot.stopped)
+    open_tickets = [
+        row
+        for row in (state.get("tickets") or [])
+        if isinstance(row, dict) and str(row.get("status") or "").lower() == "open"
+    ]
+    if open_tickets and client.can_trade:
+        cashouts = manage_open_cashouts(
+            client,
+            open_tickets,
+            live=go_live_early,
+            exchange_index=CRYPTO_SHARD,
+            rest_filter=is_fifteen_rest,
+        )
+        cashed = {str(r.get("ticker") or "") for r in cashouts if r.get("action") == "cashed_out"}
+        if cashed:
+            for row in state.get("tickets") or []:
+                if isinstance(row, dict) and str(row.get("ticker") or "") in cashed:
+                    row["status"] = "cashed_out"
+            set_open_risk(pot, 0.0)
+            save_state(state_path, state)
+            save_pot(pot, settings.pot_path)
 
     try:
         ideas, notes, spots = collect_ideas(
