@@ -12,9 +12,11 @@ from typing import Any
 
 from src.cfindex import FIFTEEN_INDEX_BY_ASSET, fifteen_index_id_for
 from src.clock import configure_logging, format_et, to_et
-from src.executor import CRYPTO_SHARD, execute_ideas, is_fifteen_rest
+from src.executor import CRYPTO_SHARD, FIFTEEN_SERIES, execute_ideas, is_fifteen_rest
+from src.exits import manage_open_positions
 from src.fees import taker_fee_dollars
 from src.filters import Idea
+from src.journal import load_trades
 from src.fifteen.config import (
     EXIT_CONFIG,
     EXIT_OK,
@@ -318,10 +320,6 @@ def run_scan(
     pot.start = settings.pot_start
     pot.double_at = settings.pot_double
 
-    if force_live and pot.stopped:
-        print(f"15m pot stopped at ${pot.balance:.2f}. Refusing live.")
-        save_pot(pot, settings.pot_path)
-        return EXIT_OK
     if force_live and settings.halted:
         print(HALTED_MESSAGE)
         return EXIT_CONFIG
@@ -340,6 +338,38 @@ def run_scan(
         try_settle_paper(settings, client)
     except Exception as exc:  # noqa: BLE001
         logger.info("paper settle skipped: %s", exc)
+
+    if place or force_live:
+        journal_path = Path(settings.trade_log_path)
+        trades = load_trades(journal_path)
+        fills: list[dict[str, Any]] = []
+        fills_available = False
+        if client.can_trade:
+            try:
+                fills = list(client.get_fills(limit=50) or [])
+                fills_available = True
+            except Exception as exc:  # noqa: BLE001
+                logger.info("15m fills unavailable: %s", exc)
+        exit_live = bool(force_live and armed and not settings.halted and client.can_trade)
+        manage_open_positions(
+            client,
+            state=state,
+            settings=settings,
+            trades=trades,
+            fills=fills,
+            fills_available=fills_available,
+            live=exit_live,
+            journal_path=journal_path,
+            series=FIFTEEN_SERIES,
+            exchange_index=CRYPTO_SHARD,
+        )
+        save_state(state_path, state)
+
+    if force_live and pot.stopped:
+        print(f"15m pot stopped at ${pot.balance:.2f}. Refusing new live entries.")
+        save_pot(pot, settings.pot_path)
+        save_state(state_path, state)
+        return EXIT_OK
 
     try:
         ideas, notes, spots = collect_ideas(

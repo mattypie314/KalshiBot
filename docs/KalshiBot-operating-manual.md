@@ -43,6 +43,7 @@ Prod is live Kalshi — real cash (`external-api.kalshi.com`). Demo is paper (`d
 6. Edge is always vs the executable ask, never the mid. The filter uses the taker fee even if it later posts a maker limit.
 7. Keep one idea if filters pass. Everything else is watch or avoid.
 8. `scan` / `once` only print. `live` posts a post-only GTC limit. Typical ticket $1.50–$2.00, never over $2. If that price would take the book, it steps one tick more passive. It will not market-buy. Max 1 open hourly ticket (2 only if different coin and opposite side).
+9. Each live tick also manages open inventory. If the held-side bid is **99¢** (`CASH_OUT_BID=0.99`), flatten immediately (`cash_out_99`) — ahead of the +2¢ TP. Prefer post-only; if the only fill at 99¢ is hitting that bid, place a 99¢ limit, not a market sweep.
 
 ## Rules it will not break
 

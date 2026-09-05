@@ -14,7 +14,8 @@ from typing import Any
 from src.clock import configure_logging, format_et, hour_key, same_et_hour, to_et
 from src.config import EXIT_CONFIG, EXIT_OK, EXIT_RATE_LIMITED, HourlySettings, load_settings
 from src.evaluate import run_eval
-from src.executor import execute_ideas
+from src.executor import CRYPTO_SHARD, HOURLY_SERIES, execute_ideas
+from src.exits import manage_open_positions
 from src.paper import (
     describe_paper_append,
     record_printed_ideas,
@@ -338,6 +339,27 @@ def run_scan(
     if "hour_key" not in state:
         state["hour_key"] = _hour_key(to_et())
     save_state(Path(settings.state_path), state)
+    if place or (force_live and not settings.halted):
+        exit_live = bool(
+            force_live
+            and (armed or settings.live_enabled)
+            and not settings.halted
+            and client.can_trade
+        )
+        manage_open_positions(
+            client,
+            state=state,
+            settings=settings,
+            trades=trades,
+            fills=fills,
+            fills_available=fills_available,
+            live=exit_live,
+            journal_path=journal_path,
+            series=HOURLY_SERIES,
+            exchange_index=CRYPTO_SHARD,
+        )
+        write_trades(journal_path, trades)
+        save_state(Path(settings.state_path), state)
     spots_svc = SpotService(preferred=settings.spot_source, kalshi=client)
     try:
         try:

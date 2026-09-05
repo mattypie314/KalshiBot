@@ -102,6 +102,20 @@ If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid
 - Before a new live order, cancel leftover hourly rests that are no longer the chosen ticker
 - GitHub Actions hourly scan is halted (no cron). The Pi timer must stay disabled while `HALTED=true`. Cloud IPs often 403.
 
+## Hard cash-out at 99¢ (all bots)
+
+When the held side’s live bid hits **99¢** (~99% implied), flatten immediately. This is a hard rule for hourly **and** 15m. It **beats / runs ahead of** the +2¢ take-profit. Live timer oneshots **place the exit** — they do not wait for an operator.
+
+| Held | Trigger (default `CASH_OUT_BID=0.99`) |
+| --- | --- |
+| Yes | `yes_bid >= 0.99` → sell / flatten now |
+| No | `no_bid >= 0.99` (equiv. `yes_ask <= 0.01`) → flatten now |
+
+- Prefer maker / post-only if the book can rest at 99¢. If the only fill at 99¢ is hitting that bid, place a **99¢ limit** (not a market sweep).
+- Journal / trade-log label: `cash_out_99`.
+- Hourly live ticks run a compact manage-open-positions step before new entries (and even when the scan has no new idea).
+- 15m: `should_take_profit` is also True at fill+2¢; `cash_out_99` still wins the label when the bid is 99¢.
+
 ## What it will not do
 
 - No sports, no parlays. 15m BTC/ETH is a **separate** bot (`./kb15`); this hourly process still does not trade it

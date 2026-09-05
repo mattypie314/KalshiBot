@@ -122,6 +122,10 @@ class HourlySettings(BaseSettings):
     # assumed-maker-fill: score at the printed maker limit ("if we got that quote").
     # unfilled: leave tickets unscored until/unless a real fill exists (stricter).
     paper_fill_model: str = "assumed-maker-fill"
+    # Hard flatten when the held-side live bid hits this (default 99¢).
+    # Beats / runs ahead of TAKE_PROFIT_CENTS. Live oneshots place the exit.
+    cash_out_bid: float = 0.99
+    take_profit_cents: float = 0.02
 
     @field_validator("paper_fill_model", mode="before")
     @classmethod
