@@ -12,10 +12,11 @@ from typing import Any
 
 from src.cfindex import FIFTEEN_INDEX_BY_ASSET, fifteen_index_id_for
 from src.clock import configure_logging, format_et, to_et
-from src.cashout import manage_open_cashouts
-from src.executor import CRYPTO_SHARD, execute_ideas, is_fifteen_rest
+from src.executor import CRYPTO_SHARD, FIFTEEN_SERIES, execute_ideas, is_fifteen_rest
+from src.exits import manage_open_positions
 from src.fees import taker_fee_dollars
 from src.filters import Idea
+from src.journal import load_trades
 from src.fifteen.config import (
     EXIT_CONFIG,
     EXIT_OK,
@@ -319,10 +320,6 @@ def run_scan(
     pot.start = settings.pot_start
     pot.double_at = settings.pot_double
 
-    if force_live and pot.stopped:
-        print(f"15m pot stopped at ${pot.balance:.2f}. Refusing live.")
-        save_pot(pot, settings.pot_path)
-        return EXIT_OK
     if force_live and settings.halted:
         print(HALTED_MESSAGE)
         return EXIT_CONFIG
@@ -342,29 +339,37 @@ def run_scan(
     except Exception as exc:  # noqa: BLE001
         logger.info("paper settle skipped: %s", exc)
 
-    # Manage opens before new entries: lock a near-certain win at 99¢.
-    go_live_early = bool(force_live and armed and not settings.halted and not pot.stopped)
-    open_tickets = [
-        row
-        for row in (state.get("tickets") or [])
-        if isinstance(row, dict) and str(row.get("status") or "").lower() == "open"
-    ]
-    if open_tickets and client.can_trade:
-        cashouts = manage_open_cashouts(
+    if place or force_live:
+        journal_path = Path(settings.trade_log_path)
+        trades = load_trades(journal_path)
+        fills: list[dict[str, Any]] = []
+        fills_available = False
+        if client.can_trade:
+            try:
+                fills = list(client.get_fills(limit=50) or [])
+                fills_available = True
+            except Exception as exc:  # noqa: BLE001
+                logger.info("15m fills unavailable: %s", exc)
+        exit_live = bool(force_live and armed and not settings.halted and client.can_trade)
+        manage_open_positions(
             client,
-            open_tickets,
-            live=go_live_early,
+            state=state,
+            settings=settings,
+            trades=trades,
+            fills=fills,
+            fills_available=fills_available,
+            live=exit_live,
+            journal_path=journal_path,
+            series=FIFTEEN_SERIES,
             exchange_index=CRYPTO_SHARD,
-            rest_filter=is_fifteen_rest,
         )
-        cashed = {str(r.get("ticker") or "") for r in cashouts if r.get("action") == "cashed_out"}
-        if cashed:
-            for row in state.get("tickets") or []:
-                if isinstance(row, dict) and str(row.get("ticker") or "") in cashed:
-                    row["status"] = "cashed_out"
-            set_open_risk(pot, 0.0)
-            save_state(state_path, state)
-            save_pot(pot, settings.pot_path)
+        save_state(state_path, state)
+
+    if force_live and pot.stopped:
+        print(f"15m pot stopped at ${pot.balance:.2f}. Refusing new live entries.")
+        save_pot(pot, settings.pot_path)
+        save_state(state_path, state)
+        return EXIT_OK
 
     try:
         ideas, notes, spots = collect_ideas(

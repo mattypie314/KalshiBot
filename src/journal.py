@@ -16,6 +16,28 @@ TERMINAL_RESULTS = frozenset({"win", "loss", "unfilled"})
 TURBO_LABEL = "Turbo / FORCE_NEAR_RULE"
 
 
+CASH_OUT_LABEL = "cash_out_99"
+
+
+def apply_exit_fields(
+    row: dict[str, Any],
+    *,
+    reason: str,
+    exit_price: float,
+    order_id: str = "",
+) -> dict[str, Any]:
+    """Label a flatten (cash_out_99 / take_profit) on a journal row."""
+    row["exit_reason"] = reason
+    row["exit_label"] = reason
+    row["exit_price"] = round(float(exit_price), 4)
+    if reason:
+        row["label"] = reason
+    if order_id:
+        row["exit_order_id"] = order_id
+    row["exit_ts"] = format_et()
+    return row
+
+
 def forced_ticket_fields(*, forced: bool = False, force_near_rule: bool = False) -> dict[str, Any]:
     """Label a Turbo Mode ticket in journal / last_run / trade_log / paper."""
     on = bool(forced or force_near_rule)

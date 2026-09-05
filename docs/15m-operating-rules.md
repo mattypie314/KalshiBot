@@ -130,9 +130,10 @@ Writes go through signed Kalshi REST V2 order endpoints (or the sanctioned MCP p
 ## 7. Position management (after fill)
 
 1. Flatten if down ~**$0.50** or ~**10%** from fill, whichever hits first, **or** if a recheck killed the edge.
-2. **Take profit early:** if held-side live bid ≥ fill + **2¢**, flatten at the live bid. If bid is already **99¢**, sell now (both bots run this cash-out before new entries).
-3. After fill you may rest a **99¢** post-only exit (No: bid Yes at 0.01). Never rest a sell **under** the bid.
-4. Never leave orphan rests across a new window without cancelling stale ones.
+2. **Take profit early:** if held-side live bid ≥ fill + **2¢**, flatten at the live bid.
+3. **Hard cash-out at 99¢ (all bots):** if the held-side live bid is already **99¢** (`yes_bid >= CASH_OUT_BID`, default 0.99; No: `no_bid >= 0.99` / `yes_ask <= 0.01`), flatten **now**. This beats the +2¢ TP. Live oneshots **place the exit** (not operator-notify-only). Prefer post-only if the book can rest at 99¢; if the only way to exit at 99¢ is to hit that bid, place a 99¢ limit — not a market sweep. Journal label: `cash_out_99`.
+4. After fill you may rest a **99¢** post-only exit (No: bid Yes at 0.01). Never rest a sell **under** the bid.
+5. Never leave orphan rests across a new window without cancelling stale ones.
 
 ---
 

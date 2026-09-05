@@ -75,6 +75,14 @@ class FifteenSettings(BaseSettings):
     trade_log_path: str = Field(default="artifacts/fifteen_trade_log.jsonl", validation_alias=AliasChoices("FIFTEEN_TRADE_LOG_PATH"))
     pot_path: str = Field(default="artifacts/fifteen_pot.json", validation_alias=AliasChoices("FIFTEEN_POT_PATH"))
     paper_fill_model: str = "assumed-maker-fill"
+    cash_out_bid: float = Field(
+        default=0.99,
+        validation_alias=AliasChoices("CASH_OUT_BID", "FIFTEEN_CASH_OUT_BID"),
+    )
+    take_profit_cents: float = Field(
+        default=0.02,
+        validation_alias=AliasChoices("TAKE_PROFIT_CENTS", "FIFTEEN_TAKE_PROFIT_CENTS"),
+    )
 
     @field_validator("paper_fill_model", mode="before")
     @classmethod

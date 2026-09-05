@@ -287,6 +287,52 @@ class KalshiClient:
             return []
         return list(data.get("fills") or [])
 
+    def _paged_positions(self, params: dict[str, Any], limit: int) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while len(rows) < limit:
+            page = dict(params)
+            page["limit"] = min(200, limit - len(rows))
+            if cursor:
+                page["cursor"] = cursor
+            data = self.get_json("/portfolio/positions", params=page, auth=True)
+            batch = list(data.get("market_positions") or data.get("positions") or [])
+            rows.extend(row for row in batch if isinstance(row, dict))
+            cursor = data.get("cursor") or None
+            if not batch or not cursor:
+                break
+        return rows[:limit]
+
+    def get_positions(
+        self,
+        *,
+        ticker: str | None = None,
+        count_filter: str = "position",
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """List market positions across shards (crypto lives on exchange_index 2)."""
+        params: dict[str, Any] = {}
+        if count_filter:
+            params["count_filter"] = count_filter
+        if ticker:
+            params["ticker"] = ticker
+        found: dict[str, dict[str, Any]] = {}
+        for extra in ({}, {"exchange_index": 2}, {"exchange_index": 0}, {"exchange_index": 1}):
+            try:
+                rows = self._paged_positions({**params, **extra}, limit)
+            except ForbiddenError:
+                self.read_only = True
+                if found:
+                    break
+                return []
+            except httpx.HTTPStatusError:
+                continue
+            for row in rows:
+                key = str(row.get("ticker") or row.get("market_ticker") or "")
+                if key:
+                    found[key] = row
+        return list(found.values())[:limit]
+
     def get_cf_values(self, index_id: str) -> dict[str, Any]:
         """Kalshi CF Benchmarks passthrough. Requires a signed live key."""
         return self.get_json("/cfbenchmarks/values", params={"id": index_id}, auth=True)
