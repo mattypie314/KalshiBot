@@ -36,6 +36,7 @@ from src.fifteen.edge import (
     pass_fail,
 )
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
+from src.fifteen.regime import chop_veto_note, classify_regime
 from src.kalshi_client import AuthConfigError, ForbiddenError, KalshiClient, RateLimitedError
 from src.markets import HourlyMarket, MarketDiscovery
 from src.model import fair_prob, hours_left, model_z
@@ -177,10 +178,14 @@ def collect_ideas(
     bankroll: float,
     asset: str | None = None,
     now: datetime | None = None,
+    apply_chop_veto: bool | None = None,
 ) -> tuple[list[Idea], list[str], Any]:
     now = to_et(now)
     notes: list[str] = []
     assets = [asset.upper()] if asset else list(settings.asset_list)
+    # Paper/scan default: sit after Pass when the tape is chop. Live path leaves this off.
+    veto_chop = settings.chop_veto if apply_chop_veto is None else apply_chop_veto
+    regimes: dict[str, Any] = {}
 
     if settings.news_pause:
         return [], ["NEWS_PAUSE — operator sit"], None
@@ -254,6 +259,14 @@ def collect_ideas(
         if market.spread > settings.max_spread + 1e-12 and abs(decision.edge) <= market.spread:
             notes.append(f"{market.ticker}: spread wider than edge")
             continue
+        if veto_chop:
+            if market.asset not in regimes:
+                bars = (getattr(spots, "candles", None) or {}).get(market.asset)
+                regimes[market.asset] = classify_regime(bars)
+            skipped = chop_veto_note(market.ticker, regimes[market.asset])
+            if skipped:
+                notes.append(skipped)
+                continue
         idea = idea_from_pass(
             market,
             decision,
@@ -379,6 +392,7 @@ def run_scan(
             pot_room=pot.room,
             bankroll=bankroll,
             asset=asset,
+            apply_chop_veto=bool(settings.chop_veto) and not force_live,
         )
     except RateLimitedError as exc:
         print(f"rate limited: {exc}", file=sys.stderr)

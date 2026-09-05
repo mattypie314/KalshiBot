@@ -71,6 +71,7 @@ This is the directional / mispricing pass.
 - Revenge window after a loser.
 - **Three 15m losses in a row** this ET day → stop the session.
 - Pot stopped / room too small.
+- **Paper/scan chop veto** (default on, `FIFTEEN_CHOP_VETO`): after Pass, sit when 1m tape is chop (low ADX + tight Bollinger). Live order placement / Turbo / 99¢ cash-out are unchanged. Set `FIFTEEN_CHOP_VETO=false` to disable.
 
 ### B. Last-minute maker (optional submodule)
 

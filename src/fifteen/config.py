@@ -64,6 +64,10 @@ class FifteenSettings(BaseSettings):
     require_settlement_index: bool = True
     require_maker: bool = True
     news_pause: bool = False
+    chop_veto: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("FIFTEEN_CHOP_VETO"),
+    )
     hourly_vol_fallback_btc: float = 0.004
     hourly_vol_fallback_eth: float = 0.005
 
