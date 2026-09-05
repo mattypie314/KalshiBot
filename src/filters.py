@@ -7,10 +7,16 @@ from datetime import datetime, timedelta
 
 from src.clock import to_et
 from src.fees import ev_per_contract, taker_fee_dollars
-from src.journal import strike_distance_pct, trade_bucket
+from src.journal import TURBO_LABEL, strike_distance_pct, trade_bucket
 from src.markets import HourlyMarket
 from src.model import fair_no, fair_prob, hours_left, model_z
 from src.sizer import size_idea
+
+# Turbo Mode (FORCE_NEAR_RULE): soften close-strike / min-edge only.
+# Preferred risk stays in the $0.75–$1.50 band; hard MAX_RISK still wins.
+TURBO_MIN_NET_EDGE = 0.0
+TURBO_PREFERRED_RISK_DOLLARS = 1.50
+TURBO_MIN_PREFERRED_RISK_DOLLARS = 0.75
 
 # Remaining 2026 CPI prints (8:30 AM ET) and FOMC statements (2:00 PM ET).
 CPI_DATES = frozenset(
@@ -74,6 +80,8 @@ class FilterConfig:
     settlement_index: bool = True
     require_maker: bool = True
     news_pause: bool = False
+    force_near_rule: bool = False
+    turbo_min_net_edge: float = TURBO_MIN_NET_EDGE
 
 
 @dataclass
@@ -98,6 +106,8 @@ class Idea:
     spot: float = 0.0
     minutes_left: float = 0.0
     bucket: str = ""
+    forced: bool = False
+    force_near_rule: bool = False
 
 
 @dataclass
@@ -228,6 +238,10 @@ def evaluate_market(
     for side, ask, bid, p_hat, depth in candidates:
         post_maker = bid > 0 and ask > bid
         limit = maker_limit(side, bid, ask) if post_maker else None
+        preferred_risk = cfg.preferred_risk_dollars
+        if cfg.force_near_rule:
+            # Prefer the $0.75–$1.50 band; never exceed the configured MAX_RISK.
+            preferred_risk = min(TURBO_PREFERRED_RISK_DOLLARS, cfg.max_risk_dollars)
         # Filter edge is always vs executable ask (never mid). Fee on recommended size.
         trial = size_idea(
             bankroll=cfg.bankroll,
@@ -236,7 +250,7 @@ def evaluate_market(
             kelly_mult=cfg.kelly_mult,
             max_risk_pct=cfg.max_risk_pct,
             max_risk_dollars=cfg.max_risk_dollars,
-            preferred_risk_dollars=cfg.preferred_risk_dollars,
+            preferred_risk_dollars=preferred_risk,
             last_loss_same_hour=cfg.last_loss_same_hour,
             last_contracts=cfg.last_contracts,
         )
@@ -262,10 +276,11 @@ def evaluate_market(
             )
             continue
 
-        min_edge = max(cfg.min_net_edge, cfg.soft_net_edge)
+        strict_min_edge = max(cfg.min_net_edge, cfg.soft_net_edge)
+        min_edge = cfg.turbo_min_net_edge if cfg.force_near_rule else strict_min_edge
         if net < min_edge:
             if net >= 0.02:
-                nearby_note = f"{side} net {net:.1%} vs {ask:.2f} (need {min_edge:.0%})"
+                nearby_note = f"{side} net {net:.1%} vs {ask:.2f} (need {strict_min_edge:.0%})"
             reasons.append(f"{side}: net edge {net:.3f} < {min_edge:.2f} (fair {p_hat:.3f} ask {ask:.3f} fee {fee_each:.4f})")
             continue
 
@@ -289,7 +304,7 @@ def evaluate_market(
             need = max(need, cfg.min_strike_sigma * sigma)
         if fallback > 0 and hourly_vol >= cfg.vol_widen_mult * fallback:
             need = max(need, cfg.vol_widen_distance_pct)
-        if distance < need:
+        if distance < need and not cfg.force_near_rule:
             reasons.append(
                 f"{side}: close strike {distance:.2%} from spot (need {need:.2%}; coin-flip / fade)"
             )
@@ -318,6 +333,11 @@ def evaluate_market(
         ]
         if using_maker:
             rationale.append(f"Post limit at {limit:.2f} (maker, fee 0) inside {bid:.2f}/{ask:.2f}.")
+        if cfg.force_near_rule:
+            rationale.append(
+                f"{TURBO_LABEL}: forced near-strike / softened min-edge. "
+                "Maker only; still sitting if the book would cross."
+            )
         if market.used_15m_fallback:
             rationale.append("Hourly books missing; this is a 15-minute fallback.")
 
@@ -342,6 +362,8 @@ def evaluate_market(
             spot=spot,
             minutes_left=minutes,
             bucket=bucket,
+            forced=bool(cfg.force_near_rule),
+            force_near_rule=bool(cfg.force_near_rule),
         )
         if best is None or idea.net_edge > best.net_edge:
             best = idea
@@ -354,3 +376,10 @@ def evaluate_market(
         watch_note=nearby_note,
         avoid_reasons=reasons,
     )
+
+
+def rank_actionable_ideas(ideas: list[Idea], *, force_near_rule: bool) -> list[Idea]:
+    """Strict Pass: highest net edge. Turbo: closest viable strike, then edge."""
+    if force_near_rule:
+        return sorted(ideas, key=lambda idea: (idea.strike_distance_pct, -idea.net_edge))
+    return sorted(ideas, key=lambda idea: idea.net_edge, reverse=True)

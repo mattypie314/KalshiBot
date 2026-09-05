@@ -87,6 +87,10 @@ class HourlySettings(BaseSettings):
     min_strike_sigma: float = 1.5
     close_strike_edge: float = 0.10
     vol_pause_mult: float = 2.0
+    # Turbo Mode: soften close-strike / min-edge enough to rest a maker on the
+    # nearest strike. Default off — strict Pass is unchanged. Never crosses,
+    # still requires BRTI/ERTI, still capped by MAX_RISK, one idea per run.
+    force_near_rule: bool = False
 
     assets: str = "BTC,ETH"
     max_markets_per_asset: int = 12

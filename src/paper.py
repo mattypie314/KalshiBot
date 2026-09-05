@@ -26,6 +26,7 @@ from src.filters import Idea
 from src.journal import (
     append_trade,
     estimate_pnl,
+    forced_ticket_fields,
     load_trades,
     strike_distance_pct,
     trade_bucket,
@@ -110,6 +111,8 @@ def new_paper_row(
     close_time: datetime | str | None,
     fill_model: str = FILL_ASSUMED_MAKER,
     hourly_vol: float = 0.0,
+    forced: bool = False,
+    force_near_rule: bool = False,
 ) -> dict[str, Any]:
     raw = str(spot_source or "").strip()
     if raw.upper() in {"BRTI", "ERTI", "ETHUSD_RTI"}:
@@ -181,6 +184,7 @@ def new_paper_row(
             if model == FILL_ASSUMED_MAKER
             else "stricter paper mode: left unfilled, not scored"
         ),
+        **forced_ticket_fields(forced=forced, force_near_rule=force_near_rule),
     }
 
 
@@ -208,6 +212,8 @@ def paper_row_from_idea(
         close_time=idea.market.close_time,
         fill_model=fill_model,
         hourly_vol=hourly_vol,
+        forced=idea.forced,
+        force_near_rule=idea.force_near_rule,
     )
 
 

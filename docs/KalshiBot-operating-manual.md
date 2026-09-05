@@ -51,7 +51,7 @@ Prod is live Kalshi — real cash (`external-api.kalshi.com`). Demo is paper (`d
 - One open hourly idea (do not stack four $2 tickets in one morning).
 - Ask between 5¢ and 95¢.
 - Need 6% net edge after fees. No 4% exception. Sitting is valid.
-- Ban close strikes. Do not fade a line inside ~0.5–0.75% of spot. A fat model number on a tight strike is still a coin-flip.
+- Ban close strikes. Do not fade a line inside ~0.5–0.75% of spot. A fat model number on a tight strike is still a coin-flip. `FORCE_NEAR_RULE=true` (Turbo Mode, default off) is the only way to soften that bar — maker-only, still BRTI/ERTI, still `MAX_RISK`, labeled forced.
 - |z| > 2.5 needs 8% edge. |z| > 3.5 skip (news-only jump).
 - Sit out CPI 8:15–8:45 AM ET and FOMC 1:45–2:45 PM ET on those days. Sit a coin when vol is 2× typical (war-tape hook). Set `NEWS_PAUSE=true` to sit everything without scraping headlines.
 - Maker only. If the book cannot rest a post-only limit, sit — do not lift for a 6% edge.
