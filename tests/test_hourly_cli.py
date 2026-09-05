@@ -274,6 +274,16 @@ def test_default_bankroll_is_forty(monkeypatch):
     assert settings.paper_fill_model == "assumed-maker-fill"
     assert settings.paper_log_path == "artifacts/paper_log.jsonl"
     assert settings.live_enabled is False
+    assert settings.force_near_rule is False
+
+
+def test_force_near_rule_env_true(monkeypatch):
+    monkeypatch.setenv("FORCE_NEAR_RULE", "true")
+    settings = HourlySettings(_env_file=None, kalshi_api_key_id="", kalshi_private_key_path="/tmp/not-the-home-pem")
+    assert settings.force_near_rule is True
+    assert settings.halted is True
+    assert settings.live_enabled is False
+    assert settings.require_maker is True
 
 
 def test_apply_kalshi_shell_env_reads_export_and_home(tmp_path, monkeypatch):

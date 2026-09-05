@@ -83,3 +83,6 @@ def test_scan_log_row_has_no_secret_keys():
     assert row["halted"] is True
     assert row["live_enabled"] is False
     assert "settlement_ok" in row
+    assert row["force_near_rule"] is False
+    assert row["forced"] is False
+    assert row["label"] == ""

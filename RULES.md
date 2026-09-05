@@ -78,6 +78,7 @@ Skip unless every box is checked:
 - If it would have to lift the ask, visible size must be ≥ 5 contracts
 - Net edge ≥ 6% after fees. No 4% tight-book exception. No edge = sit
 - Ban close strikes: skip if the line is inside 0.50% of spot, or inside 1.5× a normal 1-hour move. A fat model edge on a tight strike is not a reason to fade it.
+- **Turbo Mode** (`FORCE_NEAR_RULE=true`, default **false**): soften only those close-strike / min-edge bars enough to rest a maker on the nearest viable strike. Still never crosses. Still requires BRTI (BTC) / ERTI (ETH). Size stays in the ~$0.75–$1.50 band when it fits, never above `MAX_RISK`. One idea per run. Journal / `last_run.json` / `trade_log.jsonl` label the ticket `Turbo / FORCE_NEAR_RULE` (forced). Strict Pass is unchanged when the flag is off.
 - If realized vol is 2× typical, sit the coin (headline / war-tape days). Operator hook: `NEWS_PAUSE=true` sits everything without scraping headlines.
 - If |z| > 2.5 (fat-tail / long-shot), need net edge ≥ 8%
 - If the side needs a huge jump (|z| > 3.5), skip — treat as news-only, not a vol bet

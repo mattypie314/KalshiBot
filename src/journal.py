@@ -13,6 +13,18 @@ CLOSE_BUCKET_PCT = 0.01
 KILL_MIN_TRADES = 3
 FILLED_STATUSES = frozenset({"filled", "partial"})
 TERMINAL_RESULTS = frozenset({"win", "loss", "unfilled"})
+TURBO_LABEL = "Turbo / FORCE_NEAR_RULE"
+
+
+def forced_ticket_fields(*, forced: bool = False, force_near_rule: bool = False) -> dict[str, Any]:
+    """Label a Turbo Mode ticket in journal / last_run / trade_log / paper."""
+    on = bool(forced or force_near_rule)
+    return {
+        "forced": on,
+        "turbo": on,
+        "force_near_rule": on,
+        "label": TURBO_LABEL if on else "",
+    }
 
 
 def strike_distance_pct(spot: float, threshold: float) -> float:
@@ -81,9 +93,11 @@ def new_trade_row(
     client_order_id: str = "",
     fill_status: str = "resting",
     filled_contracts: float = 0.0,
+    forced: bool = False,
+    force_near_rule: bool = False,
 ) -> dict[str, Any]:
     distance = strike_distance_pct(spot, strike)
-    return {
+    row = {
         "ts": format_et(),
         "ts_iso": to_et().isoformat(),
         "ticker": ticker,
@@ -110,6 +124,8 @@ def new_trade_row(
         "result": "pending",
         "pnl": None,
     }
+    row.update(forced_ticket_fields(forced=forced, force_near_rule=force_near_rule))
+    return row
 
 
 def resolve_pending(

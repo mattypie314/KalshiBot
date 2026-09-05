@@ -47,7 +47,8 @@ def format_report(
         lines.extend(
             [
                 f"**Market:** {m.title} — {m.yes_sub_title} (`{m.ticker}`)",
-                f"**Side:** {idea.side}",
+                f"**Side:** {idea.side}"
+                + (" — Turbo / FORCE_NEAR_RULE (forced)" if idea.forced else ""),
                 f"**Entry target:** {idea.limit_price:.2f} limit"
                 f"{' (maker)' if idea.post_maker else ''} / executable ask {idea.entry_price:.2f}",
                 f"**Model fair:** {idea.fair:.1%}",

@@ -21,12 +21,21 @@ from src.paper import (
     try_settle_paper,
 )
 from src.exposure import blocks_new_idea, open_hourly_tickets
-from src.filters import FilterConfig, FilterResult, Idea, evaluate_market, news_blackout_active
+from src.filters import (
+    TURBO_PREFERRED_RISK_DOLLARS,
+    FilterConfig,
+    FilterResult,
+    Idea,
+    evaluate_market,
+    news_blackout_active,
+    rank_actionable_ideas,
+)
 from src.journal import (
     append_trade,
     bucket_underwater,
     daily_loss_reason,
     fill_status_from_order,
+    forced_ticket_fields,
     load_trades,
     new_trade_row,
     parse_count,
@@ -53,7 +62,6 @@ def _filter_cfg(settings: HourlySettings, state: dict[str, Any]) -> FilterConfig
         kelly_mult=settings.kelly_mult,
         max_risk_pct=settings.max_risk_pct,
         max_risk_dollars=settings.max_risk_dollars,
-        preferred_risk_dollars=settings.preferred_risk_dollars,
         last_loss_same_hour=bool(state.get("loss_this_hour")),
         last_contracts=state.get("last_contracts"),
         news_blackout=news_blackout_active(),
@@ -66,6 +74,12 @@ def _filter_cfg(settings: HourlySettings, state: dict[str, Any]) -> FilterConfig
         vol_pause_mult=settings.vol_pause_mult,
         kill_close_no=bool(state.get("kill_close_no")),
         kill_close_yes=bool(state.get("kill_close_yes")),
+        force_near_rule=settings.force_near_rule,
+        preferred_risk_dollars=(
+            min(TURBO_PREFERRED_RISK_DOLLARS, settings.max_risk_dollars)
+            if settings.force_near_rule
+            else settings.preferred_risk_dollars
+        ),
     )
 
 
@@ -188,6 +202,9 @@ def scan_log_row(
                 "bucket": idea.bucket,
                 "fill_status": None,
                 "settlement_result": None,
+                **forced_ticket_fields(
+                    forced=idea.forced, force_near_rule=idea.force_near_rule
+                ),
             }
             for idea in ideas
         ],
@@ -198,6 +215,7 @@ def scan_log_row(
         },
         "halted": settings.halted,
         "live_enabled": settings.live_enabled,
+        **forced_ticket_fields(forced=settings.force_near_rule),
     }
 
 
@@ -341,7 +359,12 @@ def run_scan(
                 assets,
                 max_per_asset=settings.max_markets_per_asset,
                 spots=spots.prices,
-                min_distance_pct=settings.min_strike_distance_pct,
+                min_distance_pct=(
+                    0.0 if settings.force_near_rule else settings.min_strike_distance_pct
+                ),
+                watch_slots=(
+                    settings.max_markets_per_asset if settings.force_near_rule else 3
+                ),
             )
             settlements = discovery.next_settlements(markets)
         except RateLimitedError as exc:
@@ -391,7 +414,7 @@ def run_scan(
             else:
                 avoided.append(result)
 
-        ideas.sort(key=lambda i: i.net_edge, reverse=True)
+        ideas = rank_actionable_ideas(ideas, force_near_rule=settings.force_near_rule)
         extra = ideas[settings.max_ideas_per_run :]
         ideas = ideas[: settings.max_ideas_per_run]
         sit_day = daily_loss_reason(
@@ -453,7 +476,21 @@ def run_scan(
             "settlement_note": spots.note,
             "markets": [m.ticker for m in markets],
             "actionable": [i.market.ticker for i in ideas],
+            "ideas": [
+                {
+                    "ticker": idea.market.ticker,
+                    "side": idea.side,
+                    "limit_price": idea.limit_price,
+                    "net_edge": idea.net_edge,
+                    "distance_pct": idea.strike_distance_pct,
+                    **forced_ticket_fields(
+                        forced=idea.forced, force_near_rule=idea.force_near_rule
+                    ),
+                }
+                for idea in ideas
+            ],
             "report": report,
+            **forced_ticket_fields(forced=settings.force_near_rule),
         }
         (artifacts / "last_run.json").write_text(json.dumps(scan_blob, indent=2, default=str))
 
@@ -549,6 +586,8 @@ def run_scan(
                         ),
                         fill_status=fill_status_from_order(order),
                         filled_contracts=parse_count(order.get("fill_count")),
+                        forced=idea.forced,
+                        force_near_rule=idea.force_near_rule,
                     ),
                 )
                 save_state(Path(settings.state_path), state)

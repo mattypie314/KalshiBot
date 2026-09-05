@@ -1,9 +1,11 @@
 from src.clock import to_et
 from src.journal import (
+    TURBO_LABEL,
     bucket_underwater,
     daily_loss_reason,
     estimate_pnl,
     fill_status_from_order,
+    forced_ticket_fields,
     new_trade_row,
     resolve_pending,
     strike_distance_pct,
@@ -145,6 +147,53 @@ def test_daily_loss_reason_sits_after_two_filled_losses():
     assert daily_loss_reason(rows[:1], now, max_dollars=4.00, max_losses=2) is None
     unfilled = [{"result": "unfilled", "pnl": 0, "resolved_ts": now.isoformat()}]
     assert daily_loss_reason(unfilled, now, max_dollars=4.00, max_losses=2) is None
+
+
+def test_new_trade_row_default_is_not_forced():
+    row = new_trade_row(
+        ticker="KXBTCD-1",
+        asset="BTC",
+        side="No",
+        strike=77600.0,
+        spot=76800.0,
+        minutes_left=40,
+        fair=0.70,
+        kalshi_price=0.82,
+        limit_price=0.81,
+        contracts=2,
+        risk_dollars=1.64,
+        hourly_vol=0.004,
+        source="cfbenchmarks",
+    )
+    assert row["forced"] is False
+    assert row["turbo"] is False
+    assert row["force_near_rule"] is False
+    assert row["label"] == ""
+
+
+def test_new_trade_row_labels_turbo_force_near_rule():
+    row = new_trade_row(
+        ticker="KXETHD-1",
+        asset="ETH",
+        side="Yes",
+        strike=2375.0,
+        spot=2390.0,
+        minutes_left=25,
+        fair=0.90,
+        kalshi_price=0.64,
+        limit_price=0.63,
+        contracts=2,
+        risk_dollars=1.28,
+        hourly_vol=0.005,
+        source="cfbenchmarks",
+        forced=True,
+        force_near_rule=True,
+    )
+    assert row["forced"] is True
+    assert row["turbo"] is True
+    assert row["force_near_rule"] is True
+    assert row["label"] == TURBO_LABEL
+    assert forced_ticket_fields(forced=True)["label"] == TURBO_LABEL
 
 
 def test_fill_status_from_order():

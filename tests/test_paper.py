@@ -121,6 +121,7 @@ def test_defaults_never_arm_live():
     assert settings.halted is True
     assert settings.live_enabled is False
     assert settings.live_trading is False
+    assert settings.force_near_rule is False
     assert settings.paper_fill_model == FILL_ASSUMED_MAKER
     assert Path(settings.paper_log_path).name != LIVE_TRADE_LOG_NAME
 
@@ -163,6 +164,10 @@ def test_append_paper_ticket_fields(tmp_path):
     assert row["result"] == "pending"
     assert "assumed-maker-fill" in row["note"]
     assert "not a real fill" in row["note"]
+    assert row["forced"] is False
+    assert row["turbo"] is False
+    assert row["force_near_rule"] is False
+    assert row["label"] == ""
     assert path.is_file()
     assert not live.exists()
     # Dedup: second scan of the same ticker does not double-count.
