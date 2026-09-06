@@ -126,6 +126,20 @@ When we already hold a fill, flatten if the held-side live bid is **≥ 95¢** (
 - Journal / trade-log label: `cash_out_95_time`.
 - 15m aliases: `FIFTEEN_EARLY_CASH_OUT_BID` / `FIFTEEN_EARLY_CASH_OUT_MINUTES`.
 
+## Manual in-app flatten (all bots)
+
+If a live entry we placed is later flat because someone sold/flattened **in the Kalshi app** — position gone, and a matching sell/close fill whose `order_id` is **not** one of our exit order ids — journal it as an exit. Label: `manual_flatten` (alias `manual_cash_out`). Do not treat that as a mystery disappearance, and do not try to flatten a position that is already gone.
+
+Bot-placed 99¢ / 95¢+time / +2¢ exits keep their own labels when the close fill matches `exit_order_id`.
+
+## Resting-entry cancels (current behavior)
+
+If Matt cancels a resting **entry** in the app, the bot does **not** immediately replace it.
+
+- Hourly: `last_ticker` stays until that market settles, so `blocks_new_idea` sits the rest of the hour.
+- 15m: an `open` ticket/rest for this window still counts as working (`fifteen_working`), so that window sits.
+- The next tick is a fresh Pass/Sit. A new place happens only if the usual filters Pass **and** those working-ticket gates are clear. We do not fight cancels by re-posting the same rest.
+
 ## What it will not do
 
 - No sports, no parlays. 15m BTC/ETH is a **separate** bot (`./kb15`); this hourly process still does not trade it

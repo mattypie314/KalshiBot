@@ -134,8 +134,10 @@ Writes go through signed Kalshi REST V2 order endpoints (or the sanctioned MCP p
 2. **Take profit early:** if held-side live bid ≥ fill + **2¢**, flatten at the live bid.
 3. **Hard cash-out at 99¢ (all bots):** if the held-side live bid is already **99¢** (`yes_bid >= CASH_OUT_BID`, default 0.99; No: `no_bid >= 0.99` / `yes_ask <= 0.01`), flatten **now**. This beats early 95¢ cash-out and the +2¢ TP. Live oneshots **place the exit** (not operator-notify-only). Prefer post-only if the book can rest at 99¢; if the only way to exit at 99¢ is to hit that bid, place a 99¢ limit — not a market sweep. Journal label: `cash_out_99`.
 3b. **Early cash-out at 95¢ + time:** if the held-side live bid is **≥ 95¢** (`EARLY_CASH_OUT_BID=0.95`) **and** minutes to settlement are **≤ 10** (`EARLY_CASH_OUT_MINUTES=10`), flatten now. After 99¢, ahead of +2¢ TP. Journal label: `cash_out_95_time`.
+3c. **Manual in-app flatten:** if Matt (or anyone) sells/flattens in the Kalshi app, journal `manual_flatten` when the position is gone and the close fill is not one of our exit order ids. Do not relabel a bot `cash_out_99` / `cash_out_95_time` / `take_profit`.
 4. After fill you may rest a **99¢** post-only exit (No: bid Yes at 0.01). Never rest a sell **under** the bid.
 5. Never leave orphan rests across a new window without cancelling stale ones.
+6. **Canceled resting entries:** if Matt cancels a resting 15m entry, do **not** immediately re-fire that idea. An `open` ticket/rest still counts as working this window. The next tick may place only if Pass filters still fire **and** that working gate is clear. We do not fight cancels.
 
 ---
 

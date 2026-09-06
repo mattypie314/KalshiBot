@@ -10,9 +10,12 @@ from src.exits import (
     CASH_OUT_LABEL,
     EARLY_CASH_OUT_LABEL,
     Holding,
+    MANUAL_FLATTEN_LABEL,
     TAKE_PROFIT_LABEL,
     collect_holdings,
+    detect_manual_flattens,
     exit_reason,
+    fill_is_close,
     flatten_payload,
     manage_open_positions,
     minutes_until_settlement,
@@ -665,3 +668,223 @@ def test_fifteen_no_position_cashes_out_at_yes_ask_01(tmp_path: Path):
     assert sent["price"] == "0.0100"
     assert state["tickets"][0]["status"] == "flat"
     assert state["tickets"][0]["exit_reason"] == CASH_OUT_LABEL
+
+
+def test_fill_is_close_yes_and_no():
+    assert fill_is_close({"action": "sell", "side": "yes"}, "Yes") is True
+    assert fill_is_close({"action": "buy", "side": "yes"}, "Yes") is False
+    assert fill_is_close({"action": "sell", "side": "no"}, "No") is True
+    assert fill_is_close({"action": "buy", "side": "no"}, "No") is False
+    assert fill_is_close({"outcome_side": "no"}, "Yes") is True
+    assert fill_is_close({"outcome_side": "yes"}, "Yes") is False
+    assert fill_is_close({"outcome_side": "yes"}, "No") is True
+
+
+def _filled_trade(*, ticker: str, side: str, order_id: str = "entry-1", **extra):
+    row = {
+        "ticker": ticker,
+        "side": side,
+        "fill_status": "filled",
+        "kalshi_price": 0.54,
+        "contracts": 2,
+        "result": "pending",
+        "order_id": order_id,
+    }
+    row.update(extra)
+    return row
+
+
+def test_detect_manual_flatten_yes_when_position_gone_and_external_sell():
+    trade = _filled_trade(ticker="KXBTCD-1", side="Yes")
+    hits = detect_manual_flattens(
+        [trade],
+        fills=[
+            {"ticker": "KXBTCD-1", "order_id": "entry-1", "action": "buy", "side": "yes"},
+            {
+                "ticker": "KXBTCD-1",
+                "order_id": "app-sell-9",
+                "action": "sell",
+                "side": "yes",
+                "yes_price_dollars": "0.9600",
+            },
+        ],
+        fills_available=True,
+        positions={},
+        positions_available=True,
+        series=("KXBTCD",),
+    )
+    assert len(hits) == 1
+    assert hits[0]["ticker"] == "KXBTCD-1"
+    assert hits[0]["order_id"] == "app-sell-9"
+    assert hits[0]["exit_price"] == 0.96
+
+
+def test_detect_manual_flatten_no_when_position_gone_and_external_sell():
+    trade = _filled_trade(ticker="KXBTC15M-1", side="No")
+    hits = detect_manual_flattens(
+        [trade],
+        fills=[
+            {
+                "ticker": "KXBTC15M-1",
+                "order_id": "app-sell-no",
+                "action": "sell",
+                "side": "no",
+                "no_price_dollars": "0.9700",
+            }
+        ],
+        fills_available=True,
+        positions={"KXBTC15M-1": 0.0},
+        positions_available=True,
+        series=("KXBTC15M", "KXETH15M"),
+    )
+    assert len(hits) == 1
+    assert hits[0]["side"] == "No"
+    assert hits[0]["exit_price"] == 0.97
+
+
+def test_detect_skips_bot_placed_exit_order_id():
+    trade = _filled_trade(ticker="KXBTCD-1", side="Yes", exit_order_id="bot-exit-1")
+    hits = detect_manual_flattens(
+        [trade],
+        fills=[
+            {
+                "ticker": "KXBTCD-1",
+                "order_id": "bot-exit-1",
+                "action": "sell",
+                "side": "yes",
+                "yes_price_dollars": "0.9900",
+            }
+        ],
+        fills_available=True,
+        positions={},
+        positions_available=True,
+        series=("KXBTCD",),
+    )
+    assert hits == []
+
+
+def test_detect_skips_when_still_holding():
+    trade = _filled_trade(ticker="KXBTCD-1", side="Yes")
+    hits = detect_manual_flattens(
+        [trade],
+        fills=[{"ticker": "KXBTCD-1", "order_id": "app-sell-9", "action": "sell", "side": "yes"}],
+        fills_available=True,
+        positions={"KXBTCD-1": 2.0},
+        positions_available=True,
+        series=("KXBTCD",),
+    )
+    assert hits == []
+
+
+def test_detect_skips_when_only_entry_fill():
+    trade = _filled_trade(ticker="KXBTCD-1", side="Yes")
+    hits = detect_manual_flattens(
+        [trade],
+        fills=[{"ticker": "KXBTCD-1", "order_id": "entry-1", "action": "buy", "side": "yes"}],
+        fills_available=True,
+        positions={},
+        positions_available=True,
+        series=("KXBTCD",),
+    )
+    assert hits == []
+
+
+def test_manage_journals_manual_flatten_and_does_not_place(tmp_path: Path, capsys):
+    client = MagicMock()
+    client.get_positions.return_value = []
+    client.get_market.return_value = {
+        "yes_bid_dollars": "0.9600",
+        "yes_ask_dollars": "0.9700",
+        "no_bid_dollars": "0.0300",
+        "no_ask_dollars": "0.0400",
+    }
+    trades = [
+        _filled_trade(ticker="KXBTCD-26SEP0510-T64000", side="Yes", order_id="entry-1")
+    ]
+    fills = [
+        {"ticker": "KXBTCD-26SEP0510-T64000", "order_id": "entry-1", "action": "buy", "side": "yes"},
+        {
+            "ticker": "KXBTCD-26SEP0510-T64000",
+            "order_id": "app-sell-9",
+            "action": "sell",
+            "side": "yes",
+            "yes_price_dollars": "0.9600",
+        },
+    ]
+    state = {
+        "last_ticker": "KXBTCD-26SEP0510-T64000",
+        "last_side": "Yes",
+        "last_contracts": 2,
+        "tickets": [
+            {
+                "status": "open",
+                "ticker": "KXBTCD-26SEP0510-T64000",
+                "side": "Yes",
+                "contracts": 2,
+            }
+        ],
+    }
+    out = manage_open_positions(
+        client,
+        state=state,
+        trades=trades,
+        fills=fills,
+        fills_available=True,
+        live=True,
+        journal_path=tmp_path / "trade_log.jsonl",
+        series=("KXBTCD",),
+        exchange_index=2,
+    )
+    client.create_order.assert_not_called()
+    assert out["placed"] == []
+    assert out["manual"][0]["reason"] == MANUAL_FLATTEN_LABEL
+    assert trades[0]["exit_reason"] == MANUAL_FLATTEN_LABEL
+    assert trades[0]["exit_order_id"] == "app-sell-9"
+    assert state["tickets"][0]["status"] == "flat"
+    assert state["last_exit_reason"] == MANUAL_FLATTEN_LABEL
+    assert "MANUAL_FLATTEN" in capsys.readouterr().out
+    rows = load_trades(tmp_path / "trade_log.jsonl")
+    assert any(row.get("exit_reason") == MANUAL_FLATTEN_LABEL for row in rows)
+
+
+def test_manage_bot_exit_order_not_relabeled_manual(tmp_path: Path):
+    client = MagicMock()
+    client.get_positions.return_value = []
+    client.get_market.return_value = {
+        "yes_bid_dollars": "0.9900",
+        "yes_ask_dollars": "1.0000",
+        "no_bid_dollars": "0.0000",
+        "no_ask_dollars": "0.0100",
+    }
+    trades = [
+        _filled_trade(
+            ticker="KXBTCD-26SEP0510-T64000",
+            side="Yes",
+            order_id="entry-1",
+            exit_order_id="bot-exit-1",
+            exit_reason=CASH_OUT_LABEL,
+        )
+    ]
+    fills = [
+        {
+            "ticker": "KXBTCD-26SEP0510-T64000",
+            "order_id": "bot-exit-1",
+            "action": "sell",
+            "side": "yes",
+            "yes_price_dollars": "0.9900",
+        }
+    ]
+    out = manage_open_positions(
+        client,
+        state={"last_ticker": "KXBTCD-26SEP0510-T64000", "last_side": "Yes"},
+        trades=trades,
+        fills=fills,
+        fills_available=True,
+        live=True,
+        journal_path=tmp_path / "trade_log.jsonl",
+        series=("KXBTCD",),
+        exchange_index=2,
+    )
+    client.create_order.assert_not_called()
+    assert out["manual"] == []
+    assert trades[0]["exit_reason"] == CASH_OUT_LABEL

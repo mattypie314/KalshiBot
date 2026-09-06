@@ -178,6 +178,24 @@ def test_win_resets_streak_and_working_blocks_window():
     assert fifteen_working(working, _et(10, 3))
 
 
+def test_canceled_resting_entry_still_blocks_window():
+    """Matt canceling a rest is respected: we do not immediately re-fire that window."""
+    wid = fifteen_window_id(_et(10, 3))
+    state = {
+        "tickets": [
+            {
+                "status": "open",
+                "loop": "fifteen",
+                "window_id": wid,
+                "ticker": "KXBTC15M-1",
+                "side": "Yes",
+            }
+        ]
+    }
+    assert fifteen_working(state, _et(10, 3))
+    assert fifteen_working(state, _et(10, 8))
+
+
 def test_size_room_and_half_sigma():
     assert fifteen_stake(100.0, 100.0) == pytest.approx(4.0)
     assert fifteen_stake(100.0, 2.0) == pytest.approx(2.0)

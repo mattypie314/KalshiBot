@@ -38,6 +38,8 @@ DEFAULT_EARLY_CASH_OUT_MINUTES = 10.0
 DEFAULT_TAKE_PROFIT_CENTS = 0.02
 CASH_OUT_LABEL = "cash_out_99"
 EARLY_CASH_OUT_LABEL = "cash_out_95_time"
+MANUAL_FLATTEN_LABEL = "manual_flatten"
+MANUAL_CASH_OUT_LABEL = MANUAL_FLATTEN_LABEL
 TAKE_PROFIT_LABEL = "take_profit"
 
 
@@ -353,6 +355,177 @@ def _hint_fill(row: dict[str, Any], side: str) -> float | None:
     return parse_fill_price(row, side)
 
 
+def fill_ticker(row: dict[str, Any]) -> str:
+    return str(row.get("ticker") or row.get("market_ticker") or "")
+
+
+def fill_order_id(row: dict[str, Any]) -> str:
+    return str(row.get("order_id") or "")
+
+
+def known_bot_order_ids(row: dict[str, Any]) -> set[str]:
+    """Entry + bot-placed exit ids on a journal row. App fills will not match these."""
+    found: set[str] = set()
+    for key in ("order_id", "client_order_id", "exit_order_id", "exit_client_order_id"):
+        value = str(row.get(key) or "").strip()
+        if value:
+            found.add(value)
+    return found
+
+
+def fill_outcome_side(row: dict[str, Any]) -> str:
+    """Yes/No this fill is positioned for (Kalshi outcome_side, or action+side)."""
+    outcome = _side(row.get("outcome_side"))
+    if outcome:
+        return outcome
+    book = str(row.get("book_side") or "").strip().lower()
+    if book == "bid":
+        return "Yes"
+    if book == "ask":
+        return "No"
+    action = str(row.get("action") or "").strip().lower()
+    side = _side(row.get("side"))
+    if action == "sell" and side == "Yes":
+        return "No"
+    if action == "sell" and side == "No":
+        return "Yes"
+    if action == "buy" and side:
+        return side
+    return side
+
+
+def fill_is_close(row: dict[str, Any], held_side: str) -> bool:
+    """True when this fill reduces/closes the side we were long."""
+    held = _side(held_side)
+    if not held:
+        return False
+    action = str(row.get("action") or row.get("order_action") or "").strip().lower()
+    fill_side = _side(row.get("side"))
+    if action in {"sell", "close", "flatten", "exit"}:
+        return (not fill_side) or fill_side == held
+    if action in {"buy", "open"}:
+        return bool(fill_side) and fill_side != held
+    outcome = fill_outcome_side(row)
+    return bool(outcome) and outcome != held
+
+
+def matching_close_fills(
+    fills: Iterable[dict[str, Any]] | None,
+    *,
+    ticker: str,
+    side: str,
+    exclude_ids: Iterable[str] = (),
+) -> list[dict[str, Any]]:
+    want = str(ticker or "").upper()
+    skip = {str(item).strip() for item in exclude_ids if str(item).strip()}
+    found: list[dict[str, Any]] = []
+    for row in fills or []:
+        if not isinstance(row, dict):
+            continue
+        if fill_ticker(row).upper() != want:
+            continue
+        order_id = fill_order_id(row)
+        if order_id and order_id in skip:
+            continue
+        if fill_is_close(row, side):
+            found.append(row)
+    return found
+
+
+def ticker_has_exit(trades: Iterable[dict[str, Any]] | None, ticker: str) -> bool:
+    want = str(ticker or "")
+    if not want:
+        return False
+    for row in trades or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("ticker") or "") != want:
+            continue
+        if row.get("exit_reason"):
+            return True
+    return False
+
+
+def load_position_qty_by_ticker(
+    client: Any,
+    series: Iterable[str],
+) -> tuple[dict[str, float] | None, bool]:
+    """Map ticker → signed contracts. available=False if the positions API did not answer."""
+    getter = getattr(client, "get_positions", None)
+    if getter is None:
+        return None, False
+    try:
+        rows = getter(count_filter="position") or []
+    except Exception as exc:  # noqa: BLE001
+        logger.info("positions unavailable: %s", exc)
+        return None, False
+    if not isinstance(rows, list):
+        return None, False
+    found: dict[str, float] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        ticker = str(row.get("ticker") or row.get("market_ticker") or "")
+        if not ticker or not ticker_in_bot_series(ticker, series):
+            continue
+        found[ticker] = parse_signed_contracts(row)
+    return found, True
+
+
+def detect_manual_flattens(
+    trades: Iterable[dict[str, Any]] | None,
+    *,
+    fills: Iterable[dict[str, Any]] | None,
+    fills_available: bool,
+    positions: dict[str, float] | None,
+    positions_available: bool,
+    series: Iterable[str],
+) -> list[dict[str, Any]]:
+    """Filled bot entries that are now flat via an in-app sell, not our exit order id."""
+    if not fills_available or not positions_available or positions is None:
+        return []
+    found: list[dict[str, Any]] = []
+    for row in trades or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("action") or "") == "exit":
+            continue
+        if row.get("result") in TERMINAL_RESULTS or row.get("exit_reason"):
+            continue
+        if str(row.get("fill_status") or "").lower() not in FILLED_STATUSES:
+            continue
+        ticker = str(row.get("ticker") or "")
+        if not ticker or not ticker_in_bot_series(ticker, series):
+            continue
+        side = _side(row.get("side"))
+        if not side:
+            continue
+        qty = float(positions.get(ticker) or 0.0)
+        if abs(qty) >= 1 - 1e-9:
+            continue
+        closes = matching_close_fills(
+            fills,
+            ticker=ticker,
+            side=side,
+            exclude_ids=known_bot_order_ids(row),
+        )
+        if not closes:
+            continue
+        close = closes[0]
+        price = parse_fill_price(close, side) or 0.0
+        found.append(
+            {
+                "trade": row,
+                "ticker": ticker,
+                "side": side,
+                "exit_price": price,
+                "order_id": fill_order_id(close),
+                "fill": close,
+            }
+        )
+    return found
+
+
 def holdings_from_positions(
     rows: Iterable[dict[str, Any]],
     series: Iterable[str],
@@ -415,7 +588,7 @@ def holdings_from_hints(
         )
 
     last = str(state.get("last_ticker") or "")
-    if last:
+    if last and not ticker_has_exit(trades, last):
         _add(
             last,
             str(state.get("last_side") or ""),
@@ -681,9 +854,9 @@ def manage_open_positions(
     early_cash_out_minutes: float | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Check open inventory and flatten when cash_out_99 / early 95¢ / +2¢ TP fires.
+    """Reconcile in-app flattens, then flatten when 99¢ / early 95¢ / +2¢ TP fires.
 
-    Live oneshots POST the exit. Dry / scan only print the signal + payload.
+    Live oneshots POST bot exits. Manual in-app sells are journaled, not re-placed.
     """
     threshold = (
         cash_out_bid
@@ -712,7 +885,66 @@ def manage_open_positions(
         "errors": [],
         "dry_run": [],
         "journal": [],
+        "manual": [],
     }
+    positions, positions_ok = load_position_qty_by_ticker(client, series)
+    for hit in detect_manual_flattens(
+        trades,
+        fills=fills,
+        fills_available=fills_available,
+        positions=positions,
+        positions_available=positions_ok,
+        series=series,
+    ):
+        apply_exit_fields(
+            hit["trade"],
+            reason=MANUAL_FLATTEN_LABEL,
+            exit_price=hit["exit_price"],
+            order_id=hit["order_id"],
+        )
+        mark_tickets_flat(state, hit["ticker"], MANUAL_FLATTEN_LABEL)
+        if str(state.get("last_ticker") or "") == hit["ticker"]:
+            state["last_exit_reason"] = MANUAL_FLATTEN_LABEL
+        event = apply_exit_fields(
+            {
+                "ts": format_et(),
+                "ticker": hit["ticker"],
+                "side": hit["side"],
+                "contracts": hit["trade"].get("contracts") or hit["trade"].get("filled_contracts"),
+                "fill_price": hit["trade"].get("kalshi_price") or hit["trade"].get("fill_price"),
+                "action": "exit",
+                "mode": "live" if live else "dry_run",
+                "order_id": hit["order_id"],
+                "source": "manual",
+            },
+            reason=MANUAL_FLATTEN_LABEL,
+            exit_price=hit["exit_price"],
+            order_id=hit["order_id"],
+        )
+        result["manual"].append(
+            {
+                "ticker": hit["ticker"],
+                "side": hit["side"],
+                "reason": MANUAL_FLATTEN_LABEL,
+                "exit_price": hit["exit_price"],
+                "order_id": hit["order_id"],
+            }
+        )
+        result["signals"].append(
+            {
+                "ticker": hit["ticker"],
+                "side": hit["side"],
+                "reason": MANUAL_FLATTEN_LABEL,
+                "exit_price": hit["exit_price"],
+                "source": "manual",
+            }
+        )
+        result["journal"].append(event)
+        print(
+            f"{MANUAL_FLATTEN_LABEL.upper()} {hit['ticker']} {hit['side']} "
+            f"@ {float(hit['exit_price'] or 0):.2f} (in-app flatten, not a bot exit)",
+            flush=True,
+        )
     holdings = collect_holdings(
         client,
         state=state,
