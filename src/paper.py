@@ -37,6 +37,8 @@ from src.spot import is_settlement_index
 logger = logging.getLogger(__name__)
 
 LIVE_TRADE_LOG_NAME = "trade_log.jsonl"
+FIFTEEN_TRADE_LOG_NAME = "fifteen_trade_log.jsonl"
+LIVE_TRADE_LOG_NAMES = frozenset({LIVE_TRADE_LOG_NAME, FIFTEEN_TRADE_LOG_NAME})
 DEFAULT_PAPER_LOG_NAME = "paper_log.jsonl"
 
 FILL_ASSUMED_MAKER = "assumed-maker-fill"
@@ -59,8 +61,8 @@ SIT_UNSCORED_RESULTS = frozenset({RESULT_SIT, RESULT_UNSCORED})
 
 def assert_paper_path(path: Path) -> Path:
     """Refuse to mix paper rows into the live fill journal."""
-    if path.name == LIVE_TRADE_LOG_NAME:
-        raise ValueError("paper journal must not write to artifacts/trade_log.jsonl")
+    if path.name in LIVE_TRADE_LOG_NAMES:
+        raise ValueError(f"paper journal must not write to artifacts/{path.name}")
     return path
 
 
