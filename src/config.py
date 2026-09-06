@@ -126,6 +126,10 @@ class HourlySettings(BaseSettings):
     # Beats / runs ahead of TAKE_PROFIT_CENTS. Live oneshots place the exit.
     cash_out_bid: float = 0.99
     take_profit_cents: float = 0.02
+    # Early flatten: held-side bid ≥ this AND minutes to settlement ≤ window.
+    # Runs after 99¢ cash-out, ahead of +2¢ TP. Prefer locking the win.
+    early_cash_out_bid: float = 0.95
+    early_cash_out_minutes: float = 10.0
 
     @field_validator("paper_fill_model", mode="before")
     @classmethod

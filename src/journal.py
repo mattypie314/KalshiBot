@@ -17,6 +17,7 @@ TURBO_LABEL = "Turbo / FORCE_NEAR_RULE"
 
 
 CASH_OUT_LABEL = "cash_out_99"
+EARLY_CASH_OUT_LABEL = "cash_out_95_time"
 
 
 def apply_exit_fields(
@@ -26,7 +27,7 @@ def apply_exit_fields(
     exit_price: float,
     order_id: str = "",
 ) -> dict[str, Any]:
-    """Label a flatten (cash_out_99 / take_profit) on a journal row."""
+    """Label a flatten (cash_out_99 / cash_out_95_time / take_profit) on a journal row."""
     row["exit_reason"] = reason
     row["exit_label"] = reason
     row["exit_price"] = round(float(exit_price), 4)

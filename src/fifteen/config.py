@@ -87,6 +87,14 @@ class FifteenSettings(BaseSettings):
         default=0.02,
         validation_alias=AliasChoices("TAKE_PROFIT_CENTS", "FIFTEEN_TAKE_PROFIT_CENTS"),
     )
+    early_cash_out_bid: float = Field(
+        default=0.95,
+        validation_alias=AliasChoices("EARLY_CASH_OUT_BID", "FIFTEEN_EARLY_CASH_OUT_BID"),
+    )
+    early_cash_out_minutes: float = Field(
+        default=10.0,
+        validation_alias=AliasChoices("EARLY_CASH_OUT_MINUTES", "FIFTEEN_EARLY_CASH_OUT_MINUTES"),
+    )
 
     @field_validator("paper_fill_model", mode="before")
     @classmethod
