@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -33,6 +34,7 @@ from src.fifteen.edge import (
 )
 from src.fifteen.main import collect_ideas, live_is_armed, main, normalize_argv
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
+from src.journal import load_trades, new_trade_row, write_trades
 from src.fifteen.regime import CHOP_VETO_PHRASE
 from src.spot import SpotSnapshot
 from src.filters import Idea
@@ -381,6 +383,8 @@ def test_cli_normalize_and_live_gates():
     assert normalize_argv(["s"]) == ["scan"]
     assert normalize_argv(["o"]) == ["once"]
     assert normalize_argv(["l"]) == ["live"]
+    assert normalize_argv(["livescore"]) == ["livescore"]
+    assert normalize_argv(["score"]) == ["score"]
     assert normalize_argv([]) == ["scan"]
 
     halted = FifteenSettings(halted=True, live_trading=True, confirm_live="YES")
@@ -497,7 +501,7 @@ def test_collect_ideas_trend_still_passes(monkeypatch):
     assert not any(CHOP_VETO_PHRASE in note for note in notes)
 
 
-def test_collect_ideas_live_path_skips_chop_veto(monkeypatch):
+def test_collect_ideas_chop_override_false_still_passes(monkeypatch):
     from tests.test_regime import choppy_ohlc
 
     now = _et(10, 3)
@@ -517,11 +521,30 @@ def test_collect_ideas_live_path_skips_chop_veto(monkeypatch):
     assert not any(CHOP_VETO_PHRASE in note for note in notes)
 
 
-def test_run_scan_live_does_not_pass_chop_veto(monkeypatch, tmp_path):
-    seen: dict = {}
+def test_collect_ideas_default_uses_settings_chop_veto(monkeypatch):
+    from tests.test_regime import choppy_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, choppy_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+    )
+    assert ideas == []
+    assert any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_run_scan_live_and_paper_share_chop_veto(monkeypatch, tmp_path):
+    seen: list[bool | None] = []
 
     def fake_collect(*args, **kwargs):
-        seen["apply_chop_veto"] = kwargs.get("apply_chop_veto")
+        seen.append(kwargs.get("apply_chop_veto"))
         return [], ["sit"], None
 
     class Client:
@@ -554,6 +577,193 @@ def test_run_scan_live_does_not_pass_chop_veto(monkeypatch, tmp_path):
         chop_veto=True,
     )
     assert run_scan(settings, asset=None, place=True, force_live=True, armed=False) == 0
-    assert seen["apply_chop_veto"] is False
     assert run_scan(settings, asset=None, place=False, force_live=False) == 0
-    assert seen["apply_chop_veto"] is True
+    assert seen == [True, True]
+
+
+def _fifteen_settings(tmp_path: Path, **kwargs) -> FifteenSettings:
+    defaults = dict(
+        _env_file=None,
+        artifacts_dir=str(tmp_path),
+        state_path=str(tmp_path / "fifteen_state.json"),
+        pot_path=str(tmp_path / "fifteen_pot.json"),
+        trade_log_path=str(tmp_path / "fifteen_trade_log.jsonl"),
+        paper_log_path=str(tmp_path / "fifteen_paper_log.jsonl"),
+        scan_log_path=str(tmp_path / "fifteen_scan_log.jsonl"),
+        halted=False,
+        chop_veto=True,
+    )
+    defaults.update(kwargs)
+    return FifteenSettings(**defaults)
+
+
+def _quiet_scan_client(*, fills=None, market=None, can_trade=True):
+    class Client:
+        def get_balance(self):
+            return {"total_value": 5}
+
+        def get_fills(self, limit=50):
+            return list(fills or [])
+
+        def get_market(self, ticker):
+            return dict(market or {"status": "active"})
+
+    Client.can_trade = can_trade
+    return Client()
+
+
+def test_run_scan_live_journals_place_not_paper(monkeypatch, tmp_path):
+    idea = _idea()
+
+    def fake_collect(*args, **kwargs):
+        return [idea], [], None
+
+    def fake_execute(*args, **kwargs):
+        return {
+            "placed": [
+                {
+                    "order_id": "live-15",
+                    "ticker": idea.market.ticker,
+                    "fill_count": "0.00",
+                    "remaining_count": "2.00",
+                    "client_order_id": "cid-15",
+                }
+            ],
+            "orders": [{"ticker": idea.market.ticker, "client_order_id": "cid-15"}],
+            "errors": [],
+        }
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main.execute_ideas", fake_execute)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client())
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=True, force_live=True, armed=True) == 0
+    rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["ticker"] == idea.market.ticker
+    assert row["side"] == idea.side
+    assert row["order_id"] == "live-15"
+    assert row["client_order_id"] == "cid-15"
+    assert row["fill_status"] == "resting"
+    assert row["result"] == "pending"
+    assert row["limit_price"] == idea.limit_price
+    assert row["risk_dollars"] == idea.risk_dollars
+    assert row.get("kind") != "paper"
+    assert load_trades(tmp_path / "fifteen_paper_log.jsonl") == []
+    state = json.loads((tmp_path / "fifteen_state.json").read_text())
+    assert state["tickets"][0]["ticker"] == idea.market.ticker
+    assert state["tickets"][0]["order_id"] == "live-15"
+
+
+def test_run_scan_resolves_live_journal_fill_and_settlement(monkeypatch, tmp_path):
+    ticker = "KXBTC15M-26SEP051015-T64000"
+    write_trades(
+        tmp_path / "fifteen_trade_log.jsonl",
+        [
+            new_trade_row(
+                ticker=ticker,
+                asset="BTC",
+                side="Yes",
+                strike=64000.0,
+                spot=65000.0,
+                minutes_left=12.0,
+                fair=0.62,
+                kalshi_price=0.54,
+                limit_price=0.54,
+                contracts=2,
+                risk_dollars=1.08,
+                hourly_vol=0.004,
+                source="cfbenchmarks",
+                order_id="live-15",
+                fill_status="resting",
+            )
+        ],
+    )
+    save_state = tmp_path / "fifteen_state.json"
+    save_state.write_text(
+        json.dumps(
+            {
+                "tickets": [
+                    {
+                        "status": "open",
+                        "loop": "fifteen",
+                        "ticker": ticker,
+                        "side": "Yes",
+                        "contracts": 2,
+                        "order_id": "live-15",
+                    }
+                ],
+                "rests": [],
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        "src.fifteen.main.collect_ideas", lambda *a, **k: ([], ["sit"], None)
+    )
+    monkeypatch.setattr(
+        "src.fifteen.main._client",
+        lambda settings: _quiet_scan_client(
+            fills=[{"ticker": ticker}],
+            market={"result": "yes", "status": "determined"},
+        ),
+    )
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=True, force_live=False) == 0
+    rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
+    assert len(rows) == 1
+    assert rows[0]["fill_status"] == "filled"
+    assert rows[0]["result"] == "win"
+    assert rows[0]["settlement_result"] == "yes"
+    assert rows[0]["pnl"] == pytest.approx(0.92)
+    assert load_trades(tmp_path / "fifteen_paper_log.jsonl") == []
+    pot = load_pot(tmp_path / "fifteen_pot.json")
+    assert pot.realized_pnl == pytest.approx(0.92)
+    assert pot.balance == pytest.approx(5.92)
+    state = json.loads(save_state.read_text())
+    assert state["tickets"][0]["status"] == "settled"
+    assert state["tickets"][0]["result"] == "win"
+
+
+def test_run_scan_paper_does_not_write_live_journal(monkeypatch, tmp_path):
+    idea = _idea()
+
+    class Spots:
+        prices = {"BTC": 65000.0}
+        hourly_vol = {"BTC": 0.004}
+        sources = {"BTC": "cfbenchmarks"}
+        source = "cfbenchmarks"
+
+        def settlement_ok(self, _asset):
+            return True
+
+    def fake_collect(*args, **kwargs):
+        return [idea], [], Spots()
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client(can_trade=False))
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=False, force_live=False) == 0
+    paper = load_trades(tmp_path / "fifteen_paper_log.jsonl")
+    assert len(paper) == 1
+    assert paper[0]["kind"] == "paper"
+    assert paper[0]["fill_status"] == "assumed-maker-fill"
+    assert load_trades(tmp_path / "fifteen_trade_log.jsonl") == []

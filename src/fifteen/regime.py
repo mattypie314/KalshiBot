@@ -1,4 +1,4 @@
-"""Tape regime for the 15m paper/scan path: TREND, CHOP, or UNKNOWN.
+"""Tape regime for the 15m Pass/Sit stack (live and paper): TREND, CHOP, or UNKNOWN.
 
 Chop = weak trend (low ADX) and a tight Bollinger band. Computed in Python
 from recent OHLC (or closes). No LLM. Stdlib only — pandas is not a dep.

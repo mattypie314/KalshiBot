@@ -16,7 +16,16 @@ from src.executor import CRYPTO_SHARD, FIFTEEN_SERIES, execute_ideas, is_fifteen
 from src.exits import manage_open_positions
 from src.fees import taker_fee_dollars
 from src.filters import Idea
-from src.journal import load_trades
+from src.evaluate import summarize_trades
+from src.journal import (
+    append_trade,
+    fill_status_from_order,
+    load_trades,
+    new_trade_row,
+    parse_count,
+    resolve_pending,
+    write_trades,
+)
 from src.fifteen.config import (
     EXIT_CONFIG,
     EXIT_OK,
@@ -34,6 +43,7 @@ from src.fifteen.edge import (
     in_fifteen_revenge,
     news_blackout,
     pass_fail,
+    record_fifteen_result,
 )
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
 from src.fifteen.regime import chop_veto_note, classify_regime
@@ -183,7 +193,7 @@ def collect_ideas(
     now = to_et(now)
     notes: list[str] = []
     assets = [asset.upper()] if asset else list(settings.asset_list)
-    # Paper/scan default: sit after Pass when the tape is chop. Live path leaves this off.
+    # Live and paper share this stack. FIFTEEN_CHOP_VETO=false is the only off switch.
     veto_chop = settings.chop_veto if apply_chop_veto is None else apply_chop_veto
     regimes: dict[str, Any] = {}
 
@@ -318,6 +328,196 @@ def append_scan_log(
         handle.write(json.dumps(row, default=str) + "\n")
 
 
+def _is_live_entry(row: dict[str, Any]) -> bool:
+    """True for a live 15m place row — not paper and not an exit event."""
+    if str(row.get("kind") or "") == "paper":
+        return False
+    if str(row.get("action") or "") == "exit":
+        return False
+    return True
+
+
+def _already_journaled(trades: list[dict[str, Any]], *, order_id: str, ticker: str) -> bool:
+    want_order = str(order_id or "")
+    want_ticker = str(ticker or "").upper()
+    for row in trades:
+        if not _is_live_entry(row):
+            continue
+        if want_order and str(row.get("order_id") or "") == want_order:
+            return True
+        if want_ticker and str(row.get("ticker") or "").upper() == want_ticker:
+            if str(row.get("result") or "pending") == "pending":
+                return True
+    return False
+
+
+def _mark_ticket_resolved(state: dict[str, Any], ticker: str, *, result: str, pnl: object) -> None:
+    for key in ("tickets", "rests"):
+        for row in state.get(key) or []:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("ticker") or "") != ticker:
+                continue
+            if str(row.get("status") or "") != "open":
+                continue
+            row["status"] = "unfilled" if result == "unfilled" else "settled"
+            row["result"] = result
+            row["pnl"] = pnl
+
+
+def _open_journal_risk(trades: list[dict[str, Any]]) -> float:
+    total = 0.0
+    for row in trades:
+        if not _is_live_entry(row):
+            continue
+        if str(row.get("result") or "pending") in {"win", "loss", "unfilled"}:
+            continue
+        try:
+            total += float(row.get("risk_dollars") or 0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def _safe_fills(client: KalshiClient) -> tuple[list[dict[str, Any]], bool]:
+    if not client.can_trade:
+        return [], False
+    try:
+        return list(client.get_fills(limit=50) or []), True
+    except Exception as exc:  # noqa: BLE001
+        logger.info("15m fills unavailable: %s", exc)
+        return [], False
+
+
+def refresh_live_journal(
+    settings: FifteenSettings,
+    *,
+    client: KalshiClient,
+    state: dict[str, Any],
+    pot: Any,
+) -> list[dict[str, Any]]:
+    """Resolve live 15m journal fills/settlements. Never writes paper assumed fills."""
+    from src.main import market_result_is_loss
+
+    journal_path = Path(settings.trade_log_path)
+    trades = load_trades(journal_path)
+    prior = {id(row): str(row.get("result") or "pending") for row in trades}
+    fills, fills_available = _safe_fills(client)
+    getter = getattr(client, "get_market", None)
+    if getter is not None:
+        trades = resolve_pending(
+            trades,
+            getter,
+            market_result_is_loss,
+            fills=fills,
+            fills_available=fills_available,
+        )
+        write_trades(journal_path, trades)
+    for row in trades:
+        if not _is_live_entry(row):
+            continue
+        result = str(row.get("result") or "pending")
+        if result not in {"win", "loss", "unfilled"}:
+            continue
+        if prior.get(id(row)) in {"win", "loss", "unfilled"}:
+            continue
+        ticker = str(row.get("ticker") or "")
+        pnl = row.get("pnl")
+        _mark_ticket_resolved(state, ticker, result=result, pnl=pnl)
+        if result in {"win", "loss"}:
+            try:
+                dollars = float(pnl or 0)
+            except (TypeError, ValueError):
+                dollars = 0.0
+            msg = credit_pot(pot, dollars, note=f"{ticker} {result}")
+            stop = record_fifteen_result(state, dollars)
+            print(
+                f"LIVE settled {ticker} {result} pnl={dollars:+.2f} "
+                f"(pot ${pot.balance:.2f})"
+            )
+            if msg:
+                print(msg)
+            if stop:
+                print(stop)
+        else:
+            print(f"LIVE unfilled {ticker} (not scored)")
+    set_open_risk(pot, _open_journal_risk(trades))
+    return trades
+
+
+def journal_live_places(
+    settings: FifteenSettings,
+    *,
+    ideas: list[Idea],
+    result: dict[str, Any],
+    spots: Any,
+    state: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Append one live journal row per successful 15m place. Paper stays separate."""
+    journal_path = Path(settings.trade_log_path)
+    trades = load_trades(journal_path)
+    payloads = {
+        str(row.get("ticker") or ""): row for row in (result.get("orders") or []) if isinstance(row, dict)
+    }
+    prices = getattr(spots, "prices", {}) or {}
+    vols = getattr(spots, "hourly_vol", {}) or {}
+    source = getattr(spots, "source", "") or ""
+    sources = getattr(spots, "sources", {}) or {}
+    written: list[dict[str, Any]] = []
+    for order in result.get("placed") or []:
+        if not isinstance(order, dict):
+            continue
+        ticker = str(order.get("ticker") or order.get("market_ticker") or "")
+        idea = next((item for item in ideas if item.market.ticker == ticker), None)
+        if idea is None and len(ideas) == 1 and len(result.get("placed") or []) == 1:
+            idea = ideas[0]
+            ticker = idea.market.ticker
+        if idea is None:
+            continue
+        order_id = str(order.get("order_id") or "")
+        payload = payloads.get(ticker) or {}
+        client_order_id = str(
+            order.get("client_order_id") or payload.get("client_order_id") or ""
+        )
+        if _already_journaled(trades, order_id=order_id, ticker=ticker):
+            continue
+        row = new_trade_row(
+            ticker=idea.market.ticker,
+            asset=idea.market.asset,
+            side=idea.side,
+            strike=idea.market.threshold,
+            spot=idea.spot or prices.get(idea.market.asset) or 0.0,
+            minutes_left=idea.minutes_left,
+            fair=idea.fair,
+            kalshi_price=idea.entry_price,
+            limit_price=idea.limit_price,
+            contracts=idea.contracts,
+            risk_dollars=idea.risk_dollars,
+            hourly_vol=vols.get(idea.market.asset) or 0.0,
+            source=sources.get(idea.market.asset) or source,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            fill_status=fill_status_from_order(order),
+            filled_contracts=parse_count(order.get("fill_count")),
+        )
+        append_trade(journal_path, row)
+        trades.append(row)
+        written.append(row)
+        for ticket in state.get("tickets") or []:
+            if not isinstance(ticket, dict):
+                continue
+            if str(ticket.get("ticker") or "") != ticker:
+                continue
+            if str(ticket.get("status") or "") != "open":
+                continue
+            if not ticket.get("order_id"):
+                ticket["order_id"] = order_id
+                ticket["client_order_id"] = client_order_id
+                ticket["fill_status"] = row["fill_status"]
+                ticket["risk"] = idea.risk_dollars
+    return written
+
+
 def run_scan(
     settings: FifteenSettings,
     *,
@@ -352,17 +552,10 @@ def run_scan(
     except Exception as exc:  # noqa: BLE001
         logger.info("paper settle skipped: %s", exc)
 
+    journal_path = Path(settings.trade_log_path)
+    trades = refresh_live_journal(settings, client=client, state=state, pot=pot)
+    fills, fills_available = _safe_fills(client)
     if place or force_live:
-        journal_path = Path(settings.trade_log_path)
-        trades = load_trades(journal_path)
-        fills: list[dict[str, Any]] = []
-        fills_available = False
-        if client.can_trade:
-            try:
-                fills = list(client.get_fills(limit=50) or [])
-                fills_available = True
-            except Exception as exc:  # noqa: BLE001
-                logger.info("15m fills unavailable: %s", exc)
         exit_live = bool(force_live and armed and not settings.halted and client.can_trade)
         manage_open_positions(
             client,
@@ -377,6 +570,7 @@ def run_scan(
             exchange_index=CRYPTO_SHARD,
         )
         save_state(state_path, state)
+        save_pot(pot, settings.pot_path)
 
     if force_live and pot.stopped:
         print(f"15m pot stopped at ${pot.balance:.2f}. Refusing new live entries.")
@@ -392,7 +586,7 @@ def run_scan(
             pot_room=pot.room,
             bankroll=bankroll,
             asset=asset,
-            apply_chop_veto=bool(settings.chop_veto) and not force_live,
+            apply_chop_veto=bool(settings.chop_veto),
         )
     except RateLimitedError as exc:
         print(f"rate limited: {exc}", file=sys.stderr)
@@ -466,9 +660,15 @@ def run_scan(
         exchange_index=CRYPTO_SHARD,
     )
     if go_live and result.get("placed"):
-        set_open_risk(pot, sum(i.risk_dollars for i in ideas))
         wid = fifteen_window_id()
+        placed_tickers = {
+            str(order.get("ticker") or order.get("market_ticker") or "")
+            for order in result["placed"]
+            if isinstance(order, dict)
+        }
         for idea in ideas:
+            if placed_tickers and idea.market.ticker not in placed_tickers:
+                continue
             state.setdefault("tickets", []).append(
                 {
                     "status": "open",
@@ -478,10 +678,20 @@ def run_scan(
                     "side": idea.side,
                     "contracts": idea.contracts,
                     "limit": idea.limit_price,
+                    "risk": idea.risk_dollars,
                 }
             )
+        journaled = journal_live_places(
+            settings, ideas=ideas, result=result, spots=spots, state=state
+        )
+        set_open_risk(pot, _open_journal_risk(load_trades(journal_path)))
         print(f"LIVE: placed {len(result['placed'])} 15m maker limit(s).")
-        _ = credit_pot
+        for row in journaled:
+            print(
+                f"LIVE journal {row.get('ticker')} {row.get('side')} "
+                f"@{row.get('limit_price')} order_id={row.get('order_id') or '?'} "
+                f"fill_status={row.get('fill_status')}"
+            )
     elif place or force_live:
         print("DRY-RUN: order payloads written (not live).")
 
@@ -513,10 +723,22 @@ def run_eval(settings: FifteenSettings) -> int:
         try_settle_paper(settings)
     except Exception as exc:  # noqa: BLE001
         logger.info("paper settle: %s", exc)
-    path = Path(settings.paper_log_path)
-    print(f"=== 15m eval (paper={path}) ===")
-    if path.is_file():
-        rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    try:
+        client = _client(settings)
+        state = load_state(Path(settings.state_path))
+        pot = load_pot(settings.pot_path)
+        refresh_live_journal(settings, client=client, state=state, pot=pot)
+        save_state(Path(settings.state_path), state)
+        save_pot(pot, settings.pot_path)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("live journal settle skipped: %s", exc)
+        pot = load_pot(settings.pot_path)
+
+    paper_path = Path(settings.paper_log_path)
+    live_path = Path(settings.trade_log_path)
+    print(f"=== 15m eval (paper={paper_path}) ===")
+    if paper_path.is_file():
+        rows = [json.loads(line) for line in paper_path.read_text().splitlines() if line.strip()]
         print(f"paper tickets: {len(rows)}")
         for row in rows[-10:]:
             print(
@@ -525,7 +747,30 @@ def run_eval(settings: FifteenSettings) -> int:
             )
     else:
         print("no paper log yet")
-    pot = load_pot(settings.pot_path)
+
+    live_rows = [
+        row
+        for row in load_trades(live_path)
+        if _is_live_entry(row)
+    ]
+    live = summarize_trades(live_rows)
+    print(f"=== 15m livescore ({live_path}) ===")
+    print(
+        f"live rows: {live['n_rows']} | filled+settled {live['n_filled_settled']} "
+        f"({live['n_wins']} win / {live['n_losses']} loss) | "
+        f"unfilled {live['n_unfilled']} | pending {live['n_pending']}"
+    )
+    print(f"live filled PnL: ${live['pnl']:.2f}")
+    if live_rows:
+        for row in live_rows[-10:]:
+            print(
+                f"  {row.get('ticker')} {row.get('side')} "
+                f"@{row.get('limit_price')} fill={row.get('fill_status')} "
+                f"result={row.get('result')} pnl={row.get('pnl')} "
+                f"order_id={row.get('order_id') or ''}"
+            )
+    else:
+        print("no live 15m journal yet")
     print(f"pot ${pot.balance:.2f} realized ${pot.realized_pnl:.2f} stopped={pot.stopped}")
     return EXIT_OK
 
@@ -579,6 +824,8 @@ def normalize_argv(argv: list[str] | None) -> list[str]:
         "6": "eval",
         "p": "paper",
         "7": "paper",
+        "livescore": "livescore",
+        "score": "score",
     }
     if not raw:
         return ["scan"]
@@ -607,8 +854,10 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--confirm", default="", metavar="LIVE")
     add_host_flags(live)
 
-    sub.add_parser("eval", help="Paper log + pot summary")
+    sub.add_parser("eval", help="Paper log + live journal + pot summary")
     sub.add_parser("paper", help="Same as eval")
+    sub.add_parser("score", help="Same as eval (paper + livescore)")
+    sub.add_parser("livescore", help="Same as eval; live journal is fifteen_trade_log.jsonl")
 
     args = parser.parse_args(normalize_argv(argv))
     configure_logging()
@@ -633,7 +882,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Live aborted (not confirmed).")
             return EXIT_OK
         return run_scan(settings, asset=None, place=True, force_live=True, armed=True)
-    if args.command in {"eval", "paper"}:
+    if args.command in {"eval", "paper", "score", "livescore"}:
         return run_eval(settings)
     return EXIT_CONFIG
 

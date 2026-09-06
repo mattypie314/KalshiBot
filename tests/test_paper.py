@@ -133,6 +133,12 @@ def test_assert_paper_path_refuses_live_journal(tmp_path):
         assert "trade_log.jsonl" in str(exc)
     else:
         raise AssertionError("expected refuse")
+    try:
+        assert_paper_path(tmp_path / "fifteen_trade_log.jsonl")
+    except ValueError as exc:
+        assert "fifteen_trade_log.jsonl" in str(exc)
+    else:
+        raise AssertionError("expected refuse")
 
 
 def test_append_paper_ticket_fields(tmp_path):
