@@ -1,4 +1,7 @@
-"""Parse Kalshi's CF Benchmarks passthrough (BRTI / ERTI)."""
+"""Parse Kalshi's CF Benchmarks passthrough (BRTI / ETHUSD_RTI).
+
+Human docs may still say ERTI for ETH. Kalshi's working API id is ETHUSD_RTI.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +10,8 @@ from typing import Any
 
 from src.clock import parse_ts, to_et
 
-INDEX_BY_ASSET = {"BTC": "BRTI", "ETH": "ERTI"}
-# 15m ETH prints on ETHUSD_RTI. Hourly still uses ERTI. Never mix them.
+INDEX_BY_ASSET = {"BTC": "BRTI", "ETH": "ETHUSD_RTI"}
+# ETH API id is ETHUSD_RTI (Kalshi 400s on ERTI). Human docs may still say ERTI.
 FIFTEEN_INDEX_BY_ASSET = {"BTC": "BRTI", "ETH": "ETHUSD_RTI"}
 SETTLEMENT_WINDOW_SECONDS = 60
 
@@ -65,7 +68,7 @@ def fifteen_index_id_for(asset: str) -> str | None:
 
 
 def official_index_label(asset: str, source: str) -> str:
-    """BRTI / ERTI when the print is the settlement index; otherwise PROXY."""
+    """BRTI / ETHUSD_RTI when the print is the settlement index; otherwise PROXY."""
     if str(source or "").strip().lower() == "cfbenchmarks":
         return index_id_for(asset) or "PROXY"
     return "PROXY"
@@ -140,7 +143,7 @@ def average_settlement_window(
 ) -> float | None:
     """Simple average of official index ticks in the minute before close.
 
-    This is the Kalshi print: 60 one-second BRTI/ERTI samples, not a Coinbase last tick.
+    This is the Kalshi print: 60 one-second BRTI/ETHUSD_RTI samples, not a Coinbase last tick.
     """
     start, end = settlement_window(close_time)
     values = [value for when, value in ticks if start <= to_et(when) < end and value > 0]

@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
 from src.cfindex import (
+    FIFTEEN_INDEX_BY_ASSET,
+    INDEX_BY_ASSET,
     fifteen_index_id_for,
     average_settlement_window,
     history_query_timestamp,
@@ -21,8 +23,10 @@ def test_parse_cf_kalshi_envelope():
     assert parse_cf_index_value(blob) == 77343.72
     assert parse_cf_index_value({"payload": {"value": 2395.1}}) == 2395.1
     assert parse_cf_index_value({"error": "nope"}) is None
+    assert INDEX_BY_ASSET == {"BTC": "BRTI", "ETH": "ETHUSD_RTI"}
+    assert FIFTEEN_INDEX_BY_ASSET == {"BTC": "BRTI", "ETH": "ETHUSD_RTI"}
     assert index_id_for("BTC") == "BRTI"
-    assert index_id_for("ETH") == "ERTI"
+    assert index_id_for("ETH") == "ETHUSD_RTI"
     assert fifteen_index_id_for("ETH") == "ETHUSD_RTI"
 
 

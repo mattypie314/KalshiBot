@@ -285,7 +285,7 @@ def fetch_official_print(
     asset: str,
     close_time: datetime | str,
 ) -> float | None:
-    """Official 60s BRTI/ERTI (hourly) or ETHUSD_RTI (15m) average. Never Coinbase last tick."""
+    """Official 60s BRTI / ETHUSD_RTI average. Never Coinbase last tick."""
     ids: list[str] = []
     for candidate in (index_id_for(asset), fifteen_index_id_for(asset)):
         if candidate and candidate not in ids:
