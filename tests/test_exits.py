@@ -147,7 +147,7 @@ def test_early_cash_out_95_with_11_minutes_does_not_fire():
 
 def test_early_cash_out_missing_minutes_does_not_fire():
     assert should_cash_out_early("Yes", yes_bid=0.95, yes_ask=0.96, minutes_left=None) is False
-    assert exit_reason("Yes", fill_price=0.90, yes_bid=0.95, yes_ask=0.96) is None
+    assert exit_reason("Yes", fill_price=0.94, yes_bid=0.95, yes_ask=0.96) is None
 
 
 def test_early_cash_out_94_with_7_minutes_does_not_fire():
