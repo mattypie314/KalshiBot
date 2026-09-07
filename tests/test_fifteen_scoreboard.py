@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from src.fifteen.config import FifteenSettings
 from src.fifteen.main import main, normalize_argv
+from src.fifteen.pot import FifteenPot, save_pot
 from src.fifteen.regime import CHOP_VETO_PHRASE
 from src.fifteen.scoreboard import (
     classify_sit_note,
@@ -20,7 +21,7 @@ from src.fifteen.scoreboard import (
     run_paper_score,
     sit_events_from_scans,
 )
-from src.journal import new_backfill_row, new_trade_row, write_trades
+from src.journal import new_backfill_row, new_trade_row, play_pot_equity, write_trades
 from src.paper import new_paper_row
 
 ET = ZoneInfo("America/New_York")
@@ -244,7 +245,7 @@ def test_play_events_skip_backfills():
     assert [event.kind for event in merged] == ["PLAY"]
 
 
-def test_run_paper_and_live_score_cli(monkeypatch, tmp_path, capsys):
+def test_run_paper_and_live_score_cli(tmp_path, capsys):
     settings = _settings(tmp_path, halted=False, live_trading=True, confirm_live="YES")
     write_trades(tmp_path / "fifteen_paper_log.jsonl", [_live_win(kind="paper")])
     write_trades(tmp_path / "fifteen_trade_log.jsonl", [_live_win(), _backfill_loss()])
@@ -252,8 +253,6 @@ def test_run_paper_and_live_score_cli(monkeypatch, tmp_path, capsys):
         '{"ts":"2026-09-07 10:01 AM EDT","window_id":"2026-09-07T10:00:00-04:00",'
         f'"notes":["KXETH15M-CHOP: {CHOP_VETO_PHRASE}"]}}\n'
     )
-    monkeypatch.setattr("src.fifteen.scoreboard.try_settle_paper", lambda *a, **k: [])
-    monkeypatch.setattr("src.fifteen.scoreboard._maybe_refresh_live", lambda settings: None)
     assert run_paper_score(settings, color=False) == 0
     paper_out = capsys.readouterr().out
     assert "KB15 PAPER SCOREBOARD" in paper_out
@@ -268,8 +267,6 @@ def test_run_paper_and_live_score_cli(monkeypatch, tmp_path, capsys):
 def test_cli_aliases_dispatch_to_boards(monkeypatch, tmp_path, capsys):
     settings = _settings(tmp_path, halted=True, live_trading=False, confirm_live="NO")
     monkeypatch.setattr("src.fifteen.main.load_fifteen_settings", lambda: settings)
-    monkeypatch.setattr("src.fifteen.scoreboard.try_settle_paper", lambda *a, **k: [])
-    monkeypatch.setattr("src.fifteen.scoreboard._maybe_refresh_live", lambda settings: None)
     assert normalize_argv(["kbscore"]) == ["score"]
     assert normalize_argv(["paper-score"]) == ["score"]
     assert normalize_argv(["kbscore-live"]) == ["livescore"]
@@ -281,3 +278,25 @@ def test_cli_aliases_dispatch_to_boards(monkeypatch, tmp_path, capsys):
     assert "KB15 LIVE SCOREBOARD" in live_out
     assert "HALTED=true" in live_out
     assert "Live OFF (halted)" not in live_out
+
+
+def test_live_board_is_read_only_and_follows_play_pot_when_file_drifts(tmp_path, capsys):
+    settings = _settings(tmp_path, halted=False, live_trading=True, confirm_live="YES")
+    rows = [_live_win(), _backfill_loss()]
+    write_trades(tmp_path / "fifteen_trade_log.jsonl", rows)
+    drifted = FifteenPot(balance=9.99, start=5.0, realized_pnl=4.99, stopped=False)
+    save_pot(drifted, settings.pot_path)
+    before_journal = (tmp_path / "fifteen_trade_log.jsonl").read_text()
+    before_pot = Path(settings.pot_path).read_text()
+    play_only = play_pot_equity(rows, start=5.0)
+    assert play_only == 5.92
+    assert run_live_score(settings, color=False) == 0
+    out = capsys.readouterr().out
+    assert f"Pot     ${play_only:.2f}" in out
+    assert "fifteen_pot.json $9.99" in out
+    assert "display uses play-only $5.92" in out
+    assert "file not changed" in out
+    assert (tmp_path / "fifteen_trade_log.jsonl").read_text() == before_journal
+    assert Path(settings.pot_path).read_text() == before_pot
+    assert '"kind": "backfill"' in before_journal
+    assert "KXBTC15M-RECON" not in out

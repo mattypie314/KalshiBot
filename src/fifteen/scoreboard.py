@@ -1,13 +1,13 @@
 """Termius ASCII scoreboards for 15m paper and live journals.
 
-Pi wrappers (`kbscore`, `kbscore-live`) should call these entrypoints so the
-board always uses `src.journal.scoreboard_rows` / `is_journal_backfill`.
-`kind=backfill` recon rows stay in the log and never score as fake $0 losses.
+Read-only. Pi wrappers (`kbscore`, `kbscore-live`) call these entrypoints so
+the board uses `scoreboard_rows` / `play_pot_equity` and never rewrites
+`fifteen_trade_log.jsonl` or `fifteen_pot.json`. `kind=backfill` recon rows
+stay labeled in the log (PR #65) and never score as fake $0 losses.
 """
 
 from __future__ import annotations
 
-import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -24,6 +24,7 @@ from src.fifteen.regime import CHOP_VETO_PHRASE
 from src.journal import (
     asset_from_ticker,
     day_filled_pnl,
+    filled_settled_score_rows,
     is_journal_backfill,
     load_trades,
     play_pot_equity,
@@ -38,10 +39,9 @@ from src.paper import (
     RESULT_UNSCORED,
     RESULT_WIN,
     summarize_paper,
-    try_settle_paper,
 )
 
-logger = logging.getLogger(__name__)
+_SIT_RESULTS = {RESULT_SIT, RESULT_UNSCORED, "sit/unscored"}
 
 WIDTH = 76
 TIMELINE_LIMIT = 24
@@ -65,8 +65,6 @@ SKIP_SIT_SNIPPETS = (
     "no spot",
     "pass but size/room failed",
 )
-
-_SIT_RESULTS = {RESULT_SIT, RESULT_UNSCORED, "sit/unscored"}
 
 
 @dataclass(frozen=True)
@@ -558,13 +556,11 @@ def format_scoreboard(
         n_pending = int(live["n_pending"])
         streak = win_loss_streak(journal_rows)
         day = day_filled_pnl(journal_rows, now=now)
-        settled = [
-            row
-            for row in scoreboard_rows(journal_rows)
+        settled_pnls = [
+            float(row.get("pnl") or 0)
+            for row in filled_settled_score_rows(journal_rows)
             if is_live_play_row(row)
-            and str(row.get("result") or "") in {"win", "loss"}
         ]
-        settled_pnls = [float(row.get("pnl") or 0) for row in settled]
         equity = pot_curve(settled_pnls, start=start)
         pot_now = play_pot_equity(journal_rows, start=start)
         tape = "LIVE tape · real money · fifteen_trade_log.jsonl"
@@ -601,10 +597,17 @@ def format_scoreboard(
         ),
     ]
     if not paper and pot is not None:
-        lines.append(
-            f"  Pot file ${pot.balance:.2f} realized ${pot.realized_pnl:.2f} "
-            f"stopped={pot.stopped}  (play-only equity ${pot_now:.2f}; backfills excluded)"
-        )
+        file_bal = float(pot.balance)
+        if abs(file_bal - pot_now) > 0.005:
+            lines.append(
+                f"  fifteen_pot.json ${file_bal:.2f} (display uses play-only "
+                f"${pot_now:.2f}; file not changed)"
+            )
+        else:
+            lines.append(
+                f"  fifteen_pot.json ${file_bal:.2f} matches play-only  "
+                f"stopped={pot.stopped}"
+            )
     if n_backfills:
         lines.append(
             f"  Journal {len(journal_rows)} rows  ·  skipped {n_backfills} kind=backfill recon"
@@ -639,7 +642,7 @@ def format_scoreboard(
         [
             "  " + "-" * (WIDTH - 2),
             "  PLAY = took a ticket.  SIT = sat out.  chop sit = process win (no $).",
-            "  Backfills stay in the jsonl and are not fake losses.",
+            "  Read-only board. Backfills stay in the jsonl and are not fake losses.",
             "",
         ]
     )
@@ -650,32 +653,15 @@ def _load_scan_log(path: Path) -> list[dict[str, Any]]:
     return load_trades(path)
 
 
-def _maybe_settle_paper(settings: FifteenSettings) -> None:
-    try:
-        try_settle_paper(settings)
-    except Exception as exc:  # noqa: BLE001
-        logger.info("paper settle skipped: %s", exc)
-
-
-def _maybe_refresh_live(settings: FifteenSettings) -> None:
-    """Best-effort journal settle. Never places orders."""
-    try:
-        from src.fifteen.main import _client, load_state, refresh_live_journal, save_state
-
-        client = _client(settings)
-        state = load_state(Path(settings.state_path))
-        pot = load_pot(settings.pot_path)
-        refresh_live_journal(settings, client=client, state=state, pot=pot)
-        save_state(Path(settings.state_path), state)
-        from src.fifteen.pot import save_pot
-
-        save_pot(pot, settings.pot_path)
-    except Exception as exc:  # noqa: BLE001
-        logger.info("live journal settle skipped: %s", exc)
+def _load_pot_file(settings: FifteenSettings) -> FifteenPot | None:
+    dest = Path(settings.pot_path)
+    if not dest.is_file():
+        return None
+    return load_pot(dest)
 
 
 def run_paper_score(settings: FifteenSettings, *, color: bool | None = None) -> int:
-    _maybe_settle_paper(settings)
+    """Read-only paper board. Does not settle or rewrite journals / pot."""
     journal = load_trades(Path(settings.paper_log_path))
     scans = _load_scan_log(Path(settings.scan_log_path))
     print(
@@ -684,7 +670,7 @@ def run_paper_score(settings: FifteenSettings, *, color: bool | None = None) -> 
             settings=settings,
             journal_rows=journal,
             scan_rows=scans,
-            pot=load_pot(settings.pot_path),
+            pot=_load_pot_file(settings),
             color=color,
         )
     )
@@ -692,8 +678,7 @@ def run_paper_score(settings: FifteenSettings, *, color: bool | None = None) -> 
 
 
 def run_live_score(settings: FifteenSettings, *, color: bool | None = None) -> int:
-    _maybe_settle_paper(settings)
-    _maybe_refresh_live(settings)
+    """Read-only live board. Does not rewrite fifteen_trade_log.jsonl or fifteen_pot.json."""
     journal = load_trades(Path(settings.trade_log_path))
     scans = _load_scan_log(Path(settings.scan_log_path))
     print(
@@ -702,7 +687,7 @@ def run_live_score(settings: FifteenSettings, *, color: bool | None = None) -> i
             settings=settings,
             journal_rows=journal,
             scan_rows=scans,
-            pot=load_pot(settings.pot_path),
+            pot=_load_pot_file(settings),
             color=color,
         )
     )
