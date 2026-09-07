@@ -273,3 +273,27 @@ class SpotService:
 
     def _coinbase_vol(self, asset: str) -> float | None:
         return hourly_vol_from_closes([bar.close for bar in self._coinbase_candles(asset)], 60)
+
+    def ohlc_1m(self, asset: str, *, limit: int = 60) -> list[Candle]:
+        """Oldest→newest 1m OHLC for the tape gate. Reuses vol candle fetchers."""
+        asset = str(asset or "").upper()
+        limit = max(30, min(int(limit), 120))
+        preferred = self.preferred if self.preferred in {"coinbase", "binance"} else "binance"
+        order = [preferred, "binance", "coinbase"]
+        seen: set[str] = set()
+        for name in order:
+            if name in seen:
+                continue
+            seen.add(name)
+            try:
+                rows = (
+                    self._binance_candles(asset)
+                    if name == "binance"
+                    else self._coinbase_candles(asset)
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.info("%s ohlc failed for %s: %s", name, asset, exc)
+                continue
+            if rows:
+                return rows[-limit:]
+        return []
