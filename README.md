@@ -214,8 +214,6 @@ chmod +x kb15
 ./kb15 live         # dual-gated live; type LIVE or --confirm LIVE (l / 4)
 ./kb15 eval         # paper + pot summary (v / 6)
 ./kb15 paper        # same as eval (p / 7)
-./kb15 score        # Termius paper board (also: kbscore)
-./kb15 livescore    # Termius live board (also: kbscore-live)
 ```
 
 Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, entry ET minutes **:02–:04** of each 15m window, Pass needs ≥**4¢** model-vs-mid with spread ≤ edge, sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.

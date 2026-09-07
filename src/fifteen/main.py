@@ -20,19 +20,11 @@ from src.filters import Idea
 from src.evaluate import summarize_trades
 from src.journal import (
     append_trade,
-    day_filled_pnl,
-    fill_already_journaled,
     fill_status_from_order,
-    is_journal_backfill,
     load_trades,
-    new_backfill_row,
     new_trade_row,
     parse_count,
-    play_pot_equity,
     resolve_pending,
-    scoreboard_rows,
-    summarize_entry_timing,
-    win_loss_streak,
     write_trades,
 )
 from src.fifteen.config import (
@@ -56,7 +48,6 @@ from src.fifteen.edge import (
 )
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
 from src.fifteen.regime import chop_veto_note, classify_regime
-from src.fifteen.scoreboard import run_live_score, run_paper_score
 from src.kalshi_client import AuthConfigError, ForbiddenError, KalshiClient, RateLimitedError
 from src.markets import HourlyMarket, MarketDiscovery
 from src.model import fair_prob, hours_left, model_z
@@ -356,11 +347,7 @@ def append_scan_log(
 
 
 def _is_live_entry(row: dict[str, Any]) -> bool:
-    """True for a live 15m place or fill-recon row — not paper and not an exit event.
-
-    Backfills still count here for fill recon and exits. Score / pot equity / W-L
-    streak use `scoreboard_rows` / `is_journal_backfill` so recon rows are not PLAYS.
-    """
+    """True for a live 15m place row — not paper and not an exit event."""
     if str(row.get("kind") or "") == "paper":
         return False
     if str(row.get("action") or "") == "exit":
@@ -376,8 +363,6 @@ def _already_journaled(trades: list[dict[str, Any]], *, order_id: str, ticker: s
             continue
         if want_order and str(row.get("order_id") or "") == want_order:
             return True
-        if is_journal_backfill(row):
-            continue
         if want_ticker and str(row.get("ticker") or "").upper() == want_ticker:
             if row.get("exit_reason"):
                 continue
@@ -405,8 +390,6 @@ def _open_journal_risk(trades: list[dict[str, Any]]) -> float:
     for row in trades:
         if not _is_live_entry(row):
             continue
-        if is_journal_backfill(row):
-            continue
         if str(row.get("result") or "pending") in {"win", "loss", "unfilled"}:
             continue
         if row.get("exit_reason"):
@@ -428,31 +411,6 @@ def _safe_fills(client: KalshiClient) -> tuple[list[dict[str, Any]], bool]:
         return [], False
 
 
-def journal_fill_backfills(
-    journal_path: Path,
-    trades: list[dict[str, Any]],
-    fills: list[dict[str, Any]] | None,
-) -> list[dict[str, Any]]:
-    """Append Kalshi fill-recon rows that were never a live 15m Pass.
-
-    Labels `kind=backfill` / `spot_source=kalshi-fill-backfill`. Does not invent
-    spot, strike, or vol. `fill_ts` is the exchange stamp when Kalshi sent one.
-    """
-    written: list[dict[str, Any]] = []
-    for fill in fills or []:
-        if not isinstance(fill, dict):
-            continue
-        if not is_fifteen_rest(fill):
-            continue
-        if fill_already_journaled(trades, fill):
-            continue
-        row = new_backfill_row(fill=fill)
-        append_trade(journal_path, row)
-        trades.append(row)
-        written.append(row)
-    return written
-
-
 def refresh_live_journal(
     settings: FifteenSettings,
     *,
@@ -465,10 +423,8 @@ def refresh_live_journal(
 
     journal_path = Path(settings.trade_log_path)
     trades = load_trades(journal_path)
-    fills, fills_available = _safe_fills(client)
-    if fills_available:
-        journal_fill_backfills(journal_path, trades, fills)
     prior = {id(row): str(row.get("result") or "pending") for row in trades}
+    fills, fills_available = _safe_fills(client)
     getter = getattr(client, "get_market", None)
     if getter is not None:
         trades = resolve_pending(
@@ -481,8 +437,6 @@ def refresh_live_journal(
         write_trades(journal_path, trades)
     for row in trades:
         if not _is_live_entry(row):
-            continue
-        if is_journal_backfill(row):
             continue
         result = str(row.get("result") or "pending")
         if result not in {"win", "loss", "unfilled"}:
@@ -817,36 +771,20 @@ def run_eval(settings: FifteenSettings) -> int:
     else:
         print("no paper log yet")
 
-    journal_rows = load_trades(live_path)
     live_rows = [
         row
-        for row in scoreboard_rows(journal_rows)
+        for row in load_trades(live_path)
         if _is_live_entry(row)
     ]
-    live = summarize_trades(journal_rows)
-    timing = summarize_entry_timing(journal_rows)
-    streak = win_loss_streak(journal_rows)
-    day_pnl = day_filled_pnl(journal_rows)
-    play_pot = play_pot_equity(journal_rows, start=settings.pot_start)
+    live = summarize_trades(live_rows)
     print(f"=== 15m livescore ({live_path}) ===")
     print(
         f"live rows: {live['n_rows']} | filled+settled {live['n_filled_settled']} "
         f"({live['n_wins']} win / {live['n_losses']} loss) | "
         f"unfilled {live['n_unfilled']} | pending {live['n_pending']}"
     )
-    print(f"live filled PnL: ${live['pnl']:.2f} | day PnL ${day_pnl:.2f}")
-    if streak["n"]:
-        tag = "W" if streak["result"] == "win" else "L"
-        print(f"PLAY streak: {streak['n']}{tag}")
-    else:
-        print("PLAY streak: —")
-    print(
-        f"entry timing: n={timing['n']} late={timing['n_late']} "
-        f"late-place {timing['late_place_rate']:.0%} "
-        f"(excluded {timing['n_backfills']} kind=backfill recon rows from score + timing)"
-    )
+    print(f"live filled PnL: ${live['pnl']:.2f}")
     if live_rows:
-        print("PLAY feed (live Passes only):")
         for row in live_rows[-10:]:
             print(
                 f"  {row.get('ticker')} {row.get('side')} "
@@ -856,12 +794,7 @@ def run_eval(settings: FifteenSettings) -> int:
             )
     else:
         print("no live 15m journal yet")
-    print(
-        f"play-only pot ${play_pot:.2f} (start ${settings.pot_start:.2f} + filled PnL; "
-        f"backfills excluded)"
-    )
-    print(f"pot file ${pot.balance:.2f} realized ${pot.realized_pnl:.2f} stopped={pot.stopped}")
-    print("Termius boards: ./kb15 score (paper)  ·  ./kb15 livescore (live cash)")
+    print(f"pot ${pot.balance:.2f} realized ${pot.realized_pnl:.2f} stopped={pot.stopped}")
     return EXIT_OK
 
 
@@ -915,11 +848,7 @@ def normalize_argv(argv: list[str] | None) -> list[str]:
         "p": "paper",
         "7": "paper",
         "livescore": "livescore",
-        "live-score": "livescore",
-        "kbscore-live": "livescore",
         "score": "score",
-        "kbscore": "score",
-        "paper-score": "score",
     }
     if not raw:
         return ["scan"]
@@ -950,8 +879,8 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("eval", help="Paper log + live journal + pot summary")
     sub.add_parser("paper", help="Same as eval")
-    sub.add_parser("score", help="Termius paper scoreboard (PLAY+SIT, skip backfills)")
-    sub.add_parser("livescore", help="Termius live scoreboard (fifteen_trade_log, skip backfills)")
+    sub.add_parser("score", help="Same as eval (paper + livescore)")
+    sub.add_parser("livescore", help="Same as eval; live journal is fifteen_trade_log.jsonl")
 
     args = parser.parse_args(normalize_argv(argv))
     configure_logging()
@@ -976,12 +905,8 @@ def main(argv: list[str] | None = None) -> int:
             print("Live aborted (not confirmed).")
             return EXIT_OK
         return run_scan(settings, asset=None, place=True, force_live=True, armed=True)
-    if args.command in {"eval", "paper"}:
+    if args.command in {"eval", "paper", "score", "livescore"}:
         return run_eval(settings)
-    if args.command == "score":
-        return run_paper_score(settings)
-    if args.command == "livescore":
-        return run_live_score(settings)
     return EXIT_CONFIG
 
 

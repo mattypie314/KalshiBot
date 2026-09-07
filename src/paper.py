@@ -27,7 +27,6 @@ from src.journal import (
     append_trade,
     estimate_pnl,
     forced_ticket_fields,
-    is_journal_backfill,
     load_trades,
     strike_distance_pct,
     trade_bucket,
@@ -400,10 +399,9 @@ def settle_paper_file(
 
 
 def summarize_paper(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    playable = [row for row in rows if not is_journal_backfill(row)]
     assumed = [
         row
-        for row in playable
+        for row in rows
         if row.get("result") in SCORED_RESULTS
         and str(row.get("fill_model") or "") == FILL_ASSUMED_MAKER
     ]
@@ -411,7 +409,7 @@ def summarize_paper(rows: list[dict[str, Any]]) -> dict[str, Any]:
     losses = [row for row in assumed if row.get("result") == RESULT_LOSS]
     pending = [
         row
-        for row in playable
+        for row in rows
         if row.get("result") == RESULT_PENDING
         or (
             row.get("result") not in TERMINAL_RESULTS
@@ -420,20 +418,20 @@ def summarize_paper(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     sit = [
         row
-        for row in playable
+        for row in rows
         if row.get("result") in SIT_UNSCORED_RESULTS
         or str(row.get("fill_model") or "") == FILL_SIT_UNSCORED
     ]
     unfilled = [
         row
-        for row in playable
+        for row in rows
         if row.get("result") == RESULT_UNFILLED or str(row.get("fill_model") or "") == FILL_UNFILLED
     ]
     # A sit row should not also count as pending.
     pending = [row for row in pending if row not in sit and row not in unfilled and row not in assumed]
     pnl = sum(float(row.get("pnl") or 0) for row in assumed)
     return {
-        "n_tickets": len(playable),
+        "n_tickets": len(rows),
         "n_wins": len(wins),
         "n_losses": len(losses),
         "n_assumed_filled_settled": len(assumed),
