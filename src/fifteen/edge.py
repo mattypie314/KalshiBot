@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -146,6 +147,22 @@ def seconds_until_entry_window(now: datetime | None = None) -> float | None:
         return None
     target = fifteen_window_start(local) + timedelta(minutes=earliest)
     return max(0.0, (target - local).total_seconds())
+
+
+def wait_for_entry_window(*, sleeper=None, announce=None) -> float | None:
+    """Sleep until minutes 3–5 of this block. None if the window is already gone.
+
+    Used right before collect_ideas so journal/balance work during :00–:02
+    cannot push the look into minute 6+. Frozen `now=` callers skip this.
+    """
+    wait_s = seconds_until_entry_window()
+    if wait_s is None:
+        return None
+    if wait_s > 0:
+        if announce:
+            announce(wait_s)
+        (sleeper or time.sleep)(wait_s)
+    return wait_s
 
 
 def in_fifteen_settlement(now: datetime | None = None) -> bool:

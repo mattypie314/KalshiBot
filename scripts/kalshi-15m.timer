@@ -9,6 +9,9 @@ Description=Run KalshiBot15 at :03/:18/:33/:48 Eastern (15m windows, minute 3)
 # Do not fire at :02/:17/:32/:47 — that logs "outside entry window (minute 2)".
 # Do not spray *:02,03,04,05,17,... — one fire per window is enough.
 OnCalendar=*-*-* *:03,18,33,48:00 America/New_York
+# Default AccuracySec is 1min and can slip the oneshot past minute 5.
+AccuracySec=1s
+RandomizedDelaySec=0
 # Do not catch up after downtime — a late fire would use a stale window.
 Persistent=false
 

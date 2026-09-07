@@ -35,6 +35,7 @@ from src.fifteen.edge import (
     revenge_until_after_loss,
     seconds_until_entry_window,
     strike_decided,
+    wait_for_entry_window,
     ENTRY_OFFSETS,
 )
 from src.fifteen.main import (
@@ -99,6 +100,9 @@ def test_systemd_timer_fires_once_at_minute_three():
     timer = Path(__file__).resolve().parents[1] / "scripts" / "kalshi-15m.timer"
     text = timer.read_text()
     assert "America/New_York" in text
+    assert "OnCalendar=" in text
+    assert "AccuracySec=1s" in text
+    # Extract minute list from *:03,18,33,48:00
     import re
 
     match = re.search(r"OnCalendar=\S+\s+\*:([0-9,]+):", text)
@@ -107,6 +111,95 @@ def test_systemd_timer_fires_once_at_minute_three():
     assert minutes == [3, 18, 33, 48], minutes
     for minute in minutes:
         assert minute % 15 in ENTRY_OFFSETS, f"timer minute {minute} outside entry {ENTRY_OFFSETS}"
+
+
+def test_systemd_service_allows_wait_for_entry_window():
+    service = Path(__file__).resolve().parents[1] / "scripts" / "kalshi-15m.service"
+    text = service.read_text()
+    assert "TimeoutStartSec=300" in text
+
+
+def test_wait_for_entry_window_sleeps_early_and_skips_late(monkeypatch):
+    slept = []
+    announced = []
+    monkeypatch.setattr(
+        "src.fifteen.edge.seconds_until_entry_window", lambda now=None: 47.0
+    )
+    out = wait_for_entry_window(sleeper=slept.append, announce=announced.append)
+    assert out == 47.0
+    assert slept == [47.0]
+    assert announced == [47.0]
+
+    monkeypatch.setattr(
+        "src.fifteen.edge.seconds_until_entry_window", lambda now=None: None
+    )
+    assert wait_for_entry_window(sleeper=lambda _s: (_ for _ in ()).throw(AssertionError())) is None
+
+
+def test_collect_ideas_waits_on_wall_clock(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    waited = []
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    monkeypatch.setattr(
+        "src.fifteen.main.wait_for_entry_window",
+        lambda **_kwargs: waited.append(True) or 12.0,
+    )
+    monkeypatch.setattr("src.fifteen.main.to_et", lambda stamp=None: now)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, _notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=None,
+        apply_chop_veto=True,
+    )
+    assert waited == [True]
+    assert len(ideas) == 1
+
+
+def test_collect_ideas_frozen_early_now_does_not_wait(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 2)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+
+    def _boom(**_kwargs):
+        raise AssertionError("frozen now must not wait")
+
+    monkeypatch.setattr("src.fifteen.main.wait_for_entry_window", _boom)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert ideas == []
+    assert any("outside entry window" in note and "minute 2" in note for note in notes)
+
+
+def test_run_scan_does_not_wait_before_journal():
+    text = Path(collect_ideas.__code__.co_filename).read_text()
+    assert "Do not wait here. Journal / balance / exits" in text
+    assert "collect_ideas waits until 3–5" in text
+
+
+def test_install_pi_15m_units_copies_timer():
+    root = Path(__file__).resolve().parents[1]
+    installer = (root / "scripts" / "install-pi-15m-units.sh").read_text()
+    assert "kalshi-15m.timer" in installer
+    assert "kalshi-hourly.timer" in installer
+    assert "daemon-reload" in installer
+    assert "does not enable" in installer.lower() or "still disabled" in installer
 
 
 def test_fifteen_example_env_risk_and_paths_bind(monkeypatch, tmp_path):
