@@ -452,6 +452,8 @@ def test_cli_normalize_and_live_gates():
     assert normalize_argv(["l"]) == ["live"]
     assert normalize_argv(["livescore"]) == ["livescore"]
     assert normalize_argv(["score"]) == ["score"]
+    assert normalize_argv(["kbscore"]) == ["score"]
+    assert normalize_argv(["kbscore-live"]) == ["livescore"]
     assert normalize_argv([]) == ["scan"]
 
     halted = FifteenSettings(halted=True, live_trading=True, confirm_live="YES")
