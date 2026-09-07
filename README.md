@@ -59,6 +59,18 @@ Pick a mode from a menu, or pass it on the command line:
 
 See `docs/15m.md`. Do not enable `kalshi-15m.timer` until armed. Do not touch `kalshi-hourly.timer`.
 
+Combined LIVE scoreboard (both pots, Termius):
+
+```bash
+# after git pull on either checkout
+chmod +x scripts/kbscore-all scripts/install-kbscore-all.sh
+./scripts/install-kbscore-all.sh   # kbscore-all / scoreall → ~/.local/bin
+# or: alias scoreall='kbscore-all'
+kbscore-all                        # also: python -m src.scoreboard_all
+```
+
+Reads `/home/KalshiBot15` (`fifteen_trade_log.jsonl` + `fifteen_pot.json`) and `/home/KalshiBot` (`trade_log.jsonl` + `hourly_pot.json` if present, else `BANKROLL` + live PnL). Paper tapes are not opened. Does not change trading gates. Separate boards stay: 15m `livescore` / `kbscore-live` on the Pi, hourly `./kb eval`.
+
 A **live Kalshi key** (created on kalshi.com, not demo) returns 401 on demo. Use `--prod` for that key, or `USE_DEMO=false ./kb auth`. On a terminal, `./kb live` asks you to type `LIVE` (`.env` can stay dry). Unattended systemd / CI has no TTY: both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES` are required, and `HALTED` still wins. GitHub Actions stays dry.
 
 Exit codes: `0` success or `NO_ACTIONABLE_EDGE`, `2` config/auth, `3` rate limited.
