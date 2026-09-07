@@ -1,0 +1,30 @@
+#!/bin/sh
+# Combined LIVE Termius scoreboard: 15m + hourly cash in one view.
+# Does not open paper tapes. Does not change trading gates.
+#   kbscore-all | scoreall | python -m src.scoreboard_all
+#
+# Separate boards stay as they are:
+#   livescore / kbscore-live  →  15m only (classic on the Pi)
+#   ./kb eval                 →  hourly only
+set -e
+export FORCE_COLOR="${FORCE_COLOR:-1}"
+if command -v readlink >/dev/null 2>&1; then
+  here=$(readlink -f "$0" 2>/dev/null || printf '%s\n' "$0")
+else
+  here="$0"
+fi
+scripts_dir=$(CDPATH= cd -- "$(dirname "$here")" && pwd)
+root=$(CDPATH= cd -- "$scripts_dir/.." && pwd)
+if [ ! -f "$root/kb15" ] && [ ! -f "$root/kb" ]; then
+  root="${KALSHIBOT_ROOT:-/home/KalshiBot}"
+fi
+export KALSHIBOT_ROOT="${KALSHIBOT_ROOT:-/home/KalshiBot}"
+export KALSHIBOT15_ROOT="${KALSHIBOT15_ROOT:-/home/KalshiBot15}"
+export PYTHONPATH="${PYTHONPATH:-$root}"
+cd "$root" || exit 1
+if [ -x "$root/.venv/bin/python" ]; then
+  py="$root/.venv/bin/python"
+else
+  py="python3"
+fi
+exec "$py" -m src.scoreboard_all "$@"
