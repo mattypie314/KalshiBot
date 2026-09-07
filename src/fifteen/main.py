@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,7 @@ from src.fifteen.edge import (
     news_blackout,
     pass_fail,
     record_fifteen_result,
+    seconds_until_entry_window,
 )
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
 from src.fifteen.regime import chop_veto_note, classify_regime
@@ -236,7 +238,7 @@ def collect_ideas(
         preferred=settings.spot_source,
         kalshi=client,
         index_id_fn=fifteen_index_id_for,
-        vol_lookback_minutes=60,
+        vol_lookback_minutes=settings.vol_lookback_minutes,
         settlement_labels=dict(FIFTEEN_INDEX_BY_ASSET),
     )
     try:
@@ -917,6 +919,16 @@ def run_scan(
     armed: bool = False,
 ) -> int:
     Path(settings.artifacts_dir).mkdir(parents=True, exist_ok=True)
+    # Early oneshots (stale :01 timer, manual kick at :00–:02) wait for minutes
+    # 3–5. Past the window → collect_ideas sits without sleeping into the next block.
+    wait_s = seconds_until_entry_window()
+    if wait_s and wait_s > 0:
+        print(
+            f"waiting {wait_s:.0f}s for 15m entry window (minutes 3–5)…",
+            flush=True,
+        )
+        time.sleep(wait_s)
+
     state_path = Path(settings.state_path)
     state = load_state(state_path)
     wid = fifteen_window_id()
@@ -1075,31 +1087,46 @@ def run_scan(
         exchange_index=CRYPTO_SHARD,
     )
     if go_live and result.get("placed"):
-        placed_tickers = {
-            str(order.get("ticker") or order.get("market_ticker") or "").upper()
-            for order in result["placed"]
-            if isinstance(order, dict)
+        # Journal first (handles V2 responses that omit ticker), then mirror
+        # those rows into state tickets so fifteen_working stays accurate.
+        journaled = journal_live_places(
+            settings, ideas=ideas, result=result, spots=spots, state=state
+        )
+        open_tickers = {
+            str(ticket.get("ticker") or "").upper()
+            for ticket in state.get("tickets") or []
+            if str(ticket.get("window_id") or "") == wid
+            and str(ticket.get("status") or "") == "open"
         }
-        placed_tickers.discard("")
-        for idea in ideas:
-            if placed_tickers and idea.market.ticker.upper() not in placed_tickers:
+        ideas_by_ticker = {idea.market.ticker.upper(): idea for idea in ideas}
+        for row in journaled:
+            ticker = str(row.get("ticker") or "").upper()
+            if not ticker or ticker in open_tickers:
                 continue
+            idea = ideas_by_ticker.get(ticker)
             state.setdefault("tickets", []).append(
                 {
                     "status": "open",
                     "loop": "fifteen",
                     "window_id": wid,
-                    "ticker": idea.market.ticker,
-                    "asset": idea.market.asset,
-                    "side": idea.side,
-                    "contracts": idea.contracts,
-                    "limit": idea.limit_price,
-                    "risk": idea.risk_dollars,
+                    "ticker": row.get("ticker") or (idea.market.ticker if idea else ""),
+                    "asset": row.get("asset") or (idea.market.asset if idea else ""),
+                    "side": row.get("side") or (idea.side if idea else ""),
+                    "contracts": row.get("contracts")
+                    if row.get("contracts") is not None
+                    else (idea.contracts if idea else 0),
+                    "limit": row.get("limit_price")
+                    if row.get("limit_price") is not None
+                    else (idea.limit_price if idea else 0),
+                    "risk": row.get("risk_dollars")
+                    if row.get("risk_dollars") is not None
+                    else (idea.risk_dollars if idea else 0),
+                    "order_id": row.get("order_id") or "",
+                    "client_order_id": row.get("client_order_id") or "",
+                    "fill_status": row.get("fill_status") or "",
                 }
             )
-        journaled = journal_live_places(
-            settings, ideas=ideas, result=result, spots=spots, state=state
-        )
+            open_tickers.add(ticker)
         set_open_risk(pot, _open_journal_risk(load_trades(journal_path)))
         print(f"LIVE: placed {len(result['placed'])} 15m maker limit(s).")
         for row in journaled:

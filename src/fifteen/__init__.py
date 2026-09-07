@@ -20,6 +20,7 @@ from src.fifteen.edge import (
     pass_fail,
     record_fifteen_result,
     revenge_until_after_loss,
+    seconds_until_entry_window,
     strike_decided,
 )
 
@@ -45,6 +46,7 @@ __all__ = [
     "pass_fail",
     "record_fifteen_result",
     "revenge_until_after_loss",
+    "seconds_until_entry_window",
     "strike_decided",
 ]
 

@@ -47,13 +47,34 @@ class FifteenSettings(BaseSettings):
     halted: bool = True
 
     pot_start: float = Field(default=5.00, validation_alias=AliasChoices("FIFTEEN_POT_START", "POT_START"))
-    pot_double: float = Field(default=10.00, validation_alias=AliasChoices("FIFTEEN_POT_DOUBLE", "POT_DOUBLE"))
+    pot_double: float = Field(
+        default=10.00,
+        validation_alias=AliasChoices("FIFTEEN_POT_DOUBLE", "POT_DOUBLE", "FIFTEEN_POT_ASK"),
+    )
     bankroll: float = Field(default=5.00, validation_alias=AliasChoices("FIFTEEN_BANKROLL"))
-    min_net_edge: float = Field(default=0.04, validation_alias=AliasChoices("FIFTEEN_MIN_NET_EDGE", "MIN_NET_EDGE"))
-    max_risk_pct: float = 0.40
-    max_risk_dollars: float = Field(default=2.00, validation_alias=AliasChoices("FIFTEEN_MAX_RISK_DOLLARS"))
-    preferred_risk_dollars: float = Field(default=1.50, validation_alias=AliasChoices("FIFTEEN_PREFERRED_RISK_DOLLARS"))
-    kelly_mult: float = 0.25
+    min_net_edge: float = Field(
+        default=0.04,
+        validation_alias=AliasChoices("FIFTEEN_MIN_NET_EDGE", "MIN_NET_EDGE", "MID_TOLERANCE"),
+    )
+    max_risk_pct: float = Field(
+        default=0.40,
+        validation_alias=AliasChoices("FIFTEEN_MAX_RISK_PCT", "MAX_RISK_PCT"),
+    )
+    max_risk_dollars: float = Field(
+        default=2.00,
+        validation_alias=AliasChoices("FIFTEEN_MAX_RISK_DOLLARS", "MAX_RISK_DOLLARS"),
+    )
+    preferred_risk_dollars: float = Field(
+        default=1.50,
+        validation_alias=AliasChoices(
+            "FIFTEEN_PREFERRED_RISK_DOLLARS",
+            "PREFERRED_RISK_DOLLARS",
+        ),
+    )
+    kelly_mult: float = Field(
+        default=0.25,
+        validation_alias=AliasChoices("FIFTEEN_KELLY_MULT", "KELLY_MULT"),
+    )
 
     assets: str = "BTC,ETH"
     max_markets_per_asset: int = 8
@@ -76,16 +97,51 @@ class FifteenSettings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("FIFTEEN_CHOP_VETO"),
     )
-    hourly_vol_fallback_btc: float = 0.004
-    hourly_vol_fallback_eth: float = 0.005
+    # TEMPORARY HEURISTIC: shorter than hourly's ~4h lookback.
+    vol_lookback_minutes: int = Field(
+        default=60,
+        validation_alias=AliasChoices(
+            "FIFTEEN_VOL_LOOKBACK_MINUTES",
+            "VOL_LOOKBACK_MINUTES",
+        ),
+    )
+    hourly_vol_fallback_btc: float = Field(
+        default=0.004,
+        validation_alias=AliasChoices(
+            "FIFTEEN_VOL_FALLBACK_BTC",
+            "HOURLY_VOL_FALLBACK_BTC",
+        ),
+    )
+    hourly_vol_fallback_eth: float = Field(
+        default=0.005,
+        validation_alias=AliasChoices(
+            "FIFTEEN_VOL_FALLBACK_ETH",
+            "HOURLY_VOL_FALLBACK_ETH",
+        ),
+    )
 
     request_timeout_seconds: float = 20.0
     artifacts_dir: str = "artifacts"
-    state_path: str = Field(default="artifacts/fifteen_state.json", validation_alias=AliasChoices("FIFTEEN_STATE_PATH"))
-    scan_log_path: str = Field(default="artifacts/fifteen_scan_log.jsonl", validation_alias=AliasChoices("FIFTEEN_SCAN_LOG_PATH"))
-    paper_log_path: str = Field(default="artifacts/fifteen_paper_log.jsonl", validation_alias=AliasChoices("FIFTEEN_PAPER_LOG_PATH"))
-    trade_log_path: str = Field(default="artifacts/fifteen_trade_log.jsonl", validation_alias=AliasChoices("FIFTEEN_TRADE_LOG_PATH"))
-    pot_path: str = Field(default="artifacts/fifteen_pot.json", validation_alias=AliasChoices("FIFTEEN_POT_PATH"))
+    state_path: str = Field(
+        default="artifacts/fifteen_state.json",
+        validation_alias=AliasChoices("FIFTEEN_STATE_PATH", "STATE_PATH"),
+    )
+    scan_log_path: str = Field(
+        default="artifacts/fifteen_scan_log.jsonl",
+        validation_alias=AliasChoices("FIFTEEN_SCAN_LOG_PATH", "SCAN_LOG_PATH"),
+    )
+    paper_log_path: str = Field(
+        default="artifacts/fifteen_paper_log.jsonl",
+        validation_alias=AliasChoices("FIFTEEN_PAPER_LOG_PATH", "PAPER_LOG_PATH"),
+    )
+    trade_log_path: str = Field(
+        default="artifacts/fifteen_trade_log.jsonl",
+        validation_alias=AliasChoices("FIFTEEN_TRADE_LOG_PATH", "TRADE_LOG_PATH"),
+    )
+    pot_path: str = Field(
+        default="artifacts/fifteen_pot.json",
+        validation_alias=AliasChoices("FIFTEEN_POT_PATH", "POT_PATH"),
+    )
     paper_fill_model: str = "assumed-maker-fill"
     cash_out_bid: float = Field(
         default=0.99,
