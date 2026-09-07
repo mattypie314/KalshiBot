@@ -10,7 +10,7 @@ from src.fees import ev_per_contract, taker_fee_dollars
 from src.journal import TURBO_LABEL, strike_distance_pct, trade_bucket
 from src.markets import HourlyMarket
 from src.model import fair_no, fair_prob, hours_left, model_z
-from src.sizer import size_idea
+from src.sizer import maker_cost_per_contract, size_idea
 
 # Turbo Mode (FORCE_NEAR_RULE): soften close-strike / min-edge only.
 # Preferred risk stays in the $0.75–$1.50 band; hard MAX_RISK still wins.
@@ -253,6 +253,7 @@ def evaluate_market(
             preferred_risk_dollars=preferred_risk,
             last_loss_same_hour=cfg.last_loss_same_hour,
             last_contracts=cfg.last_contracts,
+            cost_price=maker_cost_per_contract(side, labeled_limit=ask),
         )
         # Net edge for the filter uses taker fee on that size (conservative).
         contracts = max(trial.contracts, 1)

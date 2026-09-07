@@ -12,6 +12,7 @@ from src.clock import format_et
 from src.filters import Idea, maker_limit
 from src.kalshi_client import unwrap_order
 from src.markets import _quote
+from src.sizer import yes_book_price
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +53,8 @@ def is_fifteen_rest(row: dict[str, Any]) -> bool:
 def _order_payload(idea: Idea, run_id: str, *, exchange_index: int = -1) -> dict[str, Any]:
     """Kalshi V2 CreateOrder: count and price are strings. Side is bid/ask on the Yes book."""
     side = idea.side.lower()
-    if side == "yes":
-        book_side = "bid"
-        yes_price = idea.limit_price
-    else:
-        book_side = "ask"
-        yes_price = max(0.0, min(1.0, 1.0 - idea.limit_price))
+    book_side = "bid" if side == "yes" else "ask"
+    yes_price = yes_book_price(idea.side, idea.limit_price)
     return {
         "ticker": idea.market.ticker,
         "client_order_id": str(uuid.uuid4()),
@@ -124,11 +121,7 @@ def refresh_maker_payload(idea: Idea, payload: dict[str, Any], client: Any) -> d
     if limit is None:
         return payload
     refreshed = dict(payload)
-    if side.lower() == "yes":
-        yes_price = limit
-    else:
-        yes_price = max(0.0, min(1.0, 1.0 - limit))
-    refreshed["price"] = f"{yes_price:.4f}"
+    refreshed["price"] = f"{yes_book_price(side, limit):.4f}"
     refreshed["post_only"] = True
     if refreshed["price"] != payload.get("price"):
         refreshed["client_order_id"] = str(uuid.uuid4())

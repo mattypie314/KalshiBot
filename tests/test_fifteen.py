@@ -35,6 +35,7 @@ from src.fifteen.edge import (
 )
 from src.fifteen.main import (
     collect_ideas,
+    idea_from_pass,
     idea_fingerprint,
     journal_live_places,
     live_decision_for_window,
@@ -44,6 +45,7 @@ from src.fifteen.main import (
     paper_ideas_for_window,
     stamp_live_decision,
 )
+from src.sizer import economic_risk_dollars, maker_cost_per_contract, yes_book_price
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
 from src.journal import load_trades, new_trade_row, write_trades
 from src.fifteen.regime import CHOP_VETO_PHRASE
@@ -103,6 +105,80 @@ def test_pass_no_joins_yes_ask():
     assert decision.passed
     assert decision.side == "no"
     assert decision.join_price == 0.56
+
+
+def _idea_from_decision(decision, *, now=None, **settings_kw):
+    now = now or _et(10, 3)
+    market = _pass_market(now, yes_bid=0.22, yes_ask=0.24)
+    defaults = dict(
+        _env_file=None,
+        preferred_risk_dollars=1.50,
+        max_risk_dollars=1.50,
+        pot_start=5.00,
+        kelly_mult=0.25,
+    )
+    defaults.update(settings_kw)
+    return idea_from_pass(
+        market,
+        decision,
+        spot=2300.0,
+        vol=0.005,
+        bankroll=40.0,
+        room=5.0,
+        settings=FifteenSettings(**defaults),
+        now=now,
+    )
+
+
+def test_idea_from_pass_no_via_sell_yes_never_exceeds_max_risk():
+    """Cheap Yes ask must not size as if each No contract only costs that ask."""
+    decision = pass_fail(
+        model_yes=0.18, yes_bid=0.22, yes_ask=0.24, secs_left=12 * 60, sigma=0.4
+    )
+    assert decision.passed
+    assert decision.side == "no"
+    assert decision.join_price == 0.24
+    idea = _idea_from_decision(decision)
+    assert idea is not None
+    cost = maker_cost_per_contract("No", yes_book=decision.join_price)
+    assert cost == 0.76
+    assert idea.limit_price == pytest.approx(0.76)
+    assert yes_book_price(idea.side, idea.limit_price) == pytest.approx(0.24)
+    assert idea.contracts * cost <= 1.50 + 1e-9
+    assert idea.risk_dollars == economic_risk_dollars(idea.contracts, cost)
+    assert idea.risk_dollars <= 1.50 + 1e-9
+    # Old bug: 4 × 0.24 = $0.96 journaled while Kalshi locked 4 × 0.76.
+    assert idea.contracts * 0.24 < idea.risk_dollars or idea.contracts <= 1
+
+
+def test_idea_from_pass_yes_via_buy_yes_sizes_on_limit():
+    decision = pass_fail(
+        model_yes=0.62, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4
+    )
+    assert decision.passed and decision.side == "yes"
+    now = _et(10, 3)
+    market = _pass_market(now, yes_bid=0.54, yes_ask=0.56)
+    idea = idea_from_pass(
+        market,
+        decision,
+        spot=65000.0,
+        vol=0.004,
+        bankroll=40.0,
+        room=5.0,
+        settings=FifteenSettings(
+            _env_file=None,
+            preferred_risk_dollars=1.50,
+            max_risk_dollars=1.50,
+            pot_start=5.00,
+        ),
+        now=now,
+    )
+    assert idea is not None
+    assert idea.side == "Yes"
+    assert idea.limit_price == pytest.approx(0.54)
+    assert idea.risk_dollars == economic_risk_dollars(idea.contracts, 0.54)
+    assert idea.risk_dollars <= 1.50 + 1e-9
+    assert idea.contracts == 2
 
 
 def test_fail_within_four_cents_and_wide_spread():
@@ -997,6 +1073,53 @@ def test_run_scan_resolves_live_journal_fill_and_settlement(monkeypatch, tmp_pat
     state = json.loads(save_state.read_text())
     assert state["tickets"][0]["status"] == "settled"
     assert state["tickets"][0]["result"] == "win"
+
+
+def test_journal_no_sell_yes_risk_matches_economic_fill_cost(tmp_path):
+    """Sell-Yes fill cost is complement × contracts, not the cheap No label."""
+    idea = replace(
+        _eth_idea(),
+        side="No",
+        entry_price=0.76,
+        limit_price=0.76,
+        contracts=1,
+        risk_dollars=0.76,
+    )
+    settings = _fifteen_settings(tmp_path)
+    result = {
+        "placed": [
+            {
+                "order_id": "eth-no-1",
+                "ticker": idea.market.ticker,
+                "client_order_id": "cid-no",
+                "side": "ask",
+                "yes_price_dollars": "0.22",
+                "average_fill_price": "0.22",
+                "fill_count_fp": "1.00",
+                "remaining_count_fp": "0.00",
+                "maker_fill_cost_dollars": "0.78",
+            }
+        ],
+        "orders": [
+            {
+                "ticker": idea.market.ticker,
+                "client_order_id": "cid-no",
+                "count": "1.00",
+                "price": "0.2200",
+                "side": "ask",
+            }
+        ],
+    }
+    written = journal_live_places(
+        settings, ideas=[idea], result=result, spots=_spots(), state={"tickets": []}
+    )
+    assert len(written) == 1
+    row = written[0]
+    assert row["side"] == "No"
+    assert row["contracts"] == 1
+    assert row["risk_dollars"] == economic_risk_dollars(1, 0.78)
+    assert row["risk_dollars"] == pytest.approx(0.78)
+    assert row["risk_dollars"] == maker_cost_per_contract("No", yes_book=0.22)
 
 
 def test_journal_live_places_two_v2_orders_write_two_rows(tmp_path):
