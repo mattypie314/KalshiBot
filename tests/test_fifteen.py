@@ -92,18 +92,17 @@ def test_seconds_until_entry_window_waits_early_and_skips_late():
     assert seconds_until_entry_window(_et(10, 21)) is None
 
 
-def test_systemd_timer_fires_inside_entry_window():
-    """kalshi-15m.timer must land in ENTRY_OFFSETS (regression vs :01 fires)."""
+def test_systemd_timer_fires_once_at_minute_three():
+    """Live Pi unit is a single shot at :03/:18/:33/:48 — not :02 and not a :02–:05 spray."""
     timer = Path(__file__).resolve().parents[1] / "scripts" / "kalshi-15m.timer"
     text = timer.read_text()
-    assert "OnCalendar=" in text
-    # Extract minute list from *:03,18,33,48:00
+    assert "America/New_York" in text
     import re
 
     match = re.search(r"OnCalendar=\S+\s+\*:([0-9,]+):", text)
     assert match, text
     minutes = [int(part) for part in match.group(1).split(",") if part.strip()]
-    assert minutes, text
+    assert minutes == [3, 18, 33, 48], minutes
     for minute in minutes:
         assert minute % 15 in ENTRY_OFFSETS, f"timer minute {minute} outside entry {ENTRY_OFFSETS}"
 

@@ -1,11 +1,13 @@
 [Unit]
-Description=KalshiBot 15-minute timer (ship DISABLED — do not enable until armed)
-# Do not enable this timer by default. Hourly kalshi-hourly.timer is a
+Description=Run KalshiBot15 at :03/:18/:33/:48 Eastern (15m windows, minute 3)
+# Ship DISABLED — do not enable until armed. Hourly kalshi-hourly.timer is a
 # different unit under /home/KalshiBot — leave it alone.
 
 [Timer]
-# Fire at the start of the entry window (minutes 3–5 of each 15m block).
-# :01/:16/:31/:46 is too early — scan would always sit "outside entry window".
+# One shot per 15m block at minute 3 (entry wants 3–5). Matches live
+# /etc/systemd/system/kalshi-15m.timer on mattypi.
+# Do not fire at :02/:17/:32/:47 — that logs "outside entry window (minute 2)".
+# Do not spray *:02,03,04,05,17,... — one fire per window is enough.
 OnCalendar=*-*-* *:03,18,33,48:00 America/New_York
 # Do not catch up after downtime — a late fire would use a stale window.
 Persistent=false
