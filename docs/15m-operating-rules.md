@@ -61,7 +61,7 @@ This is the directional / mispricing pass.
 **Pass/Fail**
 1. Compute model-fair vs live mid / executable price.
 2. **Fail → skip.** Do not “just scalp it.”
-3. **Pass → one limit**, not a market. **One idea per window** (best Pass only).
+3. **Pass → one limit**, not a market. **One idea per asset per window** (best BTC and best ETH if both Pass).
 
 **Hard skips**
 - Under ~**8 minutes** left unless the strike is already decided.
@@ -231,4 +231,4 @@ Suggested first live day: dry-only until paper or attended makers prove the jour
 
 ## 15. One-line standing order
 
-**Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one idea per window, $1–$2 risk, $5 pot — quit at $0, ask at $10, flat is fine.**
+**Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one idea per asset per window (BTC+ETH both OK), $1–$2 risk, $5 pot — quit at $0, ask at $10, flat is fine.**

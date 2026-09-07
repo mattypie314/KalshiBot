@@ -89,12 +89,14 @@ class HourlySettings(BaseSettings):
     vol_pause_mult: float = 2.0
     # Turbo Mode: soften close-strike / min-edge enough to rest a maker on the
     # nearest strike. Default off — strict Pass is unchanged. Never crosses,
-    # still requires BRTI/ERTI, still capped by MAX_RISK, one idea per run.
+    # still requires BRTI/ERTI, still capped by MAX_RISK, one idea per asset
+    # (BTC+ETH both OK when they independently Pass).
     force_near_rule: bool = False
 
     assets: str = "BTC,ETH"
     max_markets_per_asset: int = 12
-    max_ideas_per_run: int = 1
+    # Total cap after the 1-per-asset pick. 2 lets BTC and ETH both rest.
+    max_ideas_per_run: int = 2
     min_minutes_left: float = 3
     max_spread: float = 0.06
     min_visible_depth_contracts: int = 5

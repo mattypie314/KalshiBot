@@ -179,7 +179,7 @@ def test_win_resets_streak_and_working_blocks_window():
 
 
 def test_canceled_resting_entry_still_blocks_window():
-    """Matt canceling a rest is respected: we do not immediately re-fire that window."""
+    """Matt canceling a rest is respected: we do not immediately re-fire that coin."""
     wid = fifteen_window_id(_et(10, 3))
     state = {
         "tickets": [
@@ -194,6 +194,47 @@ def test_canceled_resting_entry_still_blocks_window():
     }
     assert fifteen_working(state, _et(10, 3))
     assert fifteen_working(state, _et(10, 8))
+    assert fifteen_working(state, _et(10, 3), asset="BTC")
+    assert not fifteen_working(state, _et(10, 3), asset="ETH")
+
+
+def test_fifteen_working_is_per_asset():
+    wid = fifteen_window_id(_et(10, 3))
+    btc = {
+        "tickets": [
+            {
+                "status": "open",
+                "loop": "fifteen",
+                "window_id": wid,
+                "ticker": "KXBTC15M-1",
+                "asset": "BTC",
+            }
+        ],
+        "rests": [],
+    }
+    assert fifteen_working(btc, _et(10, 3), asset="BTC")
+    assert not fifteen_working(btc, _et(10, 3), asset="ETH")
+    both = {
+        "tickets": [
+            {
+                "status": "open",
+                "loop": "fifteen",
+                "window_id": wid,
+                "ticker": "KXBTC15M-1",
+                "asset": "BTC",
+            },
+            {
+                "status": "open",
+                "loop": "fifteen",
+                "window_id": wid,
+                "ticker": "KXETH15M-1",
+                "asset": "ETH",
+            },
+        ]
+    }
+    assert fifteen_working(both, _et(10, 3), asset="BTC")
+    assert fifteen_working(both, _et(10, 3), asset="ETH")
+    assert fifteen_working(both, _et(10, 3))
 
 
 def test_size_room_and_half_sigma():
@@ -415,25 +456,37 @@ def test_cli_normalize_and_live_gates():
     assert main(["live", "--confirm", "LIVE"]) == EXIT_CONFIG
 
 
-def _pass_market(now: datetime, ticker: str = "KXBTC15M-TEST-T64000") -> HourlyMarket:
+def _pass_market(
+    now: datetime,
+    ticker: str = "KXBTC15M-TEST-T64000",
+    *,
+    asset: str = "BTC",
+    threshold: float | None = None,
+    yes_bid: float = 0.54,
+    yes_ask: float = 0.56,
+) -> HourlyMarket:
     close = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0) + timedelta(
         minutes=15
     )
+    series = "KXETH15M" if asset == "ETH" else "KXBTC15M"
+    strike = 2300.0 if asset == "ETH" else 64000.0
+    if threshold is not None:
+        strike = threshold
     return HourlyMarket(
         ticker=ticker,
-        event_ticker="KXBTC15M-TEST",
-        series_ticker="KXBTC15M",
-        asset="BTC",
-        title="BTC 15m",
-        yes_sub_title="$64,000 or above",
-        threshold=64000.0,
+        event_ticker=f"{series}-TEST",
+        series_ticker=series,
+        asset=asset,
+        title=f"{asset} 15m",
+        yes_sub_title=f"${strike:,.0f} or above",
+        threshold=strike,
         strike_type="greater",
         close_time=close,
         status="active",
-        yes_bid=0.54,
-        yes_ask=0.56,
-        no_bid=0.44,
-        no_ask=0.46,
+        yes_bid=yes_bid,
+        yes_ask=yes_ask,
+        no_bid=max(0.01, 1.0 - yes_ask),
+        no_ask=max(0.02, 1.0 - yes_bid),
         yes_bid_size=10,
         yes_ask_size=10,
         no_bid_size=10,
@@ -448,32 +501,35 @@ def _pass_market(now: datetime, ticker: str = "KXBTC15M-TEST-T64000") -> HourlyM
 class _FakeSpotService:
     def __init__(self, candles, **_kwargs):
         self._candles = candles
+        self._prices = {"BTC": 65000.0, "ETH": 2400.0}
 
     def snapshot(self, assets, fallbacks=None):
         return SpotSnapshot(
-            prices={"BTC": 65000.0},
-            hourly_vol={"BTC": 0.004},
-            sources={"BTC": "cfbenchmarks"},
+            prices=dict(self._prices),
+            hourly_vol={"BTC": 0.004, "ETH": 0.005},
+            sources={"BTC": "cfbenchmarks", "ETH": "cfbenchmarks"},
             source="cfbenchmarks",
-            candles={"BTC": list(self._candles)},
+            candles={name: list(self._candles) for name in self._prices},
         )
 
     def close(self):
         return None
 
 
-def _patch_collect(monkeypatch, candles, market):
+def _patch_collect(monkeypatch, candles, market, extra_markets=None):
     monkeypatch.setattr(
         "src.fifteen.main.SpotService",
         lambda **kwargs: _FakeSpotService(candles),
     )
+    markets = [market, *(extra_markets or [])]
 
     class Discovery:
         def __init__(self, client):
             self.client = client
 
         def discover_fifteen(self, assets, **kwargs):
-            return [market]
+            want = {str(name).upper() for name in assets}
+            return [row for row in markets if row.asset in want]
 
     monkeypatch.setattr("src.fifteen.main.MarketDiscovery", Discovery)
 
@@ -556,6 +612,95 @@ def test_collect_ideas_default_uses_settings_chop_veto(monkeypatch):
     )
     assert ideas == []
     assert any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_collect_ideas_both_assets_pass(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    btc = _pass_market(now, "KXBTC15M-TEST-T64000", asset="BTC")
+    eth = _pass_market(now, "KXETH15M-TEST-T2300", asset="ETH")
+    _patch_collect(monkeypatch, trending_ohlc(), btc, extra_markets=[eth])
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert {idea.market.asset for idea in ideas} == {"BTC", "ETH"}
+    assert not any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_collect_ideas_two_btc_passes_keeps_best(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    better = _pass_market(
+        now,
+        "KXBTC15M-TEST-T64000",
+        asset="BTC",
+        threshold=64000.0,
+        yes_bid=0.50,
+        yes_ask=0.52,
+    )
+    worse = _pass_market(
+        now,
+        "KXBTC15M-TEST-T63000",
+        asset="BTC",
+        threshold=63000.0,
+        yes_bid=0.78,
+        yes_ask=0.80,
+    )
+    _patch_collect(monkeypatch, trending_ohlc(), better, extra_markets=[worse])
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert [idea.market.ticker for idea in ideas] == ["KXBTC15M-TEST-T64000"]
+    assert any("KXBTC15M-TEST-T63000" in note and "held back" in note for note in notes)
+
+
+def test_collect_ideas_btc_working_still_allows_eth(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    wid = fifteen_window_id(now)
+    btc = _pass_market(now, "KXBTC15M-TEST-T64000", asset="BTC")
+    eth = _pass_market(now, "KXETH15M-TEST-T2300", asset="ETH")
+    _patch_collect(monkeypatch, trending_ohlc(), btc, extra_markets=[eth])
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={
+            "tickets": [
+                {
+                    "status": "open",
+                    "loop": "fifteen",
+                    "window_id": wid,
+                    "ticker": "KXBTC15M-1",
+                    "asset": "BTC",
+                }
+            ],
+            "rests": [],
+        },
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert [idea.market.asset for idea in ideas] == ["ETH"]
+    assert any("already working" in note and "BTC" in note for note in notes)
 
 
 def test_run_scan_live_and_paper_share_chop_veto(monkeypatch, tmp_path):

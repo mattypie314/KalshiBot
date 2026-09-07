@@ -12,6 +12,7 @@ from typing import Any
 
 from src.cfindex import FIFTEEN_INDEX_BY_ASSET, fifteen_index_id_for
 from src.clock import configure_logging, format_et, to_et
+from src.exposure import select_ideas_per_asset
 from src.executor import CRYPTO_SHARD, FIFTEEN_SERIES, execute_ideas, is_fifteen_rest
 from src.exits import manage_open_positions
 from src.fees import taker_fee_dollars
@@ -192,7 +193,9 @@ def collect_ideas(
 ) -> tuple[list[Idea], list[str], Any]:
     now = to_et(now)
     notes: list[str] = []
-    assets = [asset.upper()] if asset else list(settings.asset_list)
+    requested = [asset.upper()] if asset else list(settings.asset_list)
+    working = [name for name in requested if fifteen_working(state, now, asset=name)]
+    assets = [name for name in requested if name not in working]
     # Live and paper share this stack. FIFTEEN_CHOP_VETO=false is the only off switch.
     veto_chop = settings.chop_veto if apply_chop_veto is None else apply_chop_veto
     regimes: dict[str, Any] = {}
@@ -206,8 +209,13 @@ def collect_ideas(
         return [], ["15m session stopped (3 losses)"], None
     if in_fifteen_revenge(state, now):
         return [], ["revenge window after a loser"], None
-    if fifteen_working(state, now):
-        return [], ["already working a 15m ticket this window"], None
+    if working:
+        note = "already working a 15m ticket this window"
+        if assets:
+            note = f"{note} on {' and '.join(working)}"
+        notes.append(note)
+        if not assets:
+            return [], notes, None
     if not in_fifteen_entry_window(now):
         notes.append(f"outside entry window (minute {now.minute % 15}; want 2-4)")
 
@@ -220,7 +228,7 @@ def collect_ideas(
     )
     try:
         spots = spots_svc.snapshot(
-            assets,
+            requested,
             fallbacks={
                 "BTC": settings.hourly_vol_fallback_btc,
                 "ETH": settings.hourly_vol_fallback_eth,
@@ -293,7 +301,17 @@ def collect_ideas(
         candidates.append(idea)
 
     candidates.sort(key=lambda i: abs(i.net_edge), reverse=True)
-    return candidates[: settings.max_ideas_per_run], notes, spots
+    chosen, extra = select_ideas_per_asset(
+        candidates,
+        max_per_asset=1,
+        max_ideas=settings.max_ideas_per_run,
+    )
+    for idea in extra:
+        notes.append(
+            f"{idea.market.ticker}: held back (one per asset; "
+            f"max {settings.max_ideas_per_run}/run)"
+        )
+    return chosen, notes, spots
 
 
 def append_scan_log(
@@ -679,6 +697,7 @@ def run_scan(
                     "loop": "fifteen",
                     "window_id": wid,
                     "ticker": idea.market.ticker,
+                    "asset": idea.market.asset,
                     "side": idea.side,
                     "contracts": idea.contracts,
                     "limit": idea.limit_price,

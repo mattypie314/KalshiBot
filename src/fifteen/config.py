@@ -57,7 +57,15 @@ class FifteenSettings(BaseSettings):
 
     assets: str = "BTC,ETH"
     max_markets_per_asset: int = 8
-    max_ideas_per_run: int = Field(default=1, validation_alias=AliasChoices("FIFTEEN_MAX_IDEAS_PER_RUN", "MAX_IDEAS_PER_RUN"))
+    # Total cap after the 1-per-asset pick. 2 lets BTC and ETH both rest.
+    max_ideas_per_run: int = Field(
+        default=2,
+        validation_alias=AliasChoices(
+            "FIFTEEN_MAX_IDEAS_PER_RUN",
+            "MAX_IDEAS_PER_RUN",
+            "MAX_IDEAS_PER_WINDOW",
+        ),
+    )
     min_minutes_left: float = Field(default=8.0, validation_alias=AliasChoices("FIFTEEN_MIN_MINUTES_LEFT", "MIN_MINUTES_LEFT"))
     max_spread: float = 0.10
     spot_source: str = "cfbenchmarks"
