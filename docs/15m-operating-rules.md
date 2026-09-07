@@ -108,7 +108,7 @@ Defaults Matt can override in chat; keep them in a tracker file (e.g. `artifacts
 
 Never size past remaining room or past **crypto shard cash**.
 
-Credit the pot from **live** 15m BTC/ETH Passes only. `kind=backfill` fill-recon rows stay in the trade log but do not move pot equity, W-L streak, or the PLAY scoreboard. Paper tape stays separate unless Matt says otherwise. Termius boards are in-repo: `./kb15 score` / `kbscore` (paper) and `./kb15 livescore` / `kbscore-live` (live cash). Both call `src.journal.scoreboard_rows`.
+Credit the pot from **live** 15m BTC/ETH Passes only. `kind=backfill` fill-recon rows stay in the trade log but do not move pot equity, W-L streak, or the PLAY scoreboard. Paper tape stays separate unless Matt says otherwise.
 
 Do **not** raise size to win it back. Do **not** flip always-No ↔ always-Yes after a loser.
 

@@ -56,7 +56,6 @@ from src.fifteen.edge import (
 )
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
 from src.fifteen.regime import chop_veto_note, classify_regime
-from src.fifteen.scoreboard import run_live_score, run_paper_score
 from src.kalshi_client import AuthConfigError, ForbiddenError, KalshiClient, RateLimitedError
 from src.markets import HourlyMarket, MarketDiscovery
 from src.model import fair_prob, hours_left, model_z
@@ -861,7 +860,6 @@ def run_eval(settings: FifteenSettings) -> int:
         f"backfills excluded)"
     )
     print(f"pot file ${pot.balance:.2f} realized ${pot.realized_pnl:.2f} stopped={pot.stopped}")
-    print("Termius boards: ./kb15 score (paper)  ·  ./kb15 livescore (live cash)")
     return EXIT_OK
 
 
@@ -915,11 +913,7 @@ def normalize_argv(argv: list[str] | None) -> list[str]:
         "p": "paper",
         "7": "paper",
         "livescore": "livescore",
-        "live-score": "livescore",
-        "kbscore-live": "livescore",
         "score": "score",
-        "kbscore": "score",
-        "paper-score": "score",
     }
     if not raw:
         return ["scan"]
@@ -950,8 +944,8 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("eval", help="Paper log + live journal + pot summary")
     sub.add_parser("paper", help="Same as eval")
-    sub.add_parser("score", help="Termius paper scoreboard (PLAY+SIT, skip backfills)")
-    sub.add_parser("livescore", help="Termius live scoreboard (fifteen_trade_log, skip backfills)")
+    sub.add_parser("score", help="Same as eval (paper + livescore)")
+    sub.add_parser("livescore", help="Same as eval; live journal is fifteen_trade_log.jsonl")
 
     args = parser.parse_args(normalize_argv(argv))
     configure_logging()
@@ -976,12 +970,8 @@ def main(argv: list[str] | None = None) -> int:
             print("Live aborted (not confirmed).")
             return EXIT_OK
         return run_scan(settings, asset=None, place=True, force_live=True, armed=True)
-    if args.command in {"eval", "paper"}:
+    if args.command in {"eval", "paper", "score", "livescore"}:
         return run_eval(settings)
-    if args.command == "score":
-        return run_paper_score(settings)
-    if args.command == "livescore":
-        return run_live_score(settings)
     return EXIT_CONFIG
 
 
