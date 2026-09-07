@@ -7,6 +7,8 @@
 #                 ./kb env      (e / 5)   show/set USE_DEMO in .env
 #                 ./kb eval     (v / 6)   paper + live journal / scan-log
 #                 ./kb paper    (p / 7)   same report (paper PnL is separate)
+#                 ./kb score              Termius hourly paper board
+#                 ./kb livescore          Termius hourly live board
 #                 ./kb fifteen  …         15m BTC/ETH bot (also ./kb15)
 root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 export PYTHONPATH="${PYTHONPATH:-$root}"

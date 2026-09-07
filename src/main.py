@@ -730,6 +730,10 @@ MODE_ALIASES = {
     "7": "paper",
     "p": "paper",
     "paper": "paper",
+    "score": "score",
+    "livescore": "livescore",
+    "score-hourly": "score",
+    "livescore-hourly": "livescore",
 }
 
 MODE_MENU = """\
@@ -897,6 +901,8 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("eval", help="Summarize paper PnL, live journal, and scan log (no orders)")
     sub.add_parser("paper", help="Same as eval; paper PnL is listed separately from live")
+    sub.add_parser("score", help="Termius hourly PAPER board (not live)")
+    sub.add_parser("livescore", help="Termius hourly LIVE board (not paper)")
 
     args = parser.parse_args(normalize_argv(argv))
     configure_logging()
@@ -946,6 +952,11 @@ def main(argv: list[str] | None = None) -> int:
         return run_env(settings, prod=bool(args.prod), demo=bool(args.demo))
     if args.command in {"eval", "paper"}:
         return run_eval(settings)
+    if args.command in {"score", "livescore"}:
+        from src.scoreboard import run_board
+
+        name = "score-hourly" if args.command == "score" else "livescore-hourly"
+        return run_board(name, hourly_root=Path.cwd())
     return EXIT_CONFIG
 
 

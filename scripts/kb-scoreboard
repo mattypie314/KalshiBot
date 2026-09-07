@@ -1,0 +1,46 @@
+#!/bin/sh
+# Termius scoreboard dispatcher. Aliases in this directory exec this file.
+# Boards: score | livescore | score-hourly | livescore-hourly | scoreall | livescore-all
+# Follows this file if it is a symlink so ~/.local/bin/* works.
+set -e
+export FORCE_COLOR="${FORCE_COLOR:-1}"
+if command -v readlink >/dev/null 2>&1; then
+  here=$(readlink -f "$0" 2>/dev/null || printf '%s\n' "$0")
+else
+  here="$0"
+fi
+scripts_dir=$(CDPATH= cd -- "$(dirname "$here")" && pwd)
+root=$(CDPATH= cd -- "$scripts_dir/.." && pwd)
+if [ ! -f "$root/src/scoreboard.py" ]; then
+  echo "kb-scoreboard: cannot find src/scoreboard.py next to $scripts_dir" >&2
+  exit 1
+fi
+export PYTHONPATH="${PYTHONPATH:-$root}"
+export KALSHIBOT15_ROOT="${KALSHIBOT15_ROOT:-/home/KalshiBot15}"
+export KALSHIBOT_ROOT="${KALSHIBOT_ROOT:-/home/KalshiBot}"
+cd "$root" || exit 1
+if [ -x "$root/.venv/bin/python" ]; then
+  py="$root/.venv/bin/python"
+else
+  py="python3"
+fi
+board="${1:-}"
+if [ -z "$board" ]; then
+  name=$(basename "$0")
+  case "$name" in
+    kbscore|score) board=score ;;
+    kbscore-live|livescore) board=livescore ;;
+    kbscore-hourly|score-hourly|hscore) board=score-hourly ;;
+    kbscore-hourly-live|livescore-hourly|hlivescore) board=livescore-hourly ;;
+    scoreall|score-all) board=scoreall ;;
+    livescore-all|livescoreall) board=livescore-all ;;
+    *) board=score ;;
+  esac
+  shift_n=0
+else
+  shift_n=1
+fi
+if [ "$shift_n" -eq 1 ]; then
+  shift
+fi
+exec "$py" -m src.scoreboard "$board" "$@"

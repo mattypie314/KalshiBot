@@ -207,6 +207,8 @@ After that contract’s hour, `scan` / `once` / `eval` / `paper` settle pending 
 
 `./kb eval` reports paper n tickets, wins/losses, assumed-fill PnL, pending, and sit/unscored. This is **not live profitability**. Live stays dual-gated and off (`HALTED=true`, `LIVE_TRADING=false`, `CONFIRM_LIVE=NO`). Do not retune the 6% edge, close-strike, or size caps from this tape.
 
+Termius PLAY/SIT boards (paper and live never mix): `score` / `livescore` are **15m**; `score-hourly` / `livescore-hourly` are hourly; `scoreall` / `livescore-all` combine both. Install: `scripts/install-pi-scoreboards.sh`. Notes: [`docs/scoreboards.md`](docs/scoreboards.md).
+
 ```bash
 pytest
 ./kb eval    # paper tape + local live journal + historical GitHub-scan replay; does not claim edge
