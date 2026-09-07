@@ -53,7 +53,13 @@ from src.kalshi_client import AuthConfigError, ForbiddenError, KalshiClient, Rat
 from src.markets import HourlyMarket, MarketDiscovery
 from src.model import fair_prob, hours_left, model_z
 from src.paper import FILL_ASSUMED_MAKER, record_printed_ideas, try_settle_paper
-from src.sizer import size_idea
+from src.sizer import (
+    economic_risk_dollars,
+    labeled_limit_from_yes_book,
+    maker_cost_per_contract,
+    size_idea,
+    yes_book_price,
+)
 from src.data_fetcher import signals_for_asset
 from src.indicators import tape_from_15m_signals
 from src.spot import SpotService
@@ -129,7 +135,10 @@ def idea_from_pass(
     if not decision.passed:
         return None
     side = "Yes" if str(decision.side).lower() == "yes" else "No"
-    limit = float(decision.join_price)
+    join = float(decision.join_price)
+    # join_price is on the Yes book. No joins the Yes ask (sell Yes). Size
+    # from the dollars Kalshi locks — the No complement — not the cheap ask.
+    limit = labeled_limit_from_yes_book(side, join)
     if not 0 < limit < 1:
         return None
     fair = float(decision.model_prob)
@@ -146,6 +155,7 @@ def idea_from_pass(
         max_risk_pct=1.0,  # pot room already caps dollars
         max_risk_dollars=stake_cap,
         preferred_risk_dollars=stake_cap,
+        cost_price=limit,
     )
     if sized.skip or sized.contracts < 1:
         return None
@@ -172,7 +182,7 @@ def idea_from_pass(
         max_loss=sized.risk_dollars,
         rationale=[
             decision.line,
-            f"maker join {limit:.2f} on {side}",
+            f"maker join Yes {join:.2f} as {side} (cost {limit:.2f})",
             f"pot room ${room:.2f}; risk ${sized.risk_dollars:.2f}",
         ],
         post_maker=True,
@@ -558,6 +568,23 @@ def _side_from_order(order: dict[str, Any]) -> str:
     return ""
 
 
+def _economic_place_risk(
+    *,
+    side: str,
+    contracts: int,
+    labeled_limit: float,
+    yes_book: float,
+) -> float:
+    """Journal dollars actually at risk, not cheap-side limit × contracts."""
+    if contracts < 1:
+        return 0.0
+    if yes_book and 0 < yes_book < 1:
+        cost = maker_cost_per_contract(side, yes_book=yes_book)
+    else:
+        cost = maker_cost_per_contract(side, labeled_limit=labeled_limit)
+    return economic_risk_dollars(contracts, cost)
+
+
 def _price_from_order(order: dict[str, Any]) -> float:
     for key in (
         "yes_price_dollars",
@@ -783,7 +810,14 @@ def journal_live_places(
             kalshi_price = idea.entry_price
             limit_price = idea.limit_price
             contracts = idea.contracts
-            risk_dollars = idea.risk_dollars
+            merged = dict(payload)
+            merged.update({k: v for k, v in order.items() if v not in (None, "")})
+            risk_dollars = _economic_place_risk(
+                side=side,
+                contracts=contracts,
+                labeled_limit=limit_price,
+                yes_book=_price_from_order(merged) or yes_book_price(side, limit_price),
+            )
             hourly_vol = vols.get(asset) or 0.0
             spot_source = sources.get(asset) or source
         else:
@@ -807,8 +841,11 @@ def journal_live_places(
                     ("initial_count_fp", "count_fp", "count", "remaining_count_fp", "remaining_count"),
                 )
             contracts = int(count) if count >= 1 else 0
-            risk_dollars = (
-                round(abs(contracts) * (limit_price or kalshi_price), 4) if contracts else 0.0
+            risk_dollars = _economic_place_risk(
+                side=side,
+                contracts=contracts,
+                labeled_limit=limit_price,
+                yes_book=kalshi_price,
             )
             hourly_vol = vols.get(asset) or 0.0
             spot_source = sources.get(asset) or source

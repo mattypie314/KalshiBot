@@ -3,7 +3,13 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from src.executor import execute_ideas, is_post_only_cross, step_more_passive
+from src.executor import (
+    _order_payload,
+    execute_ideas,
+    is_post_only_cross,
+    step_more_passive,
+)
+from src.sizer import yes_book_price
 from src.filters import Idea
 from src.markets import HourlyMarket
 from datetime import datetime, timedelta, timezone
@@ -52,6 +58,17 @@ def _idea() -> Idea:
         rationale=["unit test"],
         post_maker=True,
     )
+
+
+def test_no_idea_posts_sell_yes_at_complement():
+    idea = _idea()
+    idea.side = "No"
+    idea.limit_price = 0.76
+    idea.entry_price = 0.76
+    payload = _order_payload(idea, "test-run")
+    assert payload["side"] == "ask"
+    assert payload["price"] == "0.2400"
+    assert yes_book_price("No", 0.76) == 0.24
 
 
 def test_dry_run_never_calls_create_order(tmp_path: Path):

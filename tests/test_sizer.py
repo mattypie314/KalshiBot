@@ -1,6 +1,13 @@
 """Fractional Kelly sizer never breaches the $2 hard cap on a $40 book."""
 
-from src.sizer import SizeDecision, size_idea
+from src.sizer import (
+    SizeDecision,
+    economic_risk_dollars,
+    labeled_limit_from_yes_book,
+    maker_cost_per_contract,
+    size_idea,
+    yes_book_price,
+)
 
 
 BANKROLL = 40.00
@@ -68,3 +75,44 @@ def test_sizer_does_not_increase_size_after_loss_same_hour():
     )
     assert not revenge.skip
     assert revenge.contracts == 1
+
+
+def test_no_via_sell_yes_sizes_from_complement_not_cheap_limit():
+    """2026-09-07 ETH No: 4 × 0.24 looked like $0.96; sell-Yes @ 0.22 locked $3.12."""
+    yes_ask = 0.24
+    cost = maker_cost_per_contract("No", yes_book=yes_ask)
+    assert cost == 0.76
+    assert labeled_limit_from_yes_book("No", yes_ask) == 0.76
+    assert yes_book_price("No", 0.76) == 0.24
+
+    max_risk = 1.50
+    # Old math: floor(1.50 / 0.24) = 6 contracts × $0.76 = $4.56 over the cap.
+    leaked = int(max_risk / yes_ask) * cost
+    assert leaked > max_risk
+
+    decision = _size(
+        entry_price=cost,
+        p_hat=0.90,
+        max_risk_dollars=max_risk,
+        preferred_risk_dollars=max_risk,
+        cost_price=cost,
+    )
+    assert not decision.skip
+    assert decision.contracts * cost <= max_risk + 1e-9
+    assert decision.risk_dollars == economic_risk_dollars(decision.contracts, cost)
+    assert decision.risk_dollars <= max_risk + 1e-9
+    assert decision.contracts == 1  # floor(1.50 / 0.76)
+
+
+def test_yes_via_buy_yes_still_sizes_on_limit():
+    decision = _size(
+        entry_price=0.54,
+        p_hat=0.70,
+        max_risk_dollars=1.50,
+        preferred_risk_dollars=1.50,
+        cost_price=maker_cost_per_contract("Yes", labeled_limit=0.54),
+    )
+    assert not decision.skip
+    assert decision.contracts == 2  # floor(1.50 / 0.54)
+    assert decision.risk_dollars == economic_risk_dollars(2, 0.54)
+    assert yes_book_price("Yes", 0.54) == 0.54
