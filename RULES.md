@@ -104,7 +104,7 @@ If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid
 
 ## Hard cash-out at 99¢ (all bots)
 
-When the held side’s live bid hits **99¢** (~99% implied), flatten immediately. This is a hard rule for hourly **and** 15m. It **beats / runs ahead of** the +2¢ take-profit. Live timer oneshots **place the exit** — they do not wait for an operator.
+When the held side’s live bid hits **99¢** (~99% implied), flatten immediately. This is a hard rule for hourly **and** 15m. It **beats / runs ahead of** early 95¢ cash-out and the +2¢ take-profit. Live timer oneshots **place the exit** — they do not wait for an operator.
 
 | Held | Trigger (default `CASH_OUT_BID=0.99`) |
 | --- | --- |
@@ -115,6 +115,30 @@ When the held side’s live bid hits **99¢** (~99% implied), flatten immediatel
 - Journal / trade-log label: `cash_out_99`.
 - Hourly live ticks run a compact manage-open-positions step before new entries (and even when the scan has no new idea).
 - 15m: `should_take_profit` is also True at fill+2¢; `cash_out_99` still wins the label when the bid is 99¢.
+
+## Early cash-out at 95¢ with time left (all bots)
+
+When we already hold a fill, flatten if the held-side live bid is **≥ 95¢** (`EARLY_CASH_OUT_BID=0.95`) **and** minutes to settlement are **≤ 10** (`EARLY_CASH_OUT_MINUTES=10`). Prefer locking the win over riding the last minutes and risking a wipeout.
+
+- Priority: **99¢** (any time left) → **95¢ + ≤10m** → **fill+2¢ TP**.
+- 95¢ with 11+ minutes left does **not** fire this rule.
+- 99¢ still fires immediately even with plenty of time left.
+- Journal / trade-log label: `cash_out_95_time`.
+- 15m aliases: `FIFTEEN_EARLY_CASH_OUT_BID` / `FIFTEEN_EARLY_CASH_OUT_MINUTES`.
+
+## Manual in-app flatten (all bots)
+
+If a live entry we placed is later flat because someone sold/flattened **in the Kalshi app** — position gone, and a matching sell/close fill whose `order_id` is **not** one of our exit order ids — journal it as an exit. Label: `manual_flatten` (alias `manual_cash_out`). Do not treat that as a mystery disappearance, and do not try to flatten a position that is already gone.
+
+Bot-placed 99¢ / 95¢+time / +2¢ exits keep their own labels when the close fill matches `exit_order_id`.
+
+## Resting-entry cancels (current behavior)
+
+If Matt cancels a resting **entry** in the app, the bot does **not** immediately replace it.
+
+- Hourly: `last_ticker` stays until that market settles, so `blocks_new_idea` sits the rest of the hour.
+- 15m: an `open` ticket/rest for this window still counts as working (`fifteen_working`), so that window sits.
+- The next tick is a fresh Pass/Sit. A new place happens only if the usual filters Pass **and** those working-ticket gates are clear. We do not fight cancels by re-posting the same rest.
 
 ## What it will not do
 

@@ -346,6 +346,8 @@ def _already_journaled(trades: list[dict[str, Any]], *, order_id: str, ticker: s
         if want_order and str(row.get("order_id") or "") == want_order:
             return True
         if want_ticker and str(row.get("ticker") or "").upper() == want_ticker:
+            if row.get("exit_reason"):
+                continue
             if str(row.get("result") or "pending") == "pending":
                 return True
     return False
@@ -371,6 +373,8 @@ def _open_journal_risk(trades: list[dict[str, Any]]) -> float:
         if not _is_live_entry(row):
             continue
         if str(row.get("result") or "pending") in {"win", "loss", "unfilled"}:
+            continue
+        if row.get("exit_reason"):
             continue
         try:
             total += float(row.get("risk_dollars") or 0)
