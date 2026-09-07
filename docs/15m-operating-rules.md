@@ -176,6 +176,7 @@ Log every idea / ticket with at least:
 Rules:
 - Unfilled rests are **not** wins or losses.
 - Paper / assumed-maker-fill tapes are **not** live profitability.
+- 15m paper shadows the live window: same Pass/Sit as the live tick, not a later scan. Dry `scan` still papers when live has not decided that window. Paper journal stays off the live pot.
 - Do not retune edge thresholds from thin samples.
 - If the close-strike / buy-No bucket is underwater, **turn that rule off**, don’t average down.
 

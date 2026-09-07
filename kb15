@@ -2,7 +2,7 @@
 # 15m BTC/ETH edge-loop bot (package: src/fifteen/). Sibling to ./kb hourly.
 # Does not cancel or trade hourly KXBTCD / KXETHD rests.
 #   ./kb15          → scan
-#   ./kb15 scan     (s / 1)
+#   ./kb15 scan     (s / 1)  paper shadows live; dry-only papers Pass
 #   ./kb15 once     (o / 2)
 #   ./kb15 auth     (a / 3)
 #   ./kb15 live     (l / 4)

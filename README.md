@@ -207,7 +207,7 @@ Sibling bot for Kalshi **15-minute** BTC/ETH threshold books (`KXBTC15M` / `KXET
 
 ```bash
 chmod +x kb15
-./kb15              # scan (paper on Pass)
+./kb15              # scan (paper shadows live; dry-only papers Pass)
 ./kb15 scan         # also: s / 1
 ./kb15 once         # dry-run maker payloads (o / 2)
 ./kb15 auth         # key check (a / 3)
