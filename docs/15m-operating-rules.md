@@ -168,7 +168,7 @@ Writes go through signed Kalshi REST V2 order endpoints (or the sanctioned MCP p
 ## 9. Timing & cadence
 
 - Prefer watches at the **start** of each 15m window (minutes 3–5), not the end — unless running the last-minute maker submodule.
-- Suggested dry cadence if automated: every 15m at `:01` / `:16` / `:31` / `:46` ET on weekdays (or first minute of each window). Adjust to Matt’s waking hours.
+- Suggested dry cadence if automated: every 15m at `:03` / `:18` / `:33` / `:48` ET on weekdays (aligned with the entry window). Adjust to Matt’s waking hours.
 - Stay quiet on sit-only runs unless Matt asked for noisy updates.
 
 ---

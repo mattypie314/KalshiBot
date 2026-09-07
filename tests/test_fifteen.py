@@ -31,7 +31,9 @@ from src.fifteen.edge import (
     pass_fail,
     record_fifteen_result,
     revenge_until_after_loss,
+    seconds_until_entry_window,
     strike_decided,
+    ENTRY_OFFSETS,
 )
 from src.fifteen.main import (
     collect_ideas,
@@ -78,6 +80,51 @@ def test_entry_window_is_minutes_three_to_five():
     assert not in_fifteen_entry_window(_et(10, 1))
     assert not in_fifteen_entry_window(_et(10, 6))
     assert not in_fifteen_entry_window(_et(10, 12))
+
+
+def test_seconds_until_entry_window_waits_early_and_skips_late():
+    early = seconds_until_entry_window(_et(10, 1))
+    assert early is not None and 110 <= early <= 120
+    assert seconds_until_entry_window(_et(10, 3)) == 0.0
+    assert seconds_until_entry_window(_et(10, 5)) == 0.0
+    assert seconds_until_entry_window(_et(10, 6)) is None
+    assert seconds_until_entry_window(_et(10, 16)) is not None
+    assert seconds_until_entry_window(_et(10, 21)) is None
+
+
+def test_systemd_timer_fires_inside_entry_window():
+    """kalshi-15m.timer must land in ENTRY_OFFSETS (regression vs :01 fires)."""
+    timer = Path(__file__).resolve().parents[1] / "scripts" / "kalshi-15m.timer"
+    text = timer.read_text()
+    assert "OnCalendar=" in text
+    # Extract minute list from *:03,18,33,48:00
+    import re
+
+    match = re.search(r"OnCalendar=\S+\s+\*:([0-9,]+):", text)
+    assert match, text
+    minutes = [int(part) for part in match.group(1).split(",") if part.strip()]
+    assert minutes, text
+    for minute in minutes:
+        assert minute % 15 in ENTRY_OFFSETS, f"timer minute {minute} outside entry {ENTRY_OFFSETS}"
+
+
+def test_fifteen_example_env_risk_and_paths_bind(monkeypatch, tmp_path):
+    """Operator knobs in .env.fifteen.example must reach FifteenSettings."""
+    monkeypatch.setenv("PREFERRED_RISK_DOLLARS", "0.85")
+    monkeypatch.setenv("MAX_RISK_DOLLARS", "1.50")
+    monkeypatch.setenv("FIFTEEN_POT_ASK", "10")
+    monkeypatch.setenv("FIFTEEN_VOL_LOOKBACK_MINUTES", "90")
+    monkeypatch.setenv("FIFTEEN_VOL_FALLBACK_BTC", "0.0041")
+    monkeypatch.setenv("POT_PATH", str(tmp_path / "fifteen_pot.json"))
+    monkeypatch.setenv("STATE_PATH", str(tmp_path / "fifteen_state.json"))
+    settings = FifteenSettings()
+    assert settings.preferred_risk_dollars == 0.85
+    assert settings.max_risk_dollars == 1.50
+    assert settings.pot_double == 10.0
+    assert settings.vol_lookback_minutes == 90
+    assert settings.hourly_vol_fallback_btc == 0.0041
+    assert settings.pot_path.endswith("fifteen_pot.json")
+    assert settings.state_path.endswith("fifteen_state.json")
 
 
 def test_settlement_and_window_id():

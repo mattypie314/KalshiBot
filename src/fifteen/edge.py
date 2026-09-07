@@ -104,6 +104,24 @@ def in_fifteen_entry_window(now: datetime | None = None) -> bool:
     return now_et(now).minute % 15 in ENTRY_OFFSETS
 
 
+def seconds_until_entry_window(now: datetime | None = None) -> float | None:
+    """Seconds to sleep until minutes 3–5 open, or None if already past entry.
+
+    Returns 0 when already inside the entry window. Early fires (offsets 0–2,
+    including a stale :01 timer) should wait; late fires sit without waiting
+    for the next block.
+    """
+    local = now_et(now)
+    offset = local.minute % 15
+    if offset in ENTRY_OFFSETS:
+        return 0.0
+    earliest = min(ENTRY_OFFSETS)
+    if offset >= earliest:
+        return None
+    target = fifteen_window_start(local) + timedelta(minutes=earliest)
+    return max(0.0, (target - local).total_seconds())
+
+
 def in_fifteen_settlement(now: datetime | None = None) -> bool:
     return now_et(now).minute % 15 == 0
 

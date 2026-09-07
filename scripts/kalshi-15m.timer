@@ -4,7 +4,9 @@ Description=KalshiBot 15-minute timer (ship DISABLED — do not enable until arm
 # different unit under /home/KalshiBot — leave it alone.
 
 [Timer]
-OnCalendar=*-*-* *:01,16,31,46:00 America/New_York
+# Fire at the start of the entry window (minutes 3–5 of each 15m block).
+# :01/:16/:31/:46 is too early — scan would always sit "outside entry window".
+OnCalendar=*-*-* *:03,18,33,48:00 America/New_York
 # Do not catch up after downtime — a late fire would use a stale window.
 Persistent=false
 
