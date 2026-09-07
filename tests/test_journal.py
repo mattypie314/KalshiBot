@@ -201,3 +201,6 @@ def test_fill_status_from_order():
     assert fill_status_from_order({"fill_count": "3.00", "remaining_count": "0.00"}) == "filled"
     assert fill_status_from_order({"fill_count": "1.00", "remaining_count": "2.00"}) == "partial"
     assert fill_status_from_order({"status": "canceled", "fill_count": "0"}) == "canceled"
+    assert fill_status_from_order({"fill_count_fp": "2.00", "remaining_count_fp": "0.00"}) == "filled"
+    assert fill_status_from_order({"fill_count_fp": "1.00", "remaining_count_fp": "1.00"}) == "partial"
+    assert fill_status_from_order({"fill_count": "0.00", "fill_count_fp": "2.00", "remaining_count_fp": "0.00"}) == "filled"

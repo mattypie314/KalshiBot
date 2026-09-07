@@ -21,9 +21,10 @@ from src.evaluate import summarize_trades
 from src.journal import (
     append_trade,
     fill_status_from_order,
+    first_parsed_count,
     load_trades,
     new_trade_row,
-    parse_count,
+    order_filled_contracts,
     resolve_pending,
     write_trades,
 )
@@ -471,19 +472,119 @@ def _is_live_entry(row: dict[str, Any]) -> bool:
 
 
 def _already_journaled(trades: list[dict[str, Any]], *, order_id: str, ticker: str) -> bool:
+    """True when this live place is already a journal Pass.
+
+    A new Kalshi `order_id` is a new place — never skip it just because the
+    ticker already has a pending row (prior window leftover or a rest that
+    was replaced).
+    """
     want_order = str(order_id or "")
     want_ticker = str(ticker or "").upper()
     for row in trades:
         if not _is_live_entry(row):
             continue
-        if want_order and str(row.get("order_id") or "") == want_order:
+        got_order = str(row.get("order_id") or "")
+        if want_order and got_order == want_order:
             return True
+        if want_order:
+            continue
         if want_ticker and str(row.get("ticker") or "").upper() == want_ticker:
             if row.get("exit_reason"):
                 continue
             if str(row.get("result") or "pending") == "pending":
                 return True
     return False
+
+
+def _flatten_order(order: dict[str, Any]) -> dict[str, Any]:
+    nested = order.get("order")
+    if not isinstance(nested, dict):
+        return order
+    merged = dict(nested)
+    for key, value in order.items():
+        if key == "order":
+            continue
+        if value not in (None, "") or merged.get(key) in (None, ""):
+            merged[key] = value
+    return merged
+
+
+def _order_ticker(order: dict[str, Any]) -> str:
+    return str(order.get("ticker") or order.get("market_ticker") or "").strip()
+
+
+def _asset_from_ticker(ticker: str) -> str:
+    code = str(ticker or "").upper().split("-", 1)[0]
+    if "ETH" in code:
+        return "ETH"
+    if "BTC" in code:
+        return "BTC"
+    return ""
+
+
+def _side_from_order(order: dict[str, Any]) -> str:
+    for key in ("outcome_side", "side"):
+        text = str(order.get(key) or "").strip().lower()
+        if text in {"yes", "y", "bid"}:
+            return "Yes"
+        if text in {"no", "n", "ask"}:
+            return "No"
+    return ""
+
+
+def _price_from_order(order: dict[str, Any]) -> float:
+    for key in (
+        "yes_price_dollars",
+        "average_fill_price",
+        "price",
+        "yes_price",
+        "kalshi_price",
+        "limit_price",
+    ):
+        raw = order.get(key)
+        if raw in (None, ""):
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if 0 < value < 1:
+            return value
+    return 0.0
+
+
+def _payload_for_order(order: dict[str, Any], payloads: list[dict[str, Any]]) -> dict[str, Any]:
+    cid = str(order.get("client_order_id") or "")
+    if cid:
+        for payload in payloads:
+            if str(payload.get("client_order_id") or "") == cid:
+                return payload
+    ticker = _order_ticker(order).upper()
+    if ticker:
+        for payload in payloads:
+            if str(payload.get("ticker") or "").upper() == ticker:
+                return payload
+    return {}
+
+
+def _match_idea_for_place(
+    *,
+    ticker: str,
+    ideas: list[Idea],
+    used: set[int],
+) -> Idea | None:
+    want = str(ticker or "").upper()
+    if want:
+        for idea in ideas:
+            if id(idea) in used:
+                continue
+            if idea.market.ticker.upper() == want:
+                return idea
+        return None
+    leftover = [idea for idea in ideas if id(idea) not in used]
+    if len(leftover) == 1:
+        return leftover[0]
+    return None
 
 
 def _mark_ticket_resolved(state: dict[str, Any], ticker: str, *, result: str, pnl: object) -> None:
@@ -590,52 +691,119 @@ def journal_live_places(
     spots: Any,
     state: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Append one live journal row per successful 15m place. Paper stays separate."""
+    """Append one live journal row per successful 15m place. Paper stays separate.
+
+    Always writes a Pass for every placed order. Kalshi V2 place responses often
+    omit `ticker`; match via `market_ticker`, `client_order_id`, or synthesize.
+    """
     journal_path = Path(settings.trade_log_path)
     trades = load_trades(journal_path)
-    payloads = {
-        str(row.get("ticker") or ""): row for row in (result.get("orders") or []) if isinstance(row, dict)
-    }
+    order_payloads = [row for row in (result.get("orders") or []) if isinstance(row, dict)]
     prices = getattr(spots, "prices", {}) or {}
     vols = getattr(spots, "hourly_vol", {}) or {}
     source = getattr(spots, "source", "") or ""
     sources = getattr(spots, "sources", {}) or {}
     written: list[dict[str, Any]] = []
-    for order in result.get("placed") or []:
-        if not isinstance(order, dict):
+    used_ideas: set[int] = set()
+    for raw in result.get("placed") or []:
+        if not isinstance(raw, dict):
             continue
-        ticker = str(order.get("ticker") or order.get("market_ticker") or "")
-        idea = next((item for item in ideas if item.market.ticker == ticker), None)
-        if idea is None and len(ideas) == 1 and len(result.get("placed") or []) == 1:
-            idea = ideas[0]
-            ticker = idea.market.ticker
-        if idea is None:
-            continue
+        order = _flatten_order(raw)
+        payload = _payload_for_order(order, order_payloads)
+        ticker = _order_ticker(order) or str(payload.get("ticker") or "")
         order_id = str(order.get("order_id") or "")
-        payload = payloads.get(ticker) or {}
         client_order_id = str(
             order.get("client_order_id") or payload.get("client_order_id") or ""
         )
+        idea = _match_idea_for_place(ticker=ticker, ideas=ideas, used=used_ideas)
+        matched_ticker = bool(
+            idea is not None and ticker and idea.market.ticker.upper() == ticker.upper()
+        )
+        if idea is None:
+            logger.warning(
+                "15m live place: idea match failed ticker=%s order_id=%s "
+                "client_order_id=%s; synthesizing journal row from order",
+                ticker or "?",
+                order_id or "?",
+                client_order_id or "?",
+            )
+            print(
+                f"LIVE journal: no idea matched ticker={ticker or '?'} "
+                f"order_id={order_id or '?'} — writing synthesized Pass row",
+                flush=True,
+            )
+        elif not matched_ticker:
+            logger.warning(
+                "15m live place: ticker mismatch order=%s idea=%s order_id=%s; "
+                "journaling against best-effort idea",
+                ticker or "?",
+                idea.market.ticker,
+                order_id or "?",
+            )
+            ticker = idea.market.ticker
+        else:
+            ticker = idea.market.ticker
+        if idea is not None:
+            used_ideas.add(id(idea))
         if _already_journaled(trades, order_id=order_id, ticker=ticker):
             continue
+        if idea is not None:
+            asset = idea.market.asset
+            side = idea.side
+            strike = idea.market.threshold
+            spot = idea.spot or prices.get(asset) or 0.0
+            minutes_left = idea.minutes_left
+            fair = idea.fair
+            kalshi_price = idea.entry_price
+            limit_price = idea.limit_price
+            contracts = idea.contracts
+            risk_dollars = idea.risk_dollars
+            hourly_vol = vols.get(asset) or 0.0
+            spot_source = sources.get(asset) or source
+        else:
+            merged = dict(payload)
+            merged.update({k: v for k, v in order.items() if v not in (None, "")})
+            asset = _asset_from_ticker(ticker)
+            side = _side_from_order(merged) or "Yes"
+            strike = 0.0
+            spot = prices.get(asset) or 0.0
+            minutes_left = 0.0
+            fair = 0.0
+            kalshi_price = _price_from_order(merged)
+            if side == "No" and str(merged.get("side") or "").lower() == "ask" and kalshi_price:
+                limit_price = round(1.0 - kalshi_price, 4)
+            else:
+                limit_price = kalshi_price
+            count = order_filled_contracts(merged)
+            if count <= 0:
+                count = first_parsed_count(
+                    merged,
+                    ("initial_count_fp", "count_fp", "count", "remaining_count_fp", "remaining_count"),
+                )
+            contracts = int(count) if count >= 1 else 0
+            risk_dollars = (
+                round(abs(contracts) * (limit_price or kalshi_price), 4) if contracts else 0.0
+            )
+            hourly_vol = vols.get(asset) or 0.0
+            spot_source = sources.get(asset) or source
         row = new_trade_row(
-            ticker=idea.market.ticker,
-            asset=idea.market.asset,
-            side=idea.side,
-            strike=idea.market.threshold,
-            spot=idea.spot or prices.get(idea.market.asset) or 0.0,
-            minutes_left=idea.minutes_left,
-            fair=idea.fair,
-            kalshi_price=idea.entry_price,
-            limit_price=idea.limit_price,
-            contracts=idea.contracts,
-            risk_dollars=idea.risk_dollars,
-            hourly_vol=vols.get(idea.market.asset) or 0.0,
-            source=sources.get(idea.market.asset) or source,
+            ticker=ticker,
+            asset=asset,
+            side=side,
+            strike=strike,
+            spot=spot,
+            minutes_left=minutes_left,
+            fair=fair,
+            kalshi_price=kalshi_price,
+            limit_price=limit_price,
+            contracts=contracts,
+            risk_dollars=risk_dollars,
+            hourly_vol=hourly_vol,
+            source=spot_source,
             order_id=order_id,
             client_order_id=client_order_id,
             fill_status=fill_status_from_order(order),
-            filled_contracts=parse_count(order.get("fill_count")),
+            filled_contracts=order_filled_contracts(order),
         )
         row["window_id"] = fifteen_window_id()
         append_trade(journal_path, row)
@@ -644,7 +812,7 @@ def journal_live_places(
         for ticket in state.get("tickets") or []:
             if not isinstance(ticket, dict):
                 continue
-            if str(ticket.get("ticker") or "") != ticker:
+            if str(ticket.get("ticker") or "").upper() != str(ticker or "").upper():
                 continue
             if str(ticket.get("status") or "") != "open":
                 continue
@@ -652,7 +820,7 @@ def journal_live_places(
                 ticket["order_id"] = order_id
                 ticket["client_order_id"] = client_order_id
                 ticket["fill_status"] = row["fill_status"]
-                ticket["risk"] = idea.risk_dollars
+                ticket["risk"] = risk_dollars
     return written
 
 
@@ -845,12 +1013,13 @@ def run_scan(
     )
     if go_live and result.get("placed"):
         placed_tickers = {
-            str(order.get("ticker") or order.get("market_ticker") or "")
+            str(order.get("ticker") or order.get("market_ticker") or "").upper()
             for order in result["placed"]
             if isinstance(order, dict)
         }
+        placed_tickers.discard("")
         for idea in ideas:
-            if placed_tickers and idea.market.ticker not in placed_tickers:
+            if placed_tickers and idea.market.ticker.upper() not in placed_tickers:
                 continue
             state.setdefault("tickets", []).append(
                 {

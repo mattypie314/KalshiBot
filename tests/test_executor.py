@@ -218,3 +218,29 @@ def test_live_requotes_from_fresh_book_before_post(tmp_path: Path):
     assert sent["price"] == "0.1200"
     assert sent["post_only"] is True
     assert out["placed"][0]["order_id"] == "fresh"
+
+
+def test_live_place_copies_ticker_when_v2_response_omits_it(tmp_path: Path):
+    client = MagicMock()
+    client.get_orders.return_value = []
+    client.get_market.side_effect = RuntimeError("skip refresh")
+    client.create_order.return_value = {
+        "order_id": "v2-1",
+        "client_order_id": "from-kalshi",
+        "fill_count": "0.00",
+        "remaining_count": "4.00",
+        "ts_ms": 1,
+    }
+    idea = _idea()
+    out = execute_ideas(
+        [idea],
+        client=client,
+        artifacts_dir=tmp_path,
+        live=True,
+        confirm_live=True,
+        run_id="test-run",
+    )
+    placed = out["placed"][0]
+    assert placed["order_id"] == "v2-1"
+    assert placed["ticker"] == idea.market.ticker
+    assert placed["client_order_id"] == "from-kalshi"
