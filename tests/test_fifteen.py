@@ -34,15 +34,7 @@ from src.fifteen.edge import (
 )
 from src.fifteen.main import collect_ideas, live_is_armed, main, normalize_argv
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
-from src.journal import (
-    FILL_BACKFILL_SOURCE,
-    KIND_BACKFILL,
-    late_place_rate,
-    load_trades,
-    new_trade_row,
-    summarize_entry_timing,
-    write_trades,
-)
+from src.journal import load_trades, new_trade_row, write_trades
 from src.fifteen.regime import CHOP_VETO_PHRASE
 from src.spot import SpotSnapshot
 from src.filters import Idea
@@ -909,86 +901,6 @@ def test_run_scan_resolves_live_journal_fill_and_settlement(monkeypatch, tmp_pat
     state = json.loads(save_state.read_text())
     assert state["tickets"][0]["status"] == "settled"
     assert state["tickets"][0]["result"] == "win"
-
-
-def test_refresh_live_journal_writes_kind_backfill_for_unmatched_fill(tmp_path):
-    from src.fifteen.main import refresh_live_journal
-    from src.fifteen.pot import load_pot
-
-    fill = {
-        "ticker": "KXBTC15M-26SEP071015-T64000",
-        "order_id": "ord-residual",
-        "fill_id": "fill-residual",
-        "side": "yes",
-        "action": "sell",
-        "count": "1.00",
-        "yes_price": "0.0100",
-        "created_time": "2026-09-07T14:14:00Z",
-    }
-    settings = _fifteen_settings(tmp_path)
-    client = _quiet_scan_client(fills=[fill], market={"status": "active"})
-    pot = load_pot(settings.pot_path)
-    state: dict = {"tickets": [], "rests": []}
-    refresh_live_journal(settings, client=client, state=state, pot=pot)
-    rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
-    assert len(rows) == 1
-    row = rows[0]
-    assert row["kind"] == KIND_BACKFILL
-    assert row["backfill"] is True
-    assert row["spot_source"] == FILL_BACKFILL_SOURCE
-    assert row["spot"] == 0.0
-    assert row["strike"] == 0.0
-    assert row["hourly_vol"] == 0.0
-    assert row["fill_ts_iso"]
-    assert row["order_id"] == "ord-residual"
-    hourly = {
-        "ticker": "KXBTCD-26SEP0710-T64000",
-        "order_id": "hourly-1",
-        "side": "yes",
-        "count": "2.00",
-        "yes_price": "0.40",
-        "created_time": "2026-09-07T14:03:00Z",
-    }
-    client = _quiet_scan_client(fills=[fill, hourly], market={"status": "active"})
-    refresh_live_journal(settings, client=client, state=state, pot=pot)
-    assert len(load_trades(tmp_path / "fifteen_trade_log.jsonl")) == 1
-
-
-def test_backfill_counts_for_pnl_not_entry_timing(tmp_path):
-    from src.evaluate import summarize_trades
-    from src.fifteen.main import refresh_live_journal
-    from src.fifteen.pot import load_pot
-
-    fill = {
-        "ticker": "KXBTC15M-26SEP071015-T64000",
-        "order_id": "ord-residual",
-        "fill_id": "fill-residual",
-        "side": "yes",
-        "action": "sell",
-        "count": "1.00",
-        "yes_price": "0.0100",
-        "created_time": "2026-09-07T14:14:00Z",
-    }
-    settings = _fifteen_settings(tmp_path)
-    client = _quiet_scan_client(
-        fills=[fill],
-        market={"result": "yes", "status": "determined"},
-    )
-    pot = load_pot(settings.pot_path)
-    refresh_live_journal(settings, client=client, state={"tickets": [], "rests": []}, pot=pot)
-    rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
-    assert rows[0]["kind"] == KIND_BACKFILL
-    assert rows[0]["result"] == "win"
-    assert rows[0]["pnl"] == pytest.approx(0.99)
-    assert pot.realized_pnl == pytest.approx(0.99)
-    scored = summarize_trades(rows)
-    assert scored["n_filled_settled"] == 1
-    assert scored["pnl"] == pytest.approx(0.99)
-    timing = summarize_entry_timing(rows)
-    assert timing["n"] == 0
-    assert timing["n_backfills"] == 1
-    assert timing["late_place_rate"] == 0.0
-    assert late_place_rate(rows) == 0.0
 
 
 def test_run_scan_paper_does_not_write_live_journal(monkeypatch, tmp_path):

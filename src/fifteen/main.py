@@ -20,15 +20,11 @@ from src.filters import Idea
 from src.evaluate import summarize_trades
 from src.journal import (
     append_trade,
-    fill_already_journaled,
     fill_status_from_order,
-    is_journal_backfill,
     load_trades,
-    new_backfill_row,
     new_trade_row,
     parse_count,
     resolve_pending,
-    summarize_entry_timing,
     write_trades,
 )
 from src.fifteen.config import (
@@ -351,11 +347,7 @@ def append_scan_log(
 
 
 def _is_live_entry(row: dict[str, Any]) -> bool:
-    """True for a live 15m place or fill-recon row — not paper and not an exit event.
-
-    Backfills still count here for fill recon, PnL, exits, and the pot ledger.
-    Entry-timing stats use `counts_for_entry_timing` / `summarize_entry_timing`.
-    """
+    """True for a live 15m place row — not paper and not an exit event."""
     if str(row.get("kind") or "") == "paper":
         return False
     if str(row.get("action") or "") == "exit":
@@ -371,8 +363,6 @@ def _already_journaled(trades: list[dict[str, Any]], *, order_id: str, ticker: s
             continue
         if want_order and str(row.get("order_id") or "") == want_order:
             return True
-        if is_journal_backfill(row):
-            continue
         if want_ticker and str(row.get("ticker") or "").upper() == want_ticker:
             if row.get("exit_reason"):
                 continue
@@ -421,31 +411,6 @@ def _safe_fills(client: KalshiClient) -> tuple[list[dict[str, Any]], bool]:
         return [], False
 
 
-def journal_fill_backfills(
-    journal_path: Path,
-    trades: list[dict[str, Any]],
-    fills: list[dict[str, Any]] | None,
-) -> list[dict[str, Any]]:
-    """Append Kalshi fill-recon rows that were never a live 15m Pass.
-
-    Labels `kind=backfill` / `spot_source=kalshi-fill-backfill`. Does not invent
-    spot, strike, or vol. `fill_ts` is the exchange stamp when Kalshi sent one.
-    """
-    written: list[dict[str, Any]] = []
-    for fill in fills or []:
-        if not isinstance(fill, dict):
-            continue
-        if not is_fifteen_rest(fill):
-            continue
-        if fill_already_journaled(trades, fill):
-            continue
-        row = new_backfill_row(fill=fill)
-        append_trade(journal_path, row)
-        trades.append(row)
-        written.append(row)
-    return written
-
-
 def refresh_live_journal(
     settings: FifteenSettings,
     *,
@@ -458,10 +423,8 @@ def refresh_live_journal(
 
     journal_path = Path(settings.trade_log_path)
     trades = load_trades(journal_path)
-    fills, fills_available = _safe_fills(client)
-    if fills_available:
-        journal_fill_backfills(journal_path, trades, fills)
     prior = {id(row): str(row.get("result") or "pending") for row in trades}
+    fills, fills_available = _safe_fills(client)
     getter = getattr(client, "get_market", None)
     if getter is not None:
         trades = resolve_pending(
@@ -814,7 +777,6 @@ def run_eval(settings: FifteenSettings) -> int:
         if _is_live_entry(row)
     ]
     live = summarize_trades(live_rows)
-    timing = summarize_entry_timing(live_rows)
     print(f"=== 15m livescore ({live_path}) ===")
     print(
         f"live rows: {live['n_rows']} | filled+settled {live['n_filled_settled']} "
@@ -822,11 +784,6 @@ def run_eval(settings: FifteenSettings) -> int:
         f"unfilled {live['n_unfilled']} | pending {live['n_pending']}"
     )
     print(f"live filled PnL: ${live['pnl']:.2f}")
-    print(
-        f"entry timing: n={timing['n']} late={timing['n_late']} "
-        f"late-place {timing['late_place_rate']:.0%} "
-        f"(excluded {timing['n_backfills']} kind=backfill recon rows)"
-    )
     if live_rows:
         for row in live_rows[-10:]:
             print(
