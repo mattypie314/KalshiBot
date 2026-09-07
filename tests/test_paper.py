@@ -346,6 +346,26 @@ def test_eval_summary_separates_paper_from_live():
     assert "This is not live profitability" in text
 
 
+def test_summarize_paper_skips_live_backfills():
+    from src.journal import FILL_BACKFILL_SOURCE, KIND_BACKFILL
+
+    paper_rows = [
+        _ticket(ticker="P1", result="win", fill_model=FILL_ASSUMED_MAKER, pnl=0.63),
+        {
+            "kind": KIND_BACKFILL,
+            "backfill": True,
+            "spot_source": FILL_BACKFILL_SOURCE,
+            "fill_model": FILL_ASSUMED_MAKER,
+            "result": "win",
+            "pnl": 9.99,
+        },
+    ]
+    paper = summarize_paper(paper_rows)
+    assert paper["n_tickets"] == 1
+    assert paper["n_wins"] == 1
+    assert paper["assumed_fill_pnl"] == 0.63
+
+
 def test_fetch_official_print_never_uses_coinbase():
     class Client:
         can_trade = True

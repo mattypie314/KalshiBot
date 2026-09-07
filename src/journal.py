@@ -18,6 +18,22 @@ FILL_BACKFILL_SOURCE = "kalshi-fill-backfill"
 KIND_BACKFILL = "backfill"
 KIND_PAPER = "paper"
 LATE_PLACE_SECONDS = 4 * 60
+# Kalshi fills often put size in `count_fp` ("2.00") and leave `count` empty / "0.00".
+FILL_SIZE_KEYS = (
+    "count_fp",
+    "filled_count_fp",
+    "fill_count_fp",
+    "count",
+    "filled_count",
+    "fill_count",
+)
+ORDER_FILL_COUNT_KEYS = (
+    "fill_count_fp",
+    "filled_count_fp",
+    "fill_count",
+    "filled_count",
+)
+ORDER_REMAINING_KEYS = ("remaining_count_fp", "remaining_count")
 
 
 CASH_OUT_LABEL = "cash_out_99"
@@ -120,6 +136,67 @@ def is_journal_backfill(row: dict[str, Any] | None) -> bool:
     if str(row.get("spot_source") or "").strip().lower() == FILL_BACKFILL_SOURCE:
         return True
     return str(row.get("kind") or "").strip().lower() == KIND_BACKFILL
+
+
+def counts_for_scoreboard(row: dict[str, Any] | None) -> bool:
+    """True for a live/paper ticket that belongs on W/L, day PnL, streak, PLAY, pot equity.
+
+    `kind=backfill` recon rows stay in the journal but must not score like a 15m Pass.
+    """
+    if not isinstance(row, dict):
+        return False
+    return not is_journal_backfill(row)
+
+
+def scoreboard_rows(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    return [row for row in (rows or []) if counts_for_scoreboard(row)]
+
+
+def filled_settled_score_rows(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Win/loss fills that count on the board. Backfills are excluded."""
+    return [
+        row
+        for row in scoreboard_rows(rows)
+        if row.get("result") in {"win", "loss"} and counts_as_filled(row)
+    ]
+
+
+def win_loss_streak(rows: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """Current consecutive W/L streak on scoreboard rows (backfills skipped)."""
+    settled = filled_settled_score_rows(rows)
+    if not settled:
+        return {"result": None, "n": 0}
+    last = str(settled[-1].get("result") or "")
+    n = 0
+    for row in reversed(settled):
+        if str(row.get("result") or "") != last:
+            break
+        n += 1
+    return {"result": last, "n": n}
+
+
+def day_filled_pnl(rows: list[dict[str, Any]] | None, now: datetime | None = None) -> float:
+    """Today's filled PnL for the board. Backfills are excluded."""
+    total = 0.0
+    for row in filled_settled_score_rows(rows):
+        stamp = row.get("resolved_ts_iso") or row.get("resolved_ts") or row.get("ts_iso") or row.get("ts")
+        if not same_et_day(stamp, now):
+            continue
+        try:
+            total += float(row.get("pnl") or 0)
+        except (TypeError, ValueError):
+            continue
+    return round(total, 4)
+
+
+def play_pot_equity(
+    rows: list[dict[str, Any]] | None,
+    *,
+    start: float = 5.0,
+) -> float:
+    """Pot reconstructed from live-play PnL only. Backfill recon does not move it."""
+    pnl = sum(float(row.get("pnl") or 0) for row in filled_settled_score_rows(rows))
+    return round(float(start) + pnl, 4)
 
 
 def counts_for_entry_timing(row: dict[str, Any] | None) -> bool:
@@ -292,9 +369,7 @@ def new_backfill_row(
     ticker = str(ticker or payload.get("ticker") or payload.get("market_ticker") or "")
     side_label = _fill_side_label(side or payload.get("outcome_side") or payload.get("side"))
     when = parse_ts(fill_ts) or fill_exchange_ts(payload)
-    count = contracts if contracts is not None else parse_count(
-        payload.get("count") or payload.get("filled_count") or payload.get("fill_count")
-    )
+    count = float(contracts) if contracts is not None else fill_size_from_payload(payload)
     price = (
         float(kalshi_price)
         if kalshi_price is not None
@@ -457,12 +532,47 @@ def parse_count(value: object) -> float:
         return 0.0
 
 
+def first_present_count(payload: dict[str, Any] | None, keys: tuple[str, ...]) -> float:
+    """First field that is present, including zero ('0.00' remaining means filled)."""
+    if not isinstance(payload, dict):
+        return 0.0
+    for key in keys:
+        raw = payload.get(key)
+        if raw in (None, ""):
+            continue
+        return parse_count(raw)
+    return 0.0
+
+
+def first_parsed_count(payload: dict[str, Any] | None, keys: tuple[str, ...]) -> float:
+    """First field that parses to a positive size. Skips missing / empty / 0 / '0.00'."""
+    if not isinstance(payload, dict):
+        return 0.0
+    seen = 0.0
+    found = False
+    for key in keys:
+        raw = payload.get(key)
+        if raw in (None, ""):
+            continue
+        value = parse_count(raw)
+        found = True
+        if value > 0:
+            return value
+        seen = value
+    return seen if found else 0.0
+
+
+def fill_size_from_payload(payload: dict[str, Any] | None) -> float:
+    """Kalshi fill size. Prefer `count_fp` / `*_fp` strings over integer `count`."""
+    return first_parsed_count(payload, FILL_SIZE_KEYS)
+
+
 def fill_status_from_order(order: dict[str, Any] | None) -> str:
     """filled / partial / resting / canceled from a Kalshi order payload."""
     if not isinstance(order, dict):
         return "resting"
-    fill_count = parse_count(order.get("fill_count") or order.get("filled_count"))
-    remaining = parse_count(order.get("remaining_count"))
+    fill_count = first_parsed_count(order, ORDER_FILL_COUNT_KEYS)
+    remaining = first_present_count(order, ORDER_REMAINING_KEYS)
     status = str(order.get("status") or "").lower()
     if fill_count > 0 and remaining <= 1e-9:
         return "filled"

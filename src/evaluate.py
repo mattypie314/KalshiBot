@@ -14,7 +14,7 @@ from typing import Any
 
 from src.config import EXIT_OK, HourlySettings
 from src.filters import FilterConfig, evaluate_market
-from src.journal import counts_as_filled, load_trades
+from src.journal import counts_as_filled, is_journal_backfill, load_trades, scoreboard_rows
 from src.markets import HourlyMarket
 from src.paper import format_paper_section, load_paper, summarize_paper, try_settle_paper
 
@@ -43,13 +43,16 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def summarize_trades(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Score live/paper fills. `kind=backfill` recon rows are journaled, not scored."""
+    n_backfills = sum(1 for row in rows if is_journal_backfill(row))
+    scored = scoreboard_rows(rows)
     filled_settled = [
-        row for row in rows if row.get("result") in {"win", "loss"} and counts_as_filled(row)
+        row for row in scored if row.get("result") in {"win", "loss"} and counts_as_filled(row)
     ]
     wins = [row for row in filled_settled if row.get("result") == "win"]
     losses = [row for row in filled_settled if row.get("result") == "loss"]
-    unfilled = [row for row in rows if row.get("result") == "unfilled"]
-    pending = [row for row in rows if row.get("result") not in {"win", "loss", "unfilled"}]
+    unfilled = [row for row in scored if row.get("result") == "unfilled"]
+    pending = [row for row in scored if row.get("result") not in {"win", "loss", "unfilled"}]
     pnl = sum(float(row.get("pnl") or 0) for row in filled_settled)
     by_bucket: dict[str, dict[str, Any]] = {}
     for row in filled_settled:
@@ -61,7 +64,9 @@ def summarize_trades(rows: list[dict[str, Any]]) -> dict[str, Any]:
     by_asset: dict[str, int] = dict(Counter(str(row.get("asset") or "?") for row in filled_settled))
     enough = len(filled_settled) >= MIN_SETTLED_FOR_RATE
     return {
-        "n_rows": len(rows),
+        "n_rows": len(scored),
+        "n_journal_rows": len(rows),
+        "n_backfills": n_backfills,
         "n_filled_settled": len(filled_settled),
         "n_wins": len(wins),
         "n_losses": len(losses),

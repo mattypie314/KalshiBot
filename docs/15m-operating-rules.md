@@ -108,7 +108,7 @@ Defaults Matt can override in chat; keep them in a tracker file (e.g. `artifacts
 
 Never size past remaining room or past **crypto shard cash**.
 
-Credit the pot from **live** 15m BTC/ETH fills/settlements only. Paper tape stays separate unless Matt says otherwise.
+Credit the pot from **live** 15m BTC/ETH Passes only. `kind=backfill` fill-recon rows stay in the trade log but do not move pot equity, W-L streak, or the PLAY scoreboard. Paper tape stays separate unless Matt says otherwise.
 
 Do **not** raise size to win it back. Do **not** flip always-No ↔ always-Yes after a loser.
 
@@ -209,7 +209,7 @@ Rules:
 2. Dual live gates + `HALTED` saved accidental fires.
 3. Early-window scans beat late-hour noise.
 4. Forced under-edge “fun” tickets can win and still be bad process — keep them rare and labeled.
-5. Separate **paper** journal from **live** journal. Trade log may contain `kind=backfill`; exclude those from entry timing.
+5. Separate **paper** journal from **live** journal. Trade log may contain `kind=backfill`; exclude those from entry timing, scoreboards, streak, day PnL, and pot reconstruction — they are recon, not PLAYS.
 6. Track shard cash; crypto needs money on **index 2**.
 7. Quiet-unless-new is fine; Matt will ask “still running?” — answer with last scan time.
 
