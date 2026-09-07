@@ -8,7 +8,8 @@
 #   ./kb15 live     (l / 4)
 #   ./kb15 eval     (v / 6)
 #   ./kb15 paper    (p / 7)
-#   ./kb15 livescore / score
+#   ./kb15 score / kbscore           Termius paper board
+#   ./kb15 livescore / kbscore-live  Termius live board
 # Also: ./kb fifteen scan
 root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 export PYTHONPATH="${PYTHONPATH:-$root}"
