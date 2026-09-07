@@ -57,13 +57,25 @@ class FifteenSettings(BaseSettings):
 
     assets: str = "BTC,ETH"
     max_markets_per_asset: int = 8
-    max_ideas_per_run: int = Field(default=1, validation_alias=AliasChoices("FIFTEEN_MAX_IDEAS_PER_RUN", "MAX_IDEAS_PER_RUN"))
+    # Total cap after the 1-per-asset pick. 2 lets BTC and ETH both rest.
+    max_ideas_per_run: int = Field(
+        default=2,
+        validation_alias=AliasChoices(
+            "FIFTEEN_MAX_IDEAS_PER_RUN",
+            "MAX_IDEAS_PER_RUN",
+            "MAX_IDEAS_PER_WINDOW",
+        ),
+    )
     min_minutes_left: float = Field(default=8.0, validation_alias=AliasChoices("FIFTEEN_MIN_MINUTES_LEFT", "MIN_MINUTES_LEFT"))
     max_spread: float = 0.10
     spot_source: str = "cfbenchmarks"
     require_settlement_index: bool = True
     require_maker: bool = True
     news_pause: bool = False
+    chop_veto: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("FIFTEEN_CHOP_VETO"),
+    )
     hourly_vol_fallback_btc: float = 0.004
     hourly_vol_fallback_eth: float = 0.005
 
@@ -82,6 +94,14 @@ class FifteenSettings(BaseSettings):
     take_profit_cents: float = Field(
         default=0.02,
         validation_alias=AliasChoices("TAKE_PROFIT_CENTS", "FIFTEEN_TAKE_PROFIT_CENTS"),
+    )
+    early_cash_out_bid: float = Field(
+        default=0.95,
+        validation_alias=AliasChoices("EARLY_CASH_OUT_BID", "FIFTEEN_EARLY_CASH_OUT_BID"),
+    )
+    early_cash_out_minutes: float = Field(
+        default=10.0,
+        validation_alias=AliasChoices("EARLY_CASH_OUT_MINUTES", "FIFTEEN_EARLY_CASH_OUT_MINUTES"),
     )
 
     @field_validator("paper_fill_model", mode="before")

@@ -89,12 +89,14 @@ class HourlySettings(BaseSettings):
     vol_pause_mult: float = 2.0
     # Turbo Mode: soften close-strike / min-edge enough to rest a maker on the
     # nearest strike. Default off — strict Pass is unchanged. Never crosses,
-    # still requires BRTI/ERTI, still capped by MAX_RISK, one idea per run.
+    # still requires BRTI/ERTI, still capped by MAX_RISK, one idea per asset
+    # (BTC+ETH both OK when they independently Pass).
     force_near_rule: bool = False
 
     assets: str = "BTC,ETH"
     max_markets_per_asset: int = 12
-    max_ideas_per_run: int = 1
+    # Total cap after the 1-per-asset pick. 2 lets BTC and ETH both rest.
+    max_ideas_per_run: int = 2
     min_minutes_left: float = 3
     max_spread: float = 0.06
     min_visible_depth_contracts: int = 5
@@ -126,6 +128,10 @@ class HourlySettings(BaseSettings):
     # Beats / runs ahead of TAKE_PROFIT_CENTS. Live oneshots place the exit.
     cash_out_bid: float = 0.99
     take_profit_cents: float = 0.02
+    # Early flatten: held-side bid ≥ this AND minutes to settlement ≤ window.
+    # Runs after 99¢ cash-out, ahead of +2¢ TP. Prefer locking the win.
+    early_cash_out_bid: float = 0.95
+    early_cash_out_minutes: float = 10.0
 
     @field_validator("paper_fill_model", mode="before")
     @classmethod

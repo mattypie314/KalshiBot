@@ -74,7 +74,7 @@ This is the directional / mispricing pass.
 **Pass/Fail**
 1. Compute model-fair vs live mid / executable price.
 2. **Fail → skip.** Do not “just scalp it.”
-3. **Pass → one limit**, not a market. **One idea per window** (best Pass only).
+3. **Pass → one limit**, not a market. **One idea per asset per window** (best BTC and best ETH if both Pass).
 
 **Hard skips**
 - Under ~**8 minutes** left unless the strike is already decided.
@@ -84,6 +84,7 @@ This is the directional / mispricing pass.
 - Revenge window after a loser.
 - **Three 15m losses in a row** this ET day → stop the session.
 - Pot stopped / room too small.
+- **Chop veto** (default on, `FIFTEEN_CHOP_VETO`): after Pass, sit when 1m tape is chop (low ADX + tight Bollinger). Live and paper share this Pass/Sit stack. Maker/post-only, Turbo, and 99¢ cash-out are unchanged. Set `FIFTEEN_CHOP_VETO=false` to disable.
 
 ### B. Last-minute maker (optional submodule)
 
@@ -144,9 +145,12 @@ Writes go through signed Kalshi REST V2 order endpoints (or the sanctioned MCP p
 
 1. Flatten if down ~**$0.50** or ~**10%** from fill, whichever hits first, **or** if a recheck killed the edge.
 2. **Take profit early:** if held-side live bid ≥ fill + **2¢**, flatten at the live bid.
-3. **Hard cash-out at 99¢ (all bots):** if the held-side live bid is already **99¢** (`yes_bid >= CASH_OUT_BID`, default 0.99; No: `no_bid >= 0.99` / `yes_ask <= 0.01`), flatten **now**. This beats the +2¢ TP. Live oneshots **place the exit** (not operator-notify-only). Prefer post-only if the book can rest at 99¢; if the only way to exit at 99¢ is to hit that bid, place a 99¢ limit — not a market sweep. Journal label: `cash_out_99`.
+3. **Hard cash-out at 99¢ (all bots):** if the held-side live bid is already **99¢** (`yes_bid >= CASH_OUT_BID`, default 0.99; No: `no_bid >= 0.99` / `yes_ask <= 0.01`), flatten **now**. This beats early 95¢ cash-out and the +2¢ TP. Live oneshots **place the exit** (not operator-notify-only). Prefer post-only if the book can rest at 99¢; if the only way to exit at 99¢ is to hit that bid, place a 99¢ limit — not a market sweep. Journal label: `cash_out_99`.
+3b. **Early cash-out at 95¢ + time:** if the held-side live bid is **≥ 95¢** (`EARLY_CASH_OUT_BID=0.95`) **and** minutes to settlement are **≤ 10** (`EARLY_CASH_OUT_MINUTES=10`), flatten now. After 99¢, ahead of +2¢ TP. Journal label: `cash_out_95_time`.
+3c. **Manual in-app flatten:** if Matt (or anyone) sells/flattens in the Kalshi app, journal `manual_flatten` when the position is gone and the close fill is not one of our exit order ids. Do not relabel a bot `cash_out_99` / `cash_out_95_time` / `take_profit`.
 4. After fill you may rest a **99¢** post-only exit (No: bid Yes at 0.01). Never rest a sell **under** the bid.
 5. Never leave orphan rests across a new window without cancelling stale ones.
+6. **Canceled resting entries:** if Matt cancels a resting 15m entry, do **not** immediately re-fire that idea. An `open` ticket/rest still counts as working this window. The next tick may place only if Pass filters still fire **and** that working gate is clear. We do not fight cancels.
 
 ---
 
@@ -185,6 +189,7 @@ Log every idea / ticket with at least:
 Rules:
 - Unfilled rests are **not** wins or losses.
 - Paper / assumed-maker-fill tapes are **not** live profitability.
+- 15m paper shadows the live window: same Pass/Sit as the live tick, not a later scan. Dry `scan` still papers when live has not decided that window. Paper journal stays off the live pot.
 - Do not retune edge thresholds from thin samples.
 - If the close-strike / buy-No bucket is underwater, **turn that rule off**, don’t average down.
 
@@ -240,4 +245,4 @@ Suggested first live day: dry-only until paper or attended makers prove the jour
 
 ## 15. One-line standing order
 
-**Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one idea per window, $1–$2 risk, $5 pot — quit at $0, ask at $10, flat is fine.**
+**Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one idea per asset per window (BTC+ETH both OK), $1–$2 risk, $5 pot — quit at $0, ask at $10, flat is fine.**

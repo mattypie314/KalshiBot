@@ -14,7 +14,7 @@ Pi operating manual (PDF): `docs/KalshiBot-operating-manual.pdf`. Rebuild with `
 
 Not financial advice. You can lose the full amount you put on a contract. Demo first. `.env` can stay dry. Live is a one-run confirm: type `LIVE` at the prompt, or pass `--confirm LIVE` on a keyboard. Unattended live still needs both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES`.
 
-A dedicated **15-minute BTC/ETH** edge-loop bot (`KXBTC15M` / `KXETH15M`, own $5 pot) lives in-tree as `python -m src.fifteen` / `./kb15` / `./kb fifteen`. It does not change hourly. Pi path: `/home/KalshiBot15`. Rules: `docs/15m.md` and `docs/15m-operating-rules.md`. systemd `kalshi-15m.timer` ships **disabled**. ETH settlement id for 15m is **`ETHUSD_RTI`** (hourly still uses ERTI).
+A dedicated **15-minute BTC/ETH** edge-loop bot (`KXBTC15M` / `KXETH15M`, own $5 pot) lives in-tree as `python -m src.fifteen` / `./kb15` / `./kb fifteen`. It does not change hourly. Pi path: `/home/KalshiBot15`. Rules: `docs/15m.md` and `docs/15m-operating-rules.md`. systemd `kalshi-15m.timer` ships **disabled**. ETH settlement API id is **`ETHUSD_RTI`** for both hourly and 15m (human docs may still say ERTI).
 
 The older campaign desk (maker loop / dashboard / research) stays parked on `archive/campaign-desk`.
 
@@ -22,7 +22,7 @@ The older campaign desk (maker loop / dashboard / research) stays parked on `arc
 
 Scans the live hourly above/below books for Bitcoin and Ethereum. Fair probability comes from **CF Benchmarks BRTI/ERTI** (the 60-second average Kalshi settles on) plus recent realized vol. Coinbase last tick is a proxy, not the print — without the index the coin sits. It only prints or places a **maker limit** when net edge after estimated fees clears the filter.
 
-Bankroll default **$40**. Risk per idea **$1.50–$2.00**, preferred **$1.75**, hard cap **$2.00**. Maker / limit only. Sit unless net edge after fees is ≥ 6%. Ban close strikes (coin-flip fades inside ~0.5–0.75% of spot). Max 1 open hourly ticket. **Turbo Mode** (`FORCE_NEAR_RULE=true`, default off) softens only the close-strike / min-edge bars enough to rest a maker on the nearest strike — still post-only, still BRTI/ERTI, still `MAX_RISK`, one idea per run, and the ticket is labeled forced / Turbo. Full rules: `RULES.md`.
+Bankroll default **$40**. Risk per idea **$1.50–$2.00**, preferred **$1.75**, hard cap **$2.00**. Maker / limit only. Sit unless net edge after fees is ≥ 6%. Ban close strikes (coin-flip fades inside ~0.5–0.75% of spot). Max 1 open hourly ticket per coin (BTC+ETH both OK when they independently Pass). **Turbo Mode** (`FORCE_NEAR_RULE=true`, default off) softens only the close-strike / min-edge bars enough to rest a maker on the nearest strike — still post-only, still BRTI/ERTI, still `MAX_RISK`, one idea per asset, and the ticket is labeled forced / Turbo. Full rules: `RULES.md`.
 
 ```bash
 pip install -r requirements.txt
@@ -207,7 +207,7 @@ Sibling bot for Kalshi **15-minute** BTC/ETH threshold books (`KXBTC15M` / `KXET
 
 ```bash
 chmod +x kb15
-./kb15              # scan (paper on Pass)
+./kb15              # scan (paper shadows live; dry-only papers Pass)
 ./kb15 scan         # also: s / 1
 ./kb15 once         # dry-run maker payloads (o / 2)
 ./kb15 auth         # key check (a / 3)
@@ -218,9 +218,9 @@ chmod +x kb15
 
 Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, entry ET minutes **:02–:04** of each 15m window, Pass needs ≥**4¢** model-vs-mid with spread ≤ edge, sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.
 
-ETH settlement index id is **`ETHUSD_RTI`** (fallback `ERTI`). Missing/PROXY index → sit.
+ETH settlement API id is **`ETHUSD_RTI`** (human docs may still say ERTI). Missing/PROXY index → sit.
 
-v1 ships the early-window edge loop. Live oneshots flatten when the held-side bid hits **99¢** (`cash_out_99`, ahead of the +2¢ TP). Last-minute maker is still deferred.
+v1 ships the early-window edge loop. Live oneshots flatten when the held-side bid hits **99¢** (`cash_out_99`, any time left) or **≥ 95¢ with ≤ 10 minutes** to settlement (`cash_out_95_time`), ahead of the +2¢ TP. In-app flattens are journaled as `manual_flatten`. Canceled resting entries are not immediately replaced. Last-minute maker is still deferred.
 
 ## Later
 

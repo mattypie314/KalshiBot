@@ -133,6 +133,12 @@ def test_assert_paper_path_refuses_live_journal(tmp_path):
         assert "trade_log.jsonl" in str(exc)
     else:
         raise AssertionError("expected refuse")
+    try:
+        assert_paper_path(tmp_path / "fifteen_trade_log.jsonl")
+    except ValueError as exc:
+        assert "fifteen_trade_log.jsonl" in str(exc)
+    else:
+        raise AssertionError("expected refuse")
 
 
 def test_append_paper_ticket_fields(tmp_path):
@@ -243,7 +249,7 @@ def test_brti_erti_settlement_math():
         risk_dollars=1.64,
     )
     settle_paper_row(eth, settlement_print=2395.10)
-    assert eth["spot_source"] == "ERTI"
+    assert eth["spot_source"] == "ETHUSD_RTI"
     assert eth["settlement_result"] == "no"
     assert eth["result"] == "win"
     assert eth["pnl"] == paper_pnl(won=True, contracts=4, fill_price=0.41, risk_dollars=1.64)

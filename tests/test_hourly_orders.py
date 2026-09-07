@@ -8,6 +8,11 @@ from src.kalshi_client import KalshiClient, sign_path_from_url, unwrap_order
 def test_unwrap_order_reads_nested_payload():
     assert unwrap_order({"order": {"order_id": "n1", "remaining_count": "11.00"}})["order_id"] == "n1"
     assert unwrap_order({"order_id": "flat"})["order_id"] == "flat"
+    merged = unwrap_order(
+        {"order_id": "outer", "order": {"order_id": "inner", "ticker": "KXBTC15M-26SEP070630-30"}}
+    )
+    assert merged["order_id"] == "outer"
+    assert merged["ticker"] == "KXBTC15M-26SEP070630-30"
 
 
 def test_hourly_get_orders_merges_crypto_shard_when_default_page_has_rows():

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -31,8 +33,21 @@ from src.fifteen.edge import (
     revenge_until_after_loss,
     strike_decided,
 )
-from src.fifteen.main import live_is_armed, main, normalize_argv
+from src.fifteen.main import (
+    collect_ideas,
+    idea_fingerprint,
+    journal_live_places,
+    live_decision_for_window,
+    live_is_armed,
+    main,
+    normalize_argv,
+    paper_ideas_for_window,
+    stamp_live_decision,
+)
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
+from src.journal import load_trades, new_trade_row, write_trades
+from src.fifteen.regime import CHOP_VETO_PHRASE
+from src.spot import SpotSnapshot
 from src.filters import Idea
 from src.markets import (
     FIFTEEN_BY_ASSET,
@@ -175,6 +190,65 @@ def test_win_resets_streak_and_working_blocks_window():
     assert fifteen_working(working, _et(10, 3))
 
 
+def test_canceled_resting_entry_still_blocks_window():
+    """Matt canceling a rest is respected: we do not immediately re-fire that coin."""
+    wid = fifteen_window_id(_et(10, 3))
+    state = {
+        "tickets": [
+            {
+                "status": "open",
+                "loop": "fifteen",
+                "window_id": wid,
+                "ticker": "KXBTC15M-1",
+                "side": "Yes",
+            }
+        ]
+    }
+    assert fifteen_working(state, _et(10, 3))
+    assert fifteen_working(state, _et(10, 8))
+    assert fifteen_working(state, _et(10, 3), asset="BTC")
+    assert not fifteen_working(state, _et(10, 3), asset="ETH")
+
+
+def test_fifteen_working_is_per_asset():
+    wid = fifteen_window_id(_et(10, 3))
+    btc = {
+        "tickets": [
+            {
+                "status": "open",
+                "loop": "fifteen",
+                "window_id": wid,
+                "ticker": "KXBTC15M-1",
+                "asset": "BTC",
+            }
+        ],
+        "rests": [],
+    }
+    assert fifteen_working(btc, _et(10, 3), asset="BTC")
+    assert not fifteen_working(btc, _et(10, 3), asset="ETH")
+    both = {
+        "tickets": [
+            {
+                "status": "open",
+                "loop": "fifteen",
+                "window_id": wid,
+                "ticker": "KXBTC15M-1",
+                "asset": "BTC",
+            },
+            {
+                "status": "open",
+                "loop": "fifteen",
+                "window_id": wid,
+                "ticker": "KXETH15M-1",
+                "asset": "ETH",
+            },
+        ]
+    }
+    assert fifteen_working(both, _et(10, 3), asset="BTC")
+    assert fifteen_working(both, _et(10, 3), asset="ETH")
+    assert fifteen_working(both, _et(10, 3))
+
+
 def test_size_room_and_half_sigma():
     assert fifteen_stake(100.0, 100.0) == pytest.approx(4.0)
     assert fifteen_stake(100.0, 2.0) == pytest.approx(2.0)
@@ -308,6 +382,38 @@ def _idea() -> Idea:
     )
 
 
+def _eth_idea() -> Idea:
+    idea = _idea()
+    return replace(
+        idea,
+        market=replace(
+            idea.market,
+            ticker="KXETH15M-26SEP070630-30",
+            event_ticker="KXETH15M-26SEP070630",
+            series_ticker="KXETH15M",
+            asset="ETH",
+            title="ETH 15m",
+            yes_sub_title="$2,400 or above",
+            threshold=2400.0,
+        ),
+        spot=2400.0,
+    )
+
+
+def _spots() -> SpotSnapshot:
+    return SpotSnapshot(
+        prices={"BTC": 65000.0, "ETH": 2400.0},
+        hourly_vol={"BTC": 0.004, "ETH": 0.005},
+        sources={"BTC": "cfbenchmarks", "ETH": "cfbenchmarks"},
+        source="cfbenchmarks",
+    )
+
+
+def _idea_named(ticker: str) -> Idea:
+    idea = _idea()
+    return replace(idea, market=replace(idea.market, ticker=ticker))
+
+
 def test_fifteen_live_cancel_skips_hourly_rests(tmp_path: Path):
     client = MagicMock()
     client.get_orders.return_value = [
@@ -380,6 +486,8 @@ def test_cli_normalize_and_live_gates():
     assert normalize_argv(["s"]) == ["scan"]
     assert normalize_argv(["o"]) == ["once"]
     assert normalize_argv(["l"]) == ["live"]
+    assert normalize_argv(["livescore"]) == ["livescore"]
+    assert normalize_argv(["score"]) == ["score"]
     assert normalize_argv([]) == ["scan"]
 
     halted = FifteenSettings(halted=True, live_trading=True, confirm_live="YES")
@@ -430,3 +538,745 @@ def test_pass_fail_rejects_adx_chop():
     )
     assert not decision.passed
     assert "ADX chop" in (decision.fail_reason or "")
+
+def _pass_market(
+    now: datetime,
+    ticker: str = "KXBTC15M-TEST-T64000",
+    *,
+    asset: str = "BTC",
+    threshold: float | None = None,
+    yes_bid: float = 0.54,
+    yes_ask: float = 0.56,
+) -> HourlyMarket:
+    close = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0) + timedelta(
+        minutes=15
+    )
+    series = "KXETH15M" if asset == "ETH" else "KXBTC15M"
+    strike = 2300.0 if asset == "ETH" else 64000.0
+    if threshold is not None:
+        strike = threshold
+    return HourlyMarket(
+        ticker=ticker,
+        event_ticker=f"{series}-TEST",
+        series_ticker=series,
+        asset=asset,
+        title=f"{asset} 15m",
+        yes_sub_title=f"${strike:,.0f} or above",
+        threshold=strike,
+        strike_type="greater",
+        close_time=close,
+        status="active",
+        yes_bid=yes_bid,
+        yes_ask=yes_ask,
+        no_bid=max(0.01, 1.0 - yes_ask),
+        no_ask=max(0.02, 1.0 - yes_bid),
+        yes_bid_size=10,
+        yes_ask_size=10,
+        no_bid_size=10,
+        no_ask_size=10,
+        rules_primary="CF Benchmarks BRTI",
+        rules_secondary="",
+        settlement_source="CF Benchmarks",
+        exchange_index=2,
+    )
+
+
+class _FakeSpotService:
+    def __init__(self, candles, **_kwargs):
+        self._candles = candles
+        self._prices = {"BTC": 65000.0, "ETH": 2400.0}
+
+    def snapshot(self, assets, fallbacks=None):
+        return SpotSnapshot(
+            prices=dict(self._prices),
+            hourly_vol={"BTC": 0.004, "ETH": 0.005},
+            sources={"BTC": "cfbenchmarks", "ETH": "cfbenchmarks"},
+            source="cfbenchmarks",
+            candles={name: list(self._candles) for name in self._prices},
+        )
+
+    def close(self):
+        return None
+
+
+def _patch_collect(monkeypatch, candles, market, extra_markets=None):
+    monkeypatch.setattr(
+        "src.fifteen.main.SpotService",
+        lambda **kwargs: _FakeSpotService(candles),
+    )
+    # Unit tests inject OHLC via FakeSpotService; do not pull live CCXT tape.
+    monkeypatch.setattr("src.fifteen.main.signals_for_asset", lambda *a, **k: {})
+    markets = [market, *(extra_markets or [])]
+
+    class Discovery:
+        def __init__(self, client):
+            self.client = client
+
+        def discover_fifteen(self, assets, **kwargs):
+            want = {str(name).upper() for name in assets}
+            return [row for row in markets if row.asset in want]
+
+    monkeypatch.setattr("src.fifteen.main.MarketDiscovery", Discovery)
+
+
+def test_collect_ideas_chops_veto_after_pass(monkeypatch):
+    from tests.test_regime import choppy_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, choppy_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert ideas == []
+    assert any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_collect_ideas_trend_still_passes(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert len(ideas) == 1
+    assert ideas[0].market.ticker == market.ticker
+    assert not any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_collect_ideas_chop_override_false_still_passes(monkeypatch):
+    from tests.test_regime import choppy_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, choppy_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=False,
+    )
+    assert len(ideas) == 1
+    assert not any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_collect_ideas_default_uses_settings_chop_veto(monkeypatch):
+    from tests.test_regime import choppy_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, choppy_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+    )
+    assert ideas == []
+    assert any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_collect_ideas_both_assets_pass(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    btc = _pass_market(now, "KXBTC15M-TEST-T64000", asset="BTC")
+    eth = _pass_market(now, "KXETH15M-TEST-T2300", asset="ETH")
+    _patch_collect(monkeypatch, trending_ohlc(), btc, extra_markets=[eth])
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert {idea.market.asset for idea in ideas} == {"BTC", "ETH"}
+    assert not any(CHOP_VETO_PHRASE in note for note in notes)
+
+
+def test_collect_ideas_two_btc_passes_keeps_best(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    better = _pass_market(
+        now,
+        "KXBTC15M-TEST-T64000",
+        asset="BTC",
+        threshold=64000.0,
+        yes_bid=0.50,
+        yes_ask=0.52,
+    )
+    worse = _pass_market(
+        now,
+        "KXBTC15M-TEST-T63000",
+        asset="BTC",
+        threshold=63000.0,
+        yes_bid=0.78,
+        yes_ask=0.80,
+    )
+    _patch_collect(monkeypatch, trending_ohlc(), better, extra_markets=[worse])
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert [idea.market.ticker for idea in ideas] == ["KXBTC15M-TEST-T64000"]
+    assert any("KXBTC15M-TEST-T63000" in note and "held back" in note for note in notes)
+
+
+def test_collect_ideas_btc_working_still_allows_eth(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    wid = fifteen_window_id(now)
+    btc = _pass_market(now, "KXBTC15M-TEST-T64000", asset="BTC")
+    eth = _pass_market(now, "KXETH15M-TEST-T2300", asset="ETH")
+    _patch_collect(monkeypatch, trending_ohlc(), btc, extra_markets=[eth])
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={
+            "tickets": [
+                {
+                    "status": "open",
+                    "loop": "fifteen",
+                    "window_id": wid,
+                    "ticker": "KXBTC15M-1",
+                    "asset": "BTC",
+                }
+            ],
+            "rests": [],
+        },
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert [idea.market.asset for idea in ideas] == ["ETH"]
+    assert any("already working" in note and "BTC" in note for note in notes)
+
+
+def test_run_scan_live_and_paper_share_chop_veto(monkeypatch, tmp_path):
+    seen: list[bool | None] = []
+
+    def fake_collect(*args, **kwargs):
+        seen.append(kwargs.get("apply_chop_veto"))
+        return [], ["sit"], None
+
+    class Client:
+        can_trade = False
+
+        def get_balance(self):
+            return {"total_value": 5}
+
+        def get_fills(self, limit=50):
+            return []
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: Client())
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = FifteenSettings(
+        _env_file=None,
+        artifacts_dir=str(tmp_path),
+        state_path=str(tmp_path / "fifteen_state.json"),
+        pot_path=str(tmp_path / "fifteen_pot.json"),
+        trade_log_path=str(tmp_path / "fifteen_trade_log.jsonl"),
+        paper_log_path=str(tmp_path / "fifteen_paper_log.jsonl"),
+        scan_log_path=str(tmp_path / "fifteen_scan_log.jsonl"),
+        halted=False,
+        chop_veto=True,
+    )
+    assert run_scan(settings, asset=None, place=True, force_live=True, armed=False) == 0
+    assert run_scan(settings, asset=None, place=False, force_live=False) == 0
+    assert seen == [True, True]
+
+
+def _fifteen_settings(tmp_path: Path, **kwargs) -> FifteenSettings:
+    defaults = dict(
+        _env_file=None,
+        artifacts_dir=str(tmp_path),
+        state_path=str(tmp_path / "fifteen_state.json"),
+        pot_path=str(tmp_path / "fifteen_pot.json"),
+        trade_log_path=str(tmp_path / "fifteen_trade_log.jsonl"),
+        paper_log_path=str(tmp_path / "fifteen_paper_log.jsonl"),
+        scan_log_path=str(tmp_path / "fifteen_scan_log.jsonl"),
+        halted=False,
+        chop_veto=True,
+    )
+    defaults.update(kwargs)
+    return FifteenSettings(**defaults)
+
+
+def _quiet_scan_client(*, fills=None, market=None, can_trade=True):
+    class Client:
+        def get_balance(self):
+            return {"total_value": 5}
+
+        def get_fills(self, limit=50):
+            return list(fills or [])
+
+        def get_market(self, ticker):
+            return dict(market or {"status": "active"})
+
+    Client.can_trade = can_trade
+    return Client()
+
+
+def test_run_scan_live_journals_place_and_shadows_paper(monkeypatch, tmp_path):
+    idea = _idea()
+    spots = _spots()
+
+    def fake_collect(*args, **kwargs):
+        return [idea], [], spots
+
+    def fake_execute(*args, **kwargs):
+        return {
+            "placed": [
+                {
+                    "order_id": "live-15",
+                    "ticker": idea.market.ticker,
+                    "fill_count": "0.00",
+                    "remaining_count": "2.00",
+                    "client_order_id": "cid-15",
+                }
+            ],
+            "orders": [{"ticker": idea.market.ticker, "client_order_id": "cid-15"}],
+            "errors": [],
+        }
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main.execute_ideas", fake_execute)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client())
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=True, force_live=True, armed=True) == 0
+    rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["ticker"] == idea.market.ticker
+    assert row["side"] == idea.side
+    assert row["order_id"] == "live-15"
+    assert row["client_order_id"] == "cid-15"
+    assert row["fill_status"] == "resting"
+    assert row["result"] == "pending"
+    assert row["limit_price"] == idea.limit_price
+    assert row["risk_dollars"] == idea.risk_dollars
+    assert row.get("kind") != "paper"
+    paper = load_trades(tmp_path / "fifteen_paper_log.jsonl")
+    assert len(paper) == 1
+    assert paper[0]["kind"] == "paper"
+    assert paper[0]["ticker"] == idea.market.ticker
+    assert paper[0]["side"] == idea.side
+    assert paper[0]["limit_price"] == idea.limit_price
+    assert paper[0]["contracts"] == idea.contracts
+    assert paper[0]["fill_status"] == "assumed-maker-fill"
+    assert paper[0]["shadow"] == "live"
+    assert paper[0]["window_id"] == row["window_id"]
+    state = json.loads((tmp_path / "fifteen_state.json").read_text())
+    assert state["tickets"][0]["ticker"] == idea.market.ticker
+    assert state["tickets"][0]["order_id"] == "live-15"
+    assert state["live_decision"]["tickers"] == [idea.market.ticker]
+
+
+def test_run_scan_resolves_live_journal_fill_and_settlement(monkeypatch, tmp_path):
+    ticker = "KXBTC15M-26SEP051015-T64000"
+    write_trades(
+        tmp_path / "fifteen_trade_log.jsonl",
+        [
+            new_trade_row(
+                ticker=ticker,
+                asset="BTC",
+                side="Yes",
+                strike=64000.0,
+                spot=65000.0,
+                minutes_left=12.0,
+                fair=0.62,
+                kalshi_price=0.54,
+                limit_price=0.54,
+                contracts=2,
+                risk_dollars=1.08,
+                hourly_vol=0.004,
+                source="cfbenchmarks",
+                order_id="live-15",
+                fill_status="resting",
+            )
+        ],
+    )
+    save_state = tmp_path / "fifteen_state.json"
+    save_state.write_text(
+        json.dumps(
+            {
+                "tickets": [
+                    {
+                        "status": "open",
+                        "loop": "fifteen",
+                        "ticker": ticker,
+                        "side": "Yes",
+                        "contracts": 2,
+                        "order_id": "live-15",
+                    }
+                ],
+                "rests": [],
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        "src.fifteen.main.collect_ideas", lambda *a, **k: ([], ["sit"], None)
+    )
+    monkeypatch.setattr(
+        "src.fifteen.main._client",
+        lambda settings: _quiet_scan_client(
+            fills=[{"ticker": ticker}],
+            market={"result": "yes", "status": "determined"},
+        ),
+    )
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=True, force_live=False) == 0
+    rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
+    assert len(rows) == 1
+    assert rows[0]["fill_status"] == "filled"
+    assert rows[0]["result"] == "win"
+    assert rows[0]["settlement_result"] == "yes"
+    assert rows[0]["pnl"] == pytest.approx(0.92)
+    assert load_trades(tmp_path / "fifteen_paper_log.jsonl") == []
+    pot = load_pot(tmp_path / "fifteen_pot.json")
+    assert pot.realized_pnl == pytest.approx(0.92)
+    assert pot.balance == pytest.approx(5.92)
+    state = json.loads(save_state.read_text())
+    assert state["tickets"][0]["status"] == "settled"
+    assert state["tickets"][0]["result"] == "win"
+
+
+def test_journal_live_places_two_v2_orders_write_two_rows(tmp_path):
+    btc = _idea()
+    eth = _eth_idea()
+    settings = _fifteen_settings(tmp_path)
+    result = {
+        "placed": [
+            {
+                "order_id": "btc-1",
+                "client_order_id": "cid-btc",
+                "fill_count": "0.00",
+                "remaining_count": "2.00",
+            },
+            {
+                "order_id": "eth-1",
+                "client_order_id": "cid-eth",
+                "fill_count_fp": "2.00",
+                "remaining_count_fp": "0.00",
+            },
+        ],
+        "orders": [
+            {
+                "ticker": btc.market.ticker,
+                "client_order_id": "cid-btc",
+                "count": "2.00",
+                "price": "0.5400",
+                "side": "bid",
+            },
+            {
+                "ticker": eth.market.ticker,
+                "client_order_id": "cid-eth",
+                "count": "2.00",
+                "price": "0.5400",
+                "side": "bid",
+            },
+        ],
+    }
+    written = journal_live_places(
+        settings, ideas=[btc, eth], result=result, spots=_spots(), state={"tickets": []}
+    )
+    assert [row["ticker"] for row in written] == [btc.market.ticker, eth.market.ticker]
+    assert [row["order_id"] for row in written] == ["btc-1", "eth-1"]
+    assert written[0]["side"] == "Yes"
+    assert written[1]["side"] == "Yes"
+    assert written[0]["fill_status"] == "resting"
+    assert written[1]["fill_status"] == "filled"
+    assert written[1]["filled_contracts"] == 2.0
+    assert all(row["result"] == "pending" for row in written)
+    assert all(row.get("kind") != "paper" for row in written)
+    rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
+    assert len(rows) == 2
+
+
+def test_journal_live_places_ticker_key_mismatch_still_journals(tmp_path, capsys):
+    btc = _idea()
+    eth = _eth_idea()
+    settings = _fifteen_settings(tmp_path)
+    result = {
+        "placed": [
+            {
+                "order_id": "orphan-1",
+                "market_ticker": "KXBTC15M-26SEP070630-30",
+                "fill_count_fp": "2.00",
+                "remaining_count_fp": "0.00",
+                "outcome_side": "yes",
+                "yes_price_dollars": "0.54",
+            }
+        ],
+        "orders": [],
+    }
+    written = journal_live_places(
+        settings, ideas=[btc, eth], result=result, spots=_spots(), state={"tickets": []}
+    )
+    assert len(written) == 1
+    row = written[0]
+    assert row["order_id"] == "orphan-1"
+    assert row["ticker"] == "KXBTC15M-26SEP070630-30"
+    assert row["asset"] == "BTC"
+    assert row["side"] == "Yes"
+    assert row["fill_status"] == "filled"
+    assert row["filled_contracts"] == 2.0
+    assert row["result"] == "pending"
+    assert "no idea matched" in capsys.readouterr().out
+
+
+def test_journal_live_places_new_order_id_not_blocked_by_pending_ticker(tmp_path):
+    btc = _idea()
+    settings = _fifteen_settings(tmp_path)
+    prior = new_trade_row(
+        ticker=btc.market.ticker,
+        asset="BTC",
+        side="Yes",
+        strike=64000.0,
+        spot=65000.0,
+        minutes_left=12.0,
+        fair=0.62,
+        kalshi_price=0.54,
+        limit_price=0.54,
+        contracts=2,
+        risk_dollars=1.08,
+        hourly_vol=0.004,
+        source="cfbenchmarks",
+        order_id="old-order",
+        fill_status="resting",
+    )
+    write_trades(tmp_path / "fifteen_trade_log.jsonl", [prior])
+    result = {
+        "placed": [
+            {
+                "order_id": "fresh-order",
+                "ticker": btc.market.ticker,
+                "fill_count": "0.00",
+                "remaining_count": "2.00",
+                "client_order_id": "cid-new",
+            }
+        ],
+        "orders": [{"ticker": btc.market.ticker, "client_order_id": "cid-new"}],
+    }
+    written = journal_live_places(
+        settings, ideas=[btc], result=result, spots=_spots(), state={"tickets": []}
+    )
+    assert len(written) == 1
+    assert written[0]["order_id"] == "fresh-order"
+    rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
+    assert [row["order_id"] for row in rows] == ["old-order", "fresh-order"]
+
+
+def test_run_scan_paper_does_not_write_live_journal(monkeypatch, tmp_path):
+    idea = _idea()
+
+    class Spots:
+        prices = {"BTC": 65000.0}
+        hourly_vol = {"BTC": 0.004}
+        sources = {"BTC": "cfbenchmarks"}
+        source = "cfbenchmarks"
+
+        def settlement_ok(self, _asset):
+            return True
+
+    def fake_collect(*args, **kwargs):
+        return [idea], [], Spots()
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client(can_trade=False))
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=False, force_live=False) == 0
+    paper = load_trades(tmp_path / "fifteen_paper_log.jsonl")
+    assert len(paper) == 1
+    assert paper[0]["kind"] == "paper"
+    assert paper[0]["fill_status"] == "assumed-maker-fill"
+    assert paper[0]["shadow"] == "scan"
+    assert load_trades(tmp_path / "fifteen_trade_log.jsonl") == []
+
+
+def test_paper_ideas_match_live_ideas_for_same_tick_inputs(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    kwargs = dict(
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    live_ideas, _, _ = collect_ideas(settings, **kwargs)
+    paper_ideas, _, _ = collect_ideas(settings, **kwargs)
+    live_keys = [idea_fingerprint(idea) for idea in live_ideas]
+    paper_keys = [idea_fingerprint(idea) for idea in paper_ideas]
+    assert live_keys == paper_keys
+    assert live_keys
+    shadowed = paper_ideas_for_window(
+        live_ideas, force_live=True, place=True, live_decided=False
+    )
+    classic = paper_ideas_for_window(
+        paper_ideas, force_live=False, place=False, live_decided=False
+    )
+    assert [idea_fingerprint(idea) for idea in shadowed] == live_keys
+    assert [idea_fingerprint(idea) for idea in classic] == live_keys
+    later = paper_ideas_for_window(
+        [_idea_named("KXBTC15M-LATER-T64000")],
+        force_live=False,
+        place=False,
+        live_decided=True,
+    )
+    assert later == []
+    assert paper_ideas_for_window([], force_live=True, place=True, live_decided=False) == []
+    assert paper_ideas_for_window(
+        live_ideas, force_live=False, place=True, live_decided=False
+    ) == []
+
+
+def test_later_scan_does_not_paper_a_different_pass(monkeypatch, tmp_path):
+    live_idea = _idea()
+    later_idea = _idea_named("KXBTC15M-LATER-T64000")
+    calls = {"n": 0}
+
+    def fake_collect(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return [live_idea], [], _spots()
+        return [later_idea], [], _spots()
+
+    def fake_execute(*args, **kwargs):
+        return {
+            "placed": [
+                {
+                    "order_id": "live-15",
+                    "ticker": live_idea.market.ticker,
+                    "fill_count": "0.00",
+                    "remaining_count": "2.00",
+                    "client_order_id": "cid-15",
+                }
+            ],
+            "orders": [{"ticker": live_idea.market.ticker, "client_order_id": "cid-15"}],
+            "errors": [],
+        }
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main.execute_ideas", fake_execute)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client())
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=True, force_live=True, armed=True) == 0
+    assert run_scan(settings, asset=None, place=False, force_live=False) == 0
+    paper = load_trades(tmp_path / "fifteen_paper_log.jsonl")
+    live = load_trades(tmp_path / "fifteen_trade_log.jsonl")
+    assert [row["ticker"] for row in live] == [live_idea.market.ticker]
+    assert [row["ticker"] for row in paper] == [live_idea.market.ticker]
+    assert later_idea.market.ticker not in {row["ticker"] for row in paper}
+
+
+def test_live_sit_blocks_later_scan_paper(monkeypatch, tmp_path):
+    later_idea = _idea()
+    calls = {"n": 0}
+
+    def fake_collect(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return [], ["sit"], _spots()
+        return [later_idea], [], _spots()
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client())
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=True, force_live=True, armed=True) == 0
+    assert run_scan(settings, asset=None, place=False, force_live=False) == 0
+    assert load_trades(tmp_path / "fifteen_paper_log.jsonl") == []
+    assert load_trades(tmp_path / "fifteen_trade_log.jsonl") == []
+    state = json.loads((tmp_path / "fifteen_state.json").read_text())
+    assert state["live_decision"]["n"] == 0
+    assert state["live_decision"]["tickers"] == []
+
+
+def test_live_decision_stamp_matches_window():
+    state: dict = {}
+    idea = _idea()
+    wid = fifteen_window_id(_et(10, 3))
+    stamp = stamp_live_decision(state, window_id=wid, ideas=[idea])
+    assert stamp["tickers"] == [idea.market.ticker]
+    assert live_decision_for_window(state, window_id=wid) is stamp
+    assert live_decision_for_window(state, window_id=fifteen_window_id(_et(10, 17))) is None

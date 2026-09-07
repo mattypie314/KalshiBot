@@ -37,6 +37,8 @@ from src.spot import is_settlement_index
 logger = logging.getLogger(__name__)
 
 LIVE_TRADE_LOG_NAME = "trade_log.jsonl"
+FIFTEEN_TRADE_LOG_NAME = "fifteen_trade_log.jsonl"
+LIVE_TRADE_LOG_NAMES = frozenset({LIVE_TRADE_LOG_NAME, FIFTEEN_TRADE_LOG_NAME})
 DEFAULT_PAPER_LOG_NAME = "paper_log.jsonl"
 
 FILL_ASSUMED_MAKER = "assumed-maker-fill"
@@ -59,8 +61,8 @@ SIT_UNSCORED_RESULTS = frozenset({RESULT_SIT, RESULT_UNSCORED})
 
 def assert_paper_path(path: Path) -> Path:
     """Refuse to mix paper rows into the live fill journal."""
-    if path.name == LIVE_TRADE_LOG_NAME:
-        raise ValueError("paper journal must not write to artifacts/trade_log.jsonl")
+    if path.name in LIVE_TRADE_LOG_NAMES:
+        raise ValueError(f"paper journal must not write to artifacts/{path.name}")
     return path
 
 
@@ -248,6 +250,7 @@ def record_printed_ideas(
     default_source: str = "",
     fill_model: str = FILL_ASSUMED_MAKER,
     hourly_vol: dict[str, float] | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Append one paper ticket per printed dry-scan idea (deduped by ticker)."""
     dest = assert_paper_path(path)
@@ -265,6 +268,11 @@ def record_printed_ideas(
             fill_model=fill_model,
             hourly_vol=vols.get(idea.market.asset) or 0.0,
         )
+        if extra:
+            for key, value in extra.items():
+                if value is None or value == "":
+                    continue
+                row[key] = value
         append_trade(dest, row)
         written.append(row)
         existing.append(row)
@@ -283,7 +291,7 @@ def fetch_official_print(
     asset: str,
     close_time: datetime | str,
 ) -> float | None:
-    """Official 60s BRTI/ERTI (hourly) or ETHUSD_RTI (15m) average. Never Coinbase last tick."""
+    """Official 60s BRTI / ETHUSD_RTI average. Never Coinbase last tick."""
     ids: list[str] = []
     for candidate in (index_id_for(asset), fifteen_index_id_for(asset)):
         if candidate and candidate not in ids:

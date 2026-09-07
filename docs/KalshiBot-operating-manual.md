@@ -15,7 +15,7 @@ Not financial advice. A wrong contract can go to $0.
 
 KalshiBot is an hourly BTC and ETH threshold scanner. It looks at Kalshi’s “will Bitcoin / Ethereum finish above this dollar line this hour?” books (`KXBTCD`, `KXETHD`).
 
-It is not a sports bot, not a 15-minute scalp bot, and not a dashboard. It does not stay running. You start it (or the timer starts it); it scans; if one idea clears the rules it may rest a limit; then it exits.
+It is not a sports bot, not a 15-minute scalp bot, and not a dashboard. It does not stay running. You start it (or the timer starts it); it scans; if an idea per asset clears the rules it may rest a limit; then it exits.
 
 A contract pays $1 if you are right and $0 if you are wrong. Paying 0.14 means you risk 14¢ per contract to win 86¢. That 14¢ is also the market’s implied chance.
 
@@ -41,9 +41,9 @@ Prod is live Kalshi — real cash (`external-api.kalshi.com`). Demo is paper (`d
 4. Score Yes (finishes above) and No (at or below).
 5. Fair chance from how far the line is from the **settlement index**, in typical remaining-hour moves (z-score). It does not assume BTC keeps going up. Coinbase last tick is labeled PROXY and is not used as settlement truth.
 6. Edge is always vs the executable ask, never the mid. The filter uses the taker fee even if it later posts a maker limit.
-7. Keep one idea if filters pass. Everything else is watch or avoid.
-8. `scan` / `once` only print. `live` posts a post-only GTC limit. Typical ticket $1.50–$2.00, never over $2. If that price would take the book, it steps one tick more passive. It will not market-buy. Max 1 open hourly ticket (2 only if different coin and opposite side).
-9. Each live tick also manages open inventory. If the held-side bid is **99¢** (`CASH_OUT_BID=0.99`), flatten immediately (`cash_out_99`) — ahead of the +2¢ TP. Prefer post-only; if the only fill at 99¢ is hitting that bid, place a 99¢ limit, not a market sweep.
+7. Keep the best idea per asset if filters pass (BTC+ETH both OK). Everything else is watch or avoid.
+8. `scan` / `once` only print. `live` posts a post-only GTC limit. Typical ticket $1.50–$2.00, never over $2. If that price would take the book, it steps one tick more passive. It will not market-buy. Max 1 open hourly ticket per coin (BTC+ETH both OK regardless of side; never 2 of the same coin).
+9. Each live tick also manages open inventory. If the held-side bid is **99¢** (`CASH_OUT_BID=0.99`), flatten immediately (`cash_out_99`) — ahead of early 95¢ cash-out and the +2¢ TP. If the bid is **≥ 95¢** and **≤ 10 minutes** remain (`EARLY_CASH_OUT_BID` / `EARLY_CASH_OUT_MINUTES`), flatten (`cash_out_95_time`) rather than ride settlement risk. Prefer post-only; if the only fill at the exit bid is hitting that bid, place that limit, not a market sweep. If Matt flattens in the Kalshi app instead, journal `manual_flatten` (position gone + close fill that is not our exit order id). Canceling a resting entry is respected: hourly `last_ticker` still sits the hour; we do not immediately re-post that rest.
 
 ## Rules it will not break
 
@@ -184,7 +184,7 @@ Save: Ctrl+O, Enter. Quit: Ctrl+X.
 ## How to read the report
 
 - Spot — CF Benchmarks BRTI/ERTI when the key works; Coinbase if not. Vol is exchange-realized.
-- Actionable — the one idea: side, limit, fair, edge, size, max loss.
+- Actionable — the idea(s), up to one per asset: side, limit, fair, edge, size, max loss.
 - Nearby watch — close, not enough edge.
 - Avoid — failed a hard filter.
 

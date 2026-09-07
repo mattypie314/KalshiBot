@@ -14,9 +14,20 @@ KILL_MIN_TRADES = 3
 FILLED_STATUSES = frozenset({"filled", "partial"})
 TERMINAL_RESULTS = frozenset({"win", "loss", "unfilled"})
 TURBO_LABEL = "Turbo / FORCE_NEAR_RULE"
+# Kalshi V2 / events orders often emit fill size on `*_fp` and leave `fill_count` empty.
+ORDER_FILL_COUNT_KEYS = (
+    "fill_count_fp",
+    "filled_count_fp",
+    "fill_count",
+    "filled_count",
+)
+ORDER_REMAINING_KEYS = ("remaining_count_fp", "remaining_count")
 
 
 CASH_OUT_LABEL = "cash_out_99"
+EARLY_CASH_OUT_LABEL = "cash_out_95_time"
+MANUAL_FLATTEN_LABEL = "manual_flatten"
+MANUAL_CASH_OUT_LABEL = MANUAL_FLATTEN_LABEL
 
 
 def apply_exit_fields(
@@ -26,7 +37,7 @@ def apply_exit_fields(
     exit_price: float,
     order_id: str = "",
 ) -> dict[str, Any]:
-    """Label a flatten (cash_out_99 / take_profit) on a journal row."""
+    """Label a flatten (cash_out_99 / cash_out_95_time / take_profit / manual_flatten)."""
     row["exit_reason"] = reason
     row["exit_label"] = reason
     row["exit_price"] = round(float(exit_price), 4)
@@ -214,12 +225,47 @@ def parse_count(value: object) -> float:
         return 0.0
 
 
+def first_present_count(payload: dict[str, Any] | None, keys: tuple[str, ...]) -> float:
+    """First field that is present, including zero ('0.00' remaining means filled)."""
+    if not isinstance(payload, dict):
+        return 0.0
+    for key in keys:
+        raw = payload.get(key)
+        if raw in (None, ""):
+            continue
+        return parse_count(raw)
+    return 0.0
+
+
+def first_parsed_count(payload: dict[str, Any] | None, keys: tuple[str, ...]) -> float:
+    """First field that parses to a positive size. Skips missing / empty / 0 / '0.00'."""
+    if not isinstance(payload, dict):
+        return 0.0
+    seen = 0.0
+    found = False
+    for key in keys:
+        raw = payload.get(key)
+        if raw in (None, ""):
+            continue
+        value = parse_count(raw)
+        found = True
+        if value > 0:
+            return value
+        seen = value
+    return seen if found else 0.0
+
+
+def order_filled_contracts(order: dict[str, Any] | None) -> float:
+    """Contracts filled on a Kalshi order. Prefer `fill_count_fp` / `count_fp`."""
+    return first_parsed_count(order, ORDER_FILL_COUNT_KEYS)
+
+
 def fill_status_from_order(order: dict[str, Any] | None) -> str:
     """filled / partial / resting / canceled from a Kalshi order payload."""
     if not isinstance(order, dict):
         return "resting"
-    fill_count = parse_count(order.get("fill_count") or order.get("filled_count"))
-    remaining = parse_count(order.get("remaining_count"))
+    fill_count = order_filled_contracts(order)
+    remaining = first_present_count(order, ORDER_REMAINING_KEYS)
     status = str(order.get("status") or "").lower()
     if fill_count > 0 and remaining <= 1e-9:
         return "filled"

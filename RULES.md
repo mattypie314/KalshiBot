@@ -2,7 +2,7 @@
 
 These are the live rules of **hourly** KalshiBot: BTC and ETH “above/below this dollar line” contracts only (`KXBTCD`, `KXETHD`). Not sports.
 
-A separate 15-minute BTC/ETH bot (`KXBTC15M` / `KXETH15M`, own $5 pot, shard 2) is documented in `docs/15m.md`. Hourly must not load those books. Standing 15m one-liner: Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one idea per window, $0.10–$1.50 risk, own $5 pot (separate from hourly) — quit at $0, ask at $10, flat is fine.
+A separate 15-minute BTC/ETH bot (`KXBTC15M` / `KXETH15M`, own $5 pot, shard 2) is documented in `docs/15m.md`. Hourly must not load those books. Standing 15m one-liner: Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one idea per asset per window (BTC+ETH both OK), $0.10–$1.50 risk, own $5 pot (separate from hourly) — quit at $0, ask at $10, flat is fine.
 
 This is **not financial advice**. A wrong contract can go to $0.
 
@@ -14,8 +14,8 @@ Set `BANKROLL=40` in `.env` if you override it. The code default is **$40**.
 - **No:** price finishes at or below the line this hour
 - **Coins:** BTC and ETH only
 - **Books:** hourly threshold markets, up to 12 per coin per scan
-- **One idea per run.** Everything else is watch-only
-- **Open tickets:** max 1 hourly crypto idea. A second is allowed only on the other coin and the opposite side. Same-direction BTC+ETH Nos sit (that was the 2026-09-02 stacked card).
+- **One idea per asset per run** (BTC and ETH both OK when they independently Pass). Do not take two strikes of the same coin. Everything else is watch-only
+- **Open tickets:** max 1 hourly idea per coin, hard cap 2. The other coin is allowed regardless of Yes/No side. A second ticket on the same coin sits.
 - **Loseable risk:** $1.75 preferred, $2.00 hard cap on a $40 bankroll (also 5% of `BANKROLL`)
 - **Execution:** maker / limit only. It does not lift the ask for a thin edge. It does not market-buy
 - **Host:** a live Kalshi key needs `USE_DEMO=false` (edit `.env` or `./kb env --prod`). Demo host 401s that key.
@@ -42,7 +42,7 @@ How size is picked:
 2. Take the smallest of: that Kelly size, 5% of $40 ($2), preferred $1.75, hard cap $2
 3. Contracts = floor(dollars ÷ entry price)
 4. One contract is allowed only if that one contract is still ≤ $2
-5. Do not stack four $2 tickets in one morning. Max 1 open hourly idea (2 only if different coin and opposite side).
+5. Do not stack four $2 tickets in one morning. Max 1 open hourly idea per coin (BTC+ETH both OK regardless of side).
 
 Anti-revenge: if the last live hourly ticket **filled** and settled against us (or a fill reports negative pnl), the next idea cannot size bigger than last time. If last size was zero, it sits. The ticket survives the Eastern `:00` hour roll so a just-settled loss still counts. Unfilled rests are not wins or losses. After 2 filled losses or $4 filled loss in one Eastern day, sit. Reports and settlements are America/New_York.
 
@@ -78,7 +78,7 @@ Skip unless every box is checked:
 - If it would have to lift the ask, visible size must be ≥ 5 contracts
 - Net edge ≥ 6% after fees. No 4% tight-book exception. No edge = sit
 - Ban close strikes: skip if the line is inside 0.50% of spot, or inside 1.5× a normal 1-hour move. A fat model edge on a tight strike is not a reason to fade it.
-- **Turbo Mode** (`FORCE_NEAR_RULE=true`, default **false**): soften only those close-strike / min-edge bars enough to rest a maker on the nearest viable strike. Still never crosses. Still requires BRTI (BTC) / ERTI (ETH). Size stays in the ~$0.75–$1.50 band when it fits, never above `MAX_RISK`. One idea per run. Journal / `last_run.json` / `trade_log.jsonl` label the ticket `Turbo / FORCE_NEAR_RULE` (forced). Strict Pass is unchanged when the flag is off.
+- **Turbo Mode** (`FORCE_NEAR_RULE=true`, default **false**): soften only those close-strike / min-edge bars enough to rest a maker on the nearest viable strike. Still never crosses. Still requires BRTI (BTC) / ERTI (ETH). Size stays in the ~$0.75–$1.50 band when it fits, never above `MAX_RISK`. One idea per asset (BTC+ETH both OK). Journal / `last_run.json` / `trade_log.jsonl` label the ticket `Turbo / FORCE_NEAR_RULE` (forced). Strict Pass is unchanged when the flag is off.
 - If realized vol is 2× typical, sit the coin (headline / war-tape days). Operator hook: `NEWS_PAUSE=true` sits everything without scraping headlines.
 - If |z| > 2.5 (fat-tail / long-shot), need net edge ≥ 8%
 - If the side needs a huge jump (|z| > 3.5), skip — treat as news-only, not a vol bet
@@ -104,7 +104,7 @@ If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid
 
 ## Hard cash-out at 99¢ (all bots)
 
-When the held side’s live bid hits **99¢** (~99% implied), flatten immediately. This is a hard rule for hourly **and** 15m. It **beats / runs ahead of** the +2¢ take-profit. Live timer oneshots **place the exit** — they do not wait for an operator.
+When the held side’s live bid hits **99¢** (~99% implied), flatten immediately. This is a hard rule for hourly **and** 15m. It **beats / runs ahead of** early 95¢ cash-out and the +2¢ take-profit. Live timer oneshots **place the exit** — they do not wait for an operator.
 
 | Held | Trigger (default `CASH_OUT_BID=0.99`) |
 | --- | --- |
@@ -116,11 +116,35 @@ When the held side’s live bid hits **99¢** (~99% implied), flatten immediatel
 - Hourly live ticks run a compact manage-open-positions step before new entries (and even when the scan has no new idea).
 - 15m: `should_take_profit` is also True at fill+2¢; `cash_out_99` still wins the label when the bid is 99¢.
 
+## Early cash-out at 95¢ with time left (all bots)
+
+When we already hold a fill, flatten if the held-side live bid is **≥ 95¢** (`EARLY_CASH_OUT_BID=0.95`) **and** minutes to settlement are **≤ 10** (`EARLY_CASH_OUT_MINUTES=10`). Prefer locking the win over riding the last minutes and risking a wipeout.
+
+- Priority: **99¢** (any time left) → **95¢ + ≤10m** → **fill+2¢ TP**.
+- 95¢ with 11+ minutes left does **not** fire this rule.
+- 99¢ still fires immediately even with plenty of time left.
+- Journal / trade-log label: `cash_out_95_time`.
+- 15m aliases: `FIFTEEN_EARLY_CASH_OUT_BID` / `FIFTEEN_EARLY_CASH_OUT_MINUTES`.
+
+## Manual in-app flatten (all bots)
+
+If a live entry we placed is later flat because someone sold/flattened **in the Kalshi app** — position gone, and a matching sell/close fill whose `order_id` is **not** one of our exit order ids — journal it as an exit. Label: `manual_flatten` (alias `manual_cash_out`). Do not treat that as a mystery disappearance, and do not try to flatten a position that is already gone.
+
+Bot-placed 99¢ / 95¢+time / +2¢ exits keep their own labels when the close fill matches `exit_order_id`.
+
+## Resting-entry cancels (current behavior)
+
+If Matt cancels a resting **entry** in the app, the bot does **not** immediately replace it.
+
+- Hourly: `last_ticker` stays until that market settles, so `blocks_new_idea` sits the rest of the hour.
+- 15m: an `open` ticket/rest for this window still counts as working (`fifteen_working`) for **that coin**, so that asset sits. The other coin can still Pass.
+- The next tick is a fresh Pass/Sit. A new place happens only if the usual filters Pass **and** those working-ticket gates are clear. We do not fight cancels by re-posting the same rest.
+
 ## What it will not do
 
 - No sports, no parlays. 15m BTC/ETH is a **separate** bot (`./kb15`); this hourly process still does not trade it
 - No taking the mid as a fill price
-- No stacking many ideas in one morning (max 1 open hourly ticket; 2 only if different coin and opposite side)
+- No stacking many ideas in one morning (max 1 open hourly ticket per coin; BTC+ETH both OK regardless of side)
 - No sizing up after a loss to “win it back”
 - No flipping always-No to always-Yes on tight strikes — both are the same mistake
 - No firing every hour just because the timer ran. Sitting is a valid action
@@ -131,7 +155,7 @@ When the held side’s live bid hits **99¢** (~99% implied), flatten immediatel
 
 - Bankroll in use: **$40** (`BANKROLL=40`)
 - Risk unit: $1.75 typical, $2 absolute ceiling
-- Need 6%+ net edge after fees. Far strikes only. One open hourly idea
-- One limit per run, rest if you can, skip if you cannot. Log strike distance, time left, fair %, Kalshi price, result
+- Need 6%+ net edge after fees. Far strikes only. One open hourly idea per coin
+- One limit per asset per run, rest if you can, skip if you cannot. Log strike distance, time left, fair %, Kalshi price, result
 - Re-check after spot or time moves; short-hour edges die fast
 - Paper: `./kb scan` then `./kb eval` / `./kb paper`. Assumed maker fill, not live. Live stays off until you type LIVE.
