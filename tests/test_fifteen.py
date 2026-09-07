@@ -954,10 +954,12 @@ def test_refresh_live_journal_writes_kind_backfill_for_unmatched_fill(tmp_path):
     assert len(load_trades(tmp_path / "fifteen_trade_log.jsonl")) == 1
 
 
-def test_backfill_counts_for_pnl_not_entry_timing(tmp_path):
+def test_backfill_settles_in_journal_but_not_on_score_or_pot(tmp_path):
     from src.evaluate import summarize_trades
     from src.fifteen.main import refresh_live_journal
+    from src.fifteen.edge import fifteen_session_date
     from src.fifteen.pot import load_pot
+    from src.clock import to_et
 
     fill = {
         "ticker": "KXBTC15M-26SEP071015-T64000",
@@ -965,7 +967,8 @@ def test_backfill_counts_for_pnl_not_entry_timing(tmp_path):
         "fill_id": "fill-residual",
         "side": "yes",
         "action": "sell",
-        "count": "1.00",
+        "count": "0.00",
+        "count_fp": "2.00",
         "yes_price": "0.0100",
         "created_time": "2026-09-07T14:14:00Z",
     }
@@ -975,15 +978,28 @@ def test_backfill_counts_for_pnl_not_entry_timing(tmp_path):
         market={"result": "yes", "status": "determined"},
     )
     pot = load_pot(settings.pot_path)
-    refresh_live_journal(settings, client=client, state={"tickets": [], "rests": []}, pot=pot)
+    state = {
+        "tickets": [],
+        "rests": [],
+        "fifteen_loss_streak": 2,
+        "fifteen_session_date": fifteen_session_date(to_et()),
+    }
+    refresh_live_journal(settings, client=client, state=state, pot=pot)
     rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
     assert rows[0]["kind"] == KIND_BACKFILL
+    assert rows[0]["contracts"] == 2
+    assert rows[0]["filled_contracts"] == 2.0
+    assert rows[0]["risk_dollars"] == 0.02
     assert rows[0]["result"] == "win"
-    assert rows[0]["pnl"] == pytest.approx(0.99)
-    assert pot.realized_pnl == pytest.approx(0.99)
+    assert rows[0]["pnl"] == pytest.approx(1.98)
+    assert pot.realized_pnl == pytest.approx(0.0)
+    assert pot.balance == pytest.approx(5.0)
+    assert int(state.get("fifteen_loss_streak") or 0) == 2
     scored = summarize_trades(rows)
-    assert scored["n_filled_settled"] == 1
-    assert scored["pnl"] == pytest.approx(0.99)
+    assert scored["n_backfills"] == 1
+    assert scored["n_filled_settled"] == 0
+    assert scored["n_wins"] == 0
+    assert scored["pnl"] == pytest.approx(0.0)
     timing = summarize_entry_timing(rows)
     assert timing["n"] == 0
     assert timing["n_backfills"] == 1
@@ -1018,3 +1034,59 @@ def test_run_scan_paper_does_not_write_live_journal(monkeypatch, tmp_path):
     assert paper[0]["kind"] == "paper"
     assert paper[0]["fill_status"] == "assumed-maker-fill"
     assert load_trades(tmp_path / "fifteen_trade_log.jsonl") == []
+
+
+def test_livescore_play_feed_skips_backfill_rows(monkeypatch, tmp_path, capsys):
+    from src.fifteen.main import run_eval
+    from src.journal import new_backfill_row
+
+    live = new_trade_row(
+        ticker="KXBTC15M-PLAY",
+        asset="BTC",
+        side="Yes",
+        strike=64000.0,
+        spot=65000.0,
+        minutes_left=12.0,
+        fair=0.62,
+        kalshi_price=0.54,
+        limit_price=0.54,
+        contracts=2,
+        risk_dollars=1.08,
+        hourly_vol=0.004,
+        source="cfbenchmarks",
+        order_id="live-play",
+        fill_status="filled",
+    )
+    live["result"] = "win"
+    live["pnl"] = 0.92
+    backfill = new_backfill_row(
+        fill={
+            "ticker": "KXBTC15M-RECON",
+            "order_id": "ord-recon",
+            "fill_id": "fill-recon",
+            "side": "yes",
+            "count": "0.00",
+            "count_fp": "2.00",
+            "yes_price": "0.0100",
+            "created_time": "2026-09-07T14:14:00Z",
+        }
+    )
+    backfill["result"] = "loss"
+    backfill["pnl"] = -0.0
+    backfill["fill_status"] = "filled"
+    write_trades(tmp_path / "fifteen_trade_log.jsonl", [live, backfill])
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main._client",
+        lambda settings: _quiet_scan_client(can_trade=False, market={"status": "active"}),
+    )
+    settings = _fifteen_settings(tmp_path)
+    assert run_eval(settings) == 0
+    out = capsys.readouterr().out
+    assert "KXBTC15M-PLAY" in out
+    assert "KXBTC15M-RECON" not in out
+    assert "live filled PnL: $0.92" in out
+    assert "PLAY streak: 1W" in out
+    assert "kind=backfill recon rows from score" in out
+    assert "play-only pot $5.92" in out
+    assert "PLAY feed (live Passes only)" in out
