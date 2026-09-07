@@ -36,6 +36,7 @@ from src.fifteen.edge import (
 from src.fifteen.main import (
     collect_ideas,
     idea_fingerprint,
+    journal_live_places,
     live_decision_for_window,
     live_is_armed,
     main,
@@ -377,6 +378,24 @@ def _idea() -> Idea:
         max_loss=1.08,
         rationale=["unit test"],
         post_maker=True,
+    )
+
+
+def _eth_idea() -> Idea:
+    idea = _idea()
+    return replace(
+        idea,
+        market=replace(
+            idea.market,
+            ticker="KXETH15M-26SEP070630-30",
+            event_ticker="KXETH15M-26SEP070630",
+            series_ticker="KXETH15M",
+            asset="ETH",
+            title="ETH 15m",
+            yes_sub_title="$2,400 or above",
+            threshold=2400.0,
+        ),
+        spot=2400.0,
     )
 
 
@@ -936,6 +955,132 @@ def test_run_scan_resolves_live_journal_fill_and_settlement(monkeypatch, tmp_pat
     state = json.loads(save_state.read_text())
     assert state["tickets"][0]["status"] == "settled"
     assert state["tickets"][0]["result"] == "win"
+
+
+def test_journal_live_places_two_v2_orders_write_two_rows(tmp_path):
+    btc = _idea()
+    eth = _eth_idea()
+    settings = _fifteen_settings(tmp_path)
+    result = {
+        "placed": [
+            {
+                "order_id": "btc-1",
+                "client_order_id": "cid-btc",
+                "fill_count": "0.00",
+                "remaining_count": "2.00",
+            },
+            {
+                "order_id": "eth-1",
+                "client_order_id": "cid-eth",
+                "fill_count_fp": "2.00",
+                "remaining_count_fp": "0.00",
+            },
+        ],
+        "orders": [
+            {
+                "ticker": btc.market.ticker,
+                "client_order_id": "cid-btc",
+                "count": "2.00",
+                "price": "0.5400",
+                "side": "bid",
+            },
+            {
+                "ticker": eth.market.ticker,
+                "client_order_id": "cid-eth",
+                "count": "2.00",
+                "price": "0.5400",
+                "side": "bid",
+            },
+        ],
+    }
+    written = journal_live_places(
+        settings, ideas=[btc, eth], result=result, spots=_spots(), state={"tickets": []}
+    )
+    assert [row["ticker"] for row in written] == [btc.market.ticker, eth.market.ticker]
+    assert [row["order_id"] for row in written] == ["btc-1", "eth-1"]
+    assert written[0]["side"] == "Yes"
+    assert written[1]["side"] == "Yes"
+    assert written[0]["fill_status"] == "resting"
+    assert written[1]["fill_status"] == "filled"
+    assert written[1]["filled_contracts"] == 2.0
+    assert all(row["result"] == "pending" for row in written)
+    assert all(row.get("kind") != "paper" for row in written)
+    rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
+    assert len(rows) == 2
+
+
+def test_journal_live_places_ticker_key_mismatch_still_journals(tmp_path, capsys):
+    btc = _idea()
+    eth = _eth_idea()
+    settings = _fifteen_settings(tmp_path)
+    result = {
+        "placed": [
+            {
+                "order_id": "orphan-1",
+                "market_ticker": "KXBTC15M-26SEP070630-30",
+                "fill_count_fp": "2.00",
+                "remaining_count_fp": "0.00",
+                "outcome_side": "yes",
+                "yes_price_dollars": "0.54",
+            }
+        ],
+        "orders": [],
+    }
+    written = journal_live_places(
+        settings, ideas=[btc, eth], result=result, spots=_spots(), state={"tickets": []}
+    )
+    assert len(written) == 1
+    row = written[0]
+    assert row["order_id"] == "orphan-1"
+    assert row["ticker"] == "KXBTC15M-26SEP070630-30"
+    assert row["asset"] == "BTC"
+    assert row["side"] == "Yes"
+    assert row["fill_status"] == "filled"
+    assert row["filled_contracts"] == 2.0
+    assert row["result"] == "pending"
+    assert "no idea matched" in capsys.readouterr().out
+
+
+def test_journal_live_places_new_order_id_not_blocked_by_pending_ticker(tmp_path):
+    btc = _idea()
+    settings = _fifteen_settings(tmp_path)
+    prior = new_trade_row(
+        ticker=btc.market.ticker,
+        asset="BTC",
+        side="Yes",
+        strike=64000.0,
+        spot=65000.0,
+        minutes_left=12.0,
+        fair=0.62,
+        kalshi_price=0.54,
+        limit_price=0.54,
+        contracts=2,
+        risk_dollars=1.08,
+        hourly_vol=0.004,
+        source="cfbenchmarks",
+        order_id="old-order",
+        fill_status="resting",
+    )
+    write_trades(tmp_path / "fifteen_trade_log.jsonl", [prior])
+    result = {
+        "placed": [
+            {
+                "order_id": "fresh-order",
+                "ticker": btc.market.ticker,
+                "fill_count": "0.00",
+                "remaining_count": "2.00",
+                "client_order_id": "cid-new",
+            }
+        ],
+        "orders": [{"ticker": btc.market.ticker, "client_order_id": "cid-new"}],
+    }
+    written = journal_live_places(
+        settings, ideas=[btc], result=result, spots=_spots(), state={"tickets": []}
+    )
+    assert len(written) == 1
+    assert written[0]["order_id"] == "fresh-order"
+    rows = load_trades(tmp_path / "fifteen_trade_log.jsonl")
+    assert [row["order_id"] for row in rows] == ["old-order", "fresh-order"]
 
 
 def test_run_scan_paper_does_not_write_live_journal(monkeypatch, tmp_path):

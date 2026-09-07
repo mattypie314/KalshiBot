@@ -31,13 +31,19 @@ class ForbiddenError(Exception):
 
 
 def unwrap_order(data: Any) -> dict[str, Any]:
-    """Kalshi sometimes nests the order under `order`."""
+    """Kalshi sometimes nests the order under `order`. Merge so ticker is not dropped."""
     if not isinstance(data, dict):
         return {}
     inner = data.get("order")
-    if isinstance(inner, dict) and data.get("order_id") in (None, ""):
-        return inner
-    return data
+    if not isinstance(inner, dict):
+        return data
+    merged = dict(inner)
+    for key, value in data.items():
+        if key == "order":
+            continue
+        if value not in (None, "") or merged.get(key) in (None, ""):
+            merged[key] = value
+    return merged
 
 
 def _expand_path(path: str) -> Path:

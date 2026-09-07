@@ -141,6 +141,23 @@ def refresh_maker_payload(idea: Idea, payload: dict[str, Any], client: Any) -> d
     return refreshed
 
 
+def attach_place_identity(placed: dict[str, Any] | None, working: dict[str, Any] | None) -> dict[str, Any]:
+    """Copy ticker / client_order_id from the request onto a V2 place response.
+
+    CreateOrder V2 (`/portfolio/events/orders`) returns order_id + fill counts and
+    often omits `ticker`. Journal matching needs that identity on `result['placed']`.
+    """
+    out = dict(placed) if isinstance(placed, dict) else {}
+    src = working if isinstance(working, dict) else {}
+    if not str(out.get("ticker") or out.get("market_ticker") or ""):
+        ticker = src.get("ticker") or src.get("market_ticker")
+        if ticker:
+            out["ticker"] = ticker
+    if not str(out.get("client_order_id") or "") and src.get("client_order_id"):
+        out["client_order_id"] = src["client_order_id"]
+    return out
+
+
 def place_post_only(create: Any, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     """POST a post-only order. On post-only-cross, step one tick more passive and retry."""
     attempt = dict(payload)
@@ -241,7 +258,7 @@ def execute_ideas(
         working = refresh_maker_payload(idea, payload, client)
         try:
             placed, working = place_post_only(create, working)
-            result["placed"].append(placed)
+            result["placed"].append(attach_place_identity(placed, working))
             print(
                 f"LIVE placed {working.get('ticker')} {working.get('side')} "
                 f"{working.get('price')} x {working.get('count')} "

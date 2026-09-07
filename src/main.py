@@ -39,7 +39,7 @@ from src.journal import (
     forced_ticket_fields,
     load_trades,
     new_trade_row,
-    parse_count,
+    order_filled_contracts,
     resolve_pending,
     ticker_in_fills,
     write_trades,
@@ -610,7 +610,7 @@ def run_scan(
                             (placed.get("orders") or [{}])[0].get("client_order_id") or ""
                         ),
                         fill_status=fill_status_from_order(order),
-                        filled_contracts=parse_count(order.get("fill_count")),
+                        filled_contracts=order_filled_contracts(order),
                         forced=idea.forced,
                         force_near_rule=idea.force_near_rule,
                     ),
