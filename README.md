@@ -14,7 +14,7 @@ Pi operating manual (PDF): `docs/KalshiBot-operating-manual.pdf`. Rebuild with `
 
 Not financial advice. You can lose the full amount you put on a contract. Demo first. `.env` can stay dry. Live is a one-run confirm: type `LIVE` at the prompt, or pass `--confirm LIVE` on a keyboard. Unattended live still needs both `LIVE_TRADING=true` and `CONFIRM_LIVE=YES`.
 
-A dedicated **15-minute BTC/ETH** edge-loop bot (`KXBTC15M` / `KXETH15M`, own $5 pot) lives in-tree as `python -m src.fifteen` / `./kb15` / `./kb fifteen`. It does not change hourly. Pi path: `/home/KalshiBot15`. Rules: `docs/15m.md` and `docs/15m-operating-rules.md`. systemd `kalshi-15m.timer` ships **disabled**. ETH settlement id for 15m is **`ETHUSD_RTI`** (hourly still uses ERTI).
+A dedicated **15-minute BTC/ETH** edge-loop bot (`KXBTC15M` / `KXETH15M`, own $5 pot) lives in-tree as `python -m src.fifteen` / `./kb15` / `./kb fifteen`. It does not change hourly. Pi path: `/home/KalshiBot15`. Rules: `docs/15m.md` and `docs/15m-operating-rules.md`. systemd `kalshi-15m.timer` ships **disabled**. ETH settlement API id is **`ETHUSD_RTI`** for both hourly and 15m (human docs may still say ERTI).
 
 The older campaign desk (maker loop / dashboard / research) stays parked on `archive/campaign-desk`.
 
@@ -218,7 +218,7 @@ chmod +x kb15
 
 Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, entry ET minutes **:02–:04** of each 15m window, Pass needs ≥**4¢** model-vs-mid with spread ≤ edge, sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.
 
-ETH settlement index id is **`ETHUSD_RTI`** (fallback `ERTI`). Missing/PROXY index → sit.
+ETH settlement API id is **`ETHUSD_RTI`** (human docs may still say ERTI). Missing/PROXY index → sit.
 
 v1 ships the early-window edge loop. Live oneshots flatten when the held-side bid hits **99¢** (`cash_out_99`, any time left) or **≥ 95¢ with ≤ 10 minutes** to settlement (`cash_out_95_time`), ahead of the +2¢ TP. In-app flattens are journaled as `manual_flatten`. Canceled resting entries are not immediately replaced. Last-minute maker is still deferred.
 
