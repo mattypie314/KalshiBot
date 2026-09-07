@@ -21,7 +21,7 @@ from src.paper import (
     record_printed_ideas,
     try_settle_paper,
 )
-from src.exposure import blocks_new_idea, open_hourly_tickets
+from src.exposure import blocks_new_idea, open_hourly_tickets, select_ideas_per_asset
 from src.filters import (
     TURBO_PREFERRED_RISK_DOLLARS,
     FilterConfig,
@@ -437,8 +437,11 @@ def run_scan(
                 avoided.append(result)
 
         ideas = rank_actionable_ideas(ideas, force_near_rule=settings.force_near_rule)
-        extra = ideas[settings.max_ideas_per_run :]
-        ideas = ideas[: settings.max_ideas_per_run]
+        ideas, extra = select_ideas_per_asset(
+            ideas,
+            max_per_asset=1,
+            max_ideas=settings.max_ideas_per_run,
+        )
         sit_day = daily_loss_reason(
             trades,
             now,
@@ -468,7 +471,7 @@ def run_scan(
             note = (
                 f"{idea.side} held back ({sit_day})"
                 if sit_day
-                else f"{idea.side} net {idea.net_edge:.1%} held back (max {settings.max_ideas_per_run} idea/run)"
+                else f"{idea.side} net {idea.net_edge:.1%} held back (one per asset; max {settings.max_ideas_per_run}/run)"
             )
             nearby.append(
                 FilterResult(

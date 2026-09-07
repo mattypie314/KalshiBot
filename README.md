@@ -22,7 +22,7 @@ The older campaign desk (maker loop / dashboard / research) stays parked on `arc
 
 Scans the live hourly above/below books for Bitcoin and Ethereum. Fair probability comes from **CF Benchmarks BRTI/ERTI** (the 60-second average Kalshi settles on) plus recent realized vol. Coinbase last tick is a proxy, not the print — without the index the coin sits. It only prints or places a **maker limit** when net edge after estimated fees clears the filter.
 
-Bankroll default **$40**. Risk per idea **$1.50–$2.00**, preferred **$1.75**, hard cap **$2.00**. Maker / limit only. Sit unless net edge after fees is ≥ 6%. Ban close strikes (coin-flip fades inside ~0.5–0.75% of spot). Max 1 open hourly ticket. **Turbo Mode** (`FORCE_NEAR_RULE=true`, default off) softens only the close-strike / min-edge bars enough to rest a maker on the nearest strike — still post-only, still BRTI/ERTI, still `MAX_RISK`, one idea per run, and the ticket is labeled forced / Turbo. Full rules: `RULES.md`.
+Bankroll default **$40**. Risk per idea **$1.50–$2.00**, preferred **$1.75**, hard cap **$2.00**. Maker / limit only. Sit unless net edge after fees is ≥ 6%. Ban close strikes (coin-flip fades inside ~0.5–0.75% of spot). Max 1 open hourly ticket per coin (BTC+ETH both OK when they independently Pass). **Turbo Mode** (`FORCE_NEAR_RULE=true`, default off) softens only the close-strike / min-edge bars enough to rest a maker on the nearest strike — still post-only, still BRTI/ERTI, still `MAX_RISK`, one idea per asset, and the ticket is labeled forced / Turbo. Full rules: `RULES.md`.
 
 ```bash
 pip install -r requirements.txt

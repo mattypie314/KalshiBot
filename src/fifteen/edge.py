@@ -1,4 +1,4 @@
-"""15m edge loop: first 2–4 minutes of each ET window, Pass/Fail vs mid, one idea.
+"""15m edge loop: first 2–4 minutes of each ET window, Pass/Fail vs mid, one idea per asset.
 
 Maker (last 3 min 74–93¢) and the hourly scanner stay separate.
 """
@@ -10,6 +10,8 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+from src.exposure import row_asset
 
 ET = ZoneInfo("America/New_York")
 
@@ -144,19 +146,30 @@ def fifteen_stopped(state: dict, now: datetime | None = None) -> bool:
     return now_et(now) < until.astimezone(ET)
 
 
-def fifteen_working(state: dict, now: datetime | None = None) -> bool:
-    """True if a 15m ticket or rest is already working this window."""
+def fifteen_working(
+    state: dict,
+    now: datetime | None = None,
+    asset: str | None = None,
+) -> bool:
+    """True if a 15m ticket or rest is already working this window.
+
+    When ``asset`` is set, only that coin counts — an open BTC ticket must
+    not sit ETH, and vice versa. A row with no coin tag still blocks every
+    asset (legacy / canceled rests without a ticker).
+    """
+    want = str(asset or "").strip().upper()
     wid = fifteen_window_id(now)
-    for ticket in state.get("tickets") or []:
-        if ticket.get("status") != "open" or ticket.get("loop") != "fifteen":
-            continue
-        if ticket.get("window_id") in (None, "", wid):
-            return True
-    for rest in state.get("rests") or []:
-        if rest.get("status") != "open" or rest.get("loop") != "fifteen":
-            continue
-        if rest.get("window_id") in (None, "", wid):
-            return True
+    for key in ("tickets", "rests"):
+        for row in state.get(key) or []:
+            if not isinstance(row, dict):
+                continue
+            if row.get("status") != "open" or row.get("loop") != "fifteen":
+                continue
+            if row.get("window_id") not in (None, "", wid):
+                continue
+            have = row_asset(row)
+            if not want or not have or have == want:
+                return True
     return False
 
 
