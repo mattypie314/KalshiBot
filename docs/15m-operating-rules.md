@@ -209,7 +209,7 @@ Rules:
 2. Dual live gates + `HALTED` saved accidental fires.
 3. Early-window scans beat late-hour noise.
 4. Forced under-edge “fun” tickets can win and still be bad process — keep them rare and labeled.
-5. Separate **paper** journal from **live** journal.
+5. Separate **paper** journal from **live** journal. Trade log may contain `kind=backfill`; exclude those from entry timing.
 6. Track shard cash; crypto needs money on **index 2**.
 7. Quiet-unless-new is fine; Matt will ask “still running?” — answer with last scan time.
 
