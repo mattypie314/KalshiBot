@@ -16,6 +16,10 @@ def test_normalize_expands_shortcuts():
     assert normalize_argv(["paper"]) == ["paper"]
     assert normalize_argv(["p"]) == ["paper"]
     assert normalize_argv(["7"]) == ["paper"]
+    assert normalize_argv(["score"]) == ["score"]
+    assert normalize_argv(["livescore"]) == ["livescore"]
+    assert normalize_argv(["score-hourly"]) == ["score"]
+    assert normalize_argv(["livescore-hourly"]) == ["livescore"]
     assert normalize_argv(["1", "--asset", "BTC"]) == ["scan", "--asset", "BTC"]
     assert normalize_argv(["scan", "--asset", "ETH"]) == ["scan", "--asset", "ETH"]
 

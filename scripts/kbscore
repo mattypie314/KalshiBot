@@ -1,0 +1,11 @@
+#!/bin/sh
+# 15m paper Termius board (assumed fills, not live cash).
+#   kbscore | score | ./kb15 score | python -m src.scoreboard score
+set -e
+if command -v readlink >/dev/null 2>&1; then
+  here=$(readlink -f "$0" 2>/dev/null || printf '%s\n' "$0")
+else
+  here="$0"
+fi
+scripts_dir=$(CDPATH= cd -- "$(dirname "$here")" && pwd)
+exec "$scripts_dir/kb-scoreboard" score "$@"

@@ -1235,10 +1235,10 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--confirm", default="", metavar="LIVE")
     add_host_flags(live)
 
-    sub.add_parser("eval", help="Paper log + live journal + pot summary")
+    sub.add_parser("eval", help="Paper log + live journal + pot summary (bookkeeping dump)")
     sub.add_parser("paper", help="Same as eval")
-    sub.add_parser("score", help="Same as eval (paper + livescore)")
-    sub.add_parser("livescore", help="Same as eval; live journal is fifteen_trade_log.jsonl")
+    sub.add_parser("score", help="Termius 15m PAPER board (not live)")
+    sub.add_parser("livescore", help="Termius 15m LIVE board (not paper)")
 
     args = parser.parse_args(normalize_argv(argv))
     configure_logging()
@@ -1263,8 +1263,12 @@ def main(argv: list[str] | None = None) -> int:
             print("Live aborted (not confirmed).")
             return EXIT_OK
         return run_scan(settings, asset=None, place=True, force_live=True, armed=True)
-    if args.command in {"eval", "paper", "score", "livescore"}:
+    if args.command in {"eval", "paper"}:
         return run_eval(settings)
+    if args.command in {"score", "livescore"}:
+        from src.scoreboard import run_board
+
+        return run_board(args.command, fifteen_root=Path.cwd())
     return EXIT_CONFIG
 
 

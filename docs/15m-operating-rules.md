@@ -175,6 +175,8 @@ Writes go through signed Kalshi REST V2 order endpoints (or the sanctioned MCP p
 
 ## 10. Logging & evaluation
 
+Termius boards (`score` / `livescore` / `scoreall` / `livescore-all`) are read-only PLAY/SIT views. They do not change Pass/Sit or live gates. Paper and live never share a board. See `docs/scoreboards.md`.
+
 Log every idea / ticket with at least:
 - timestamp (ET)
 - ticker, side, strike

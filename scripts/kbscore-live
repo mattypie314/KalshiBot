@@ -1,0 +1,11 @@
+#!/bin/sh
+# 15m live Termius board (real money; not paper).
+#   kbscore-live | livescore | ./kb15 livescore | python -m src.scoreboard livescore
+set -e
+if command -v readlink >/dev/null 2>&1; then
+  here=$(readlink -f "$0" 2>/dev/null || printf '%s\n' "$0")
+else
+  here="$0"
+fi
+scripts_dir=$(CDPATH= cd -- "$(dirname "$here")" && pwd)
+exec "$scripts_dir/kb-scoreboard" livescore "$@"
