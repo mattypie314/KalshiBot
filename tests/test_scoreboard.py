@@ -22,6 +22,7 @@ from src.scoreboard import (
     load_bot_tape,
     main as scoreboard_main,
     render_board,
+    resolve_board,
 )
 
 ET = ZoneInfo("America/New_York")
@@ -418,6 +419,21 @@ def test_scoreboard_cli_smoke(tmp_path: Path, capsys):
     assert "hourly" in out
 
 
+def test_kb15_allscore_is_combined_live(tmp_path: Path, monkeypatch, capsys):
+    from src.fifteen.main import main as fifteen_main
+
+    fifteen = _fifteen_checkout(tmp_path)
+    hourly = _hourly_checkout(tmp_path)
+    monkeypatch.chdir(fifteen)
+    monkeypatch.setenv("KALSHIBOT15_ROOT", str(fifteen))
+    monkeypatch.setenv("KALSHIBOT_ROOT", str(hourly))
+    assert fifteen_main(["allscore"]) == 0
+    out = capsys.readouterr().out
+    assert "KB COMBINED LIVE SCOREBOARD" in out
+    assert "KXBTC15M-PLAY" in out
+    assert "KXETHD-HOUR" in out
+
+
 def test_kb15_score_is_termius_not_eval(tmp_path: Path, monkeypatch, capsys):
     from src.fifteen.main import main as fifteen_main
 
@@ -451,7 +467,34 @@ def test_hourly_kb_score_is_termius_not_eval(tmp_path: Path, monkeypatch, capsys
 def test_cli_aliases_normalize():
     assert fifteen_normalize(["score"]) == ["score"]
     assert fifteen_normalize(["livescore"]) == ["livescore"]
+    assert fifteen_normalize(["allscore"]) == ["livescore-all"]
+    assert fifteen_normalize(["livescoreall"]) == ["livescore-all"]
     assert hourly_normalize(["score"]) == ["score"]
     assert hourly_normalize(["livescore"]) == ["livescore"]
     assert hourly_normalize(["score-hourly"]) == ["score"]
     assert hourly_normalize(["livescore-hourly"]) == ["livescore"]
+    assert hourly_normalize(["allscore"]) == ["livescore-all"]
+    assert hourly_normalize(["livescore-all"]) == ["livescore-all"]
+
+
+def test_live_combined_aliases_resolve_same_board(tmp_path: Path):
+    fifteen = _fifteen_checkout(tmp_path)
+    hourly = _hourly_checkout(tmp_path)
+    for name in ("livescore-all", "allscore", "livescoreall", "kbcombined", "live-all"):
+        kind, paper, tapes = resolve_board(
+            name, fifteen_root=fifteen, hourly_root=hourly
+        )
+        assert kind == "combined"
+        assert paper is False
+        assert [tape.bot for tape in tapes] == ["15m", "hourly"]
+
+
+def test_installer_wires_allscore_to_livescore_all():
+    root = Path(__file__).resolve().parents[1]
+    installer = (root / "scripts" / "install-pi-scoreboards.sh").read_text()
+    dispatcher = (root / "scripts" / "kb-scoreboard").read_text()
+    assert 'ln -sfn "$scripts_dir/livescore-all" "$HOME/.local/bin/livescore-all"' in installer
+    assert 'ln -sfn "$scripts_dir/livescore-all" "$HOME/.local/bin/allscore"' in installer
+    assert 'ln -sfn "$scripts_dir/livescore-all" "$HOME/.local/bin/livescoreall"' in installer
+    assert '"$HOME/.local/bin/allscore"' in installer
+    assert "allscore|kbcombined" in dispatcher or "allscore" in dispatcher

@@ -34,6 +34,8 @@ chmod +x \
 mkdir -p "$HOME/.local/bin"
 
 # Drop leftover *files* from older one-off copies, then symlink.
+# allscore / kbcombined / hourscore were leftover live wrappers that never
+# got replaced, so `livescore-all` looked missing on the Pi.
 rm -f \
   "$HOME/.local/bin/kbscore" \
   "$HOME/.local/bin/score" \
@@ -45,9 +47,15 @@ rm -f \
   "$HOME/.local/bin/kbscore-hourly-live" \
   "$HOME/.local/bin/livescore-hourly" \
   "$HOME/.local/bin/hlivescore" \
+  "$HOME/.local/bin/hourscore" \
   "$HOME/.local/bin/scoreall" \
   "$HOME/.local/bin/score-all" \
-  "$HOME/.local/bin/livescore-all"
+  "$HOME/.local/bin/livescore-all" \
+  "$HOME/.local/bin/livescoreall" \
+  "$HOME/.local/bin/live-all" \
+  "$HOME/.local/bin/allscore" \
+  "$HOME/.local/bin/kbcombined" \
+  "$HOME/.local/bin/kbscore-all"
 
 ln -sfn "$scripts_dir/kbscore" "$HOME/.local/bin/kbscore"
 ln -sfn "$scripts_dir/kbscore" "$HOME/.local/bin/score"
@@ -59,17 +67,22 @@ ln -sfn "$scripts_dir/kbscore-hourly" "$HOME/.local/bin/hscore"
 ln -sfn "$scripts_dir/kbscore-hourly-live" "$HOME/.local/bin/kbscore-hourly-live"
 ln -sfn "$scripts_dir/kbscore-hourly-live" "$HOME/.local/bin/livescore-hourly"
 ln -sfn "$scripts_dir/kbscore-hourly-live" "$HOME/.local/bin/hlivescore"
+ln -sfn "$scripts_dir/kbscore-hourly-live" "$HOME/.local/bin/hourscore"
 ln -sfn "$scripts_dir/scoreall" "$HOME/.local/bin/scoreall"
 ln -sfn "$scripts_dir/scoreall" "$HOME/.local/bin/score-all"
 ln -sfn "$scripts_dir/livescore-all" "$HOME/.local/bin/livescore-all"
+ln -sfn "$scripts_dir/livescore-all" "$HOME/.local/bin/livescoreall"
+ln -sfn "$scripts_dir/livescore-all" "$HOME/.local/bin/live-all"
+ln -sfn "$scripts_dir/livescore-all" "$HOME/.local/bin/allscore"
+ln -sfn "$scripts_dir/livescore-all" "$HOME/.local/bin/kbcombined"
 
 echo "Installed Termius boards (paper and live never mix):"
 echo "  score / kbscore                 15m paper"
 echo "  livescore / kbscore-live        15m live cash"
 echo "  score-hourly / hscore           hourly paper"
-echo "  livescore-hourly / hlivescore   hourly live cash"
+echo "  livescore-hourly / hlivescore / hourscore"
 echo "  scoreall                        combined paper (15m + hourly)"
-echo "  livescore-all                   combined live (15m + hourly)"
+echo "  livescore-all / allscore        combined live (15m + hourly)"
 echo "Repo: $root"
 echo "15m artifacts:    \${KALSHIBOT15_ROOT:-/home/KalshiBot15}"
 echo "hourly artifacts: \${KALSHIBOT_ROOT:-/home/KalshiBot}"
