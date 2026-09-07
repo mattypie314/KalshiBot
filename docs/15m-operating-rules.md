@@ -55,7 +55,7 @@ Before a Pass becomes a ticket, the 15m bot reads ~60 one-minute candles:
 - **RSI ≥ 70** against a Yes / **RSI ≤ 30** against a No → short-term reversal risk → sit.
 - **MACD histogram** against the side (from the last *closed* 15m candle via CCXT) → sit.
 - Signals prefer Binance 15m OHLCV + pandas-ta; 1m local math is the fallback.
-- Entry waits until minutes **3–5** of the window so a micro-trend can form.
+- Entry waits until minutes **3–5** of the window so a micro-trend can form. The live Pi timer fires **once** at minute 3 (`:03/:18/:33/:48` ET); Python still accepts 4–5 if the oneshot is late.
 - Crowd lean is the Kalshi mid itself (same role as checking an implied-probability board).
 - Size stays a few percent of the pot — never the whole bankroll on one 15m flip.
 
@@ -168,7 +168,8 @@ Writes go through signed Kalshi REST V2 order endpoints (or the sanctioned MCP p
 ## 9. Timing & cadence
 
 - Prefer watches at the **start** of each 15m window (minutes 3–5), not the end — unless running the last-minute maker submodule.
-- Suggested dry cadence if automated: every 15m at `:03` / `:18` / `:33` / `:48` ET on weekdays (aligned with the entry window). Adjust to Matt’s waking hours.
+- Live Pi `kalshi-15m.timer` is a **single** shot at `:03` / `:18` / `:33` / `:48` ET (not `:02`, not `:02–:05` of each block).
+- Suggested dry cadence if automated: same as the live timer (`:03` / `:18` / `:33` / `:48` ET) on weekdays. Python still accepts minutes 3–5. Adjust to Matt’s waking hours.
 - Stay quiet on sit-only runs unless Matt asked for noisy updates.
 
 ---
