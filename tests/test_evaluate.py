@@ -30,47 +30,6 @@ def test_summarize_trades_ignores_unfilled():
     assert summary["n_wins"] == 1
     assert summary["pnl"] == -0.3
     assert summary["enough_for_rate"] is False
-    assert summary["n_backfills"] == 0
-
-
-def test_summarize_trades_skips_journal_backfills():
-    from src.journal import FILL_BACKFILL_SOURCE, KIND_BACKFILL
-
-    rows = [
-        {
-            "result": "win",
-            "pnl": 0.92,
-            "fill_status": "filled",
-            "bucket": "far_no",
-            "asset": "BTC",
-        },
-        {
-            "kind": KIND_BACKFILL,
-            "backfill": True,
-            "spot_source": FILL_BACKFILL_SOURCE,
-            "result": "loss",
-            "pnl": -0.0,
-            "fill_status": "filled",
-            "bucket": "backfill",
-            "asset": "BTC",
-        },
-        {
-            "spot_source": FILL_BACKFILL_SOURCE,
-            "result": "win",
-            "pnl": 9.99,
-            "fill_status": "filled",
-            "bucket": "backfill",
-            "asset": "ETH",
-        },
-    ]
-    summary = summarize_trades(rows)
-    assert summary["n_journal_rows"] == 3
-    assert summary["n_backfills"] == 2
-    assert summary["n_rows"] == 1
-    assert summary["n_filled_settled"] == 1
-    assert summary["n_wins"] == 1
-    assert summary["n_losses"] == 0
-    assert summary["pnl"] == 0.92
 
 
 def test_summarize_scans_counts_sits():

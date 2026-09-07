@@ -20,7 +20,6 @@ from src.filters import Idea
 from src.evaluate import summarize_trades
 from src.journal import (
     append_trade,
-    day_filled_pnl,
     fill_already_journaled,
     fill_status_from_order,
     is_journal_backfill,
@@ -28,11 +27,8 @@ from src.journal import (
     new_backfill_row,
     new_trade_row,
     parse_count,
-    play_pot_equity,
     resolve_pending,
-    scoreboard_rows,
     summarize_entry_timing,
-    win_loss_streak,
     write_trades,
 )
 from src.fifteen.config import (
@@ -357,8 +353,8 @@ def append_scan_log(
 def _is_live_entry(row: dict[str, Any]) -> bool:
     """True for a live 15m place or fill-recon row — not paper and not an exit event.
 
-    Backfills still count here for fill recon and exits. Score / pot equity / W-L
-    streak use `scoreboard_rows` / `is_journal_backfill` so recon rows are not PLAYS.
+    Backfills still count here for fill recon, PnL, exits, and the pot ledger.
+    Entry-timing stats use `counts_for_entry_timing` / `summarize_entry_timing`.
     """
     if str(row.get("kind") or "") == "paper":
         return False
@@ -403,8 +399,6 @@ def _open_journal_risk(trades: list[dict[str, Any]]) -> float:
     total = 0.0
     for row in trades:
         if not _is_live_entry(row):
-            continue
-        if is_journal_backfill(row):
             continue
         if str(row.get("result") or "pending") in {"win", "loss", "unfilled"}:
             continue
@@ -480,8 +474,6 @@ def refresh_live_journal(
         write_trades(journal_path, trades)
     for row in trades:
         if not _is_live_entry(row):
-            continue
-        if is_journal_backfill(row):
             continue
         result = str(row.get("result") or "pending")
         if result not in {"win", "loss", "unfilled"}:
@@ -816,36 +808,26 @@ def run_eval(settings: FifteenSettings) -> int:
     else:
         print("no paper log yet")
 
-    journal_rows = load_trades(live_path)
     live_rows = [
         row
-        for row in scoreboard_rows(journal_rows)
+        for row in load_trades(live_path)
         if _is_live_entry(row)
     ]
-    live = summarize_trades(journal_rows)
-    timing = summarize_entry_timing(journal_rows)
-    streak = win_loss_streak(journal_rows)
-    day_pnl = day_filled_pnl(journal_rows)
-    play_pot = play_pot_equity(journal_rows, start=settings.pot_start)
+    live = summarize_trades(live_rows)
+    timing = summarize_entry_timing(live_rows)
     print(f"=== 15m livescore ({live_path}) ===")
     print(
         f"live rows: {live['n_rows']} | filled+settled {live['n_filled_settled']} "
         f"({live['n_wins']} win / {live['n_losses']} loss) | "
         f"unfilled {live['n_unfilled']} | pending {live['n_pending']}"
     )
-    print(f"live filled PnL: ${live['pnl']:.2f} | day PnL ${day_pnl:.2f}")
-    if streak["n"]:
-        tag = "W" if streak["result"] == "win" else "L"
-        print(f"PLAY streak: {streak['n']}{tag}")
-    else:
-        print("PLAY streak: —")
+    print(f"live filled PnL: ${live['pnl']:.2f}")
     print(
         f"entry timing: n={timing['n']} late={timing['n_late']} "
         f"late-place {timing['late_place_rate']:.0%} "
-        f"(excluded {timing['n_backfills']} kind=backfill recon rows from score + timing)"
+        f"(excluded {timing['n_backfills']} kind=backfill recon rows)"
     )
     if live_rows:
-        print("PLAY feed (live Passes only):")
         for row in live_rows[-10:]:
             print(
                 f"  {row.get('ticker')} {row.get('side')} "
@@ -855,11 +837,7 @@ def run_eval(settings: FifteenSettings) -> int:
             )
     else:
         print("no live 15m journal yet")
-    print(
-        f"play-only pot ${play_pot:.2f} (start ${settings.pot_start:.2f} + filled PnL; "
-        f"backfills excluded)"
-    )
-    print(f"pot file ${pot.balance:.2f} realized ${pot.realized_pnl:.2f} stopped={pot.stopped}")
+    print(f"pot ${pot.balance:.2f} realized ${pot.realized_pnl:.2f} stopped={pot.stopped}")
     return EXIT_OK
 
 
