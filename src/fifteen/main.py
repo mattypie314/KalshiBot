@@ -321,13 +321,14 @@ def append_scan_log(
     ideas: list[Idea],
     notes: list[str],
     spots: Any,
+    window_id: str | None = None,
 ) -> None:
     path = Path(settings.scan_log_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     row = {
         "ts": format_et(),
         "mode": mode,
-        "window_id": fifteen_window_id(),
+        "window_id": window_id or fifteen_window_id(),
         "ideas": [
             {
                 "ticker": i.market.ticker,
@@ -344,6 +345,120 @@ def append_scan_log(
     }
     with path.open("a") as handle:
         handle.write(json.dumps(row, default=str) + "\n")
+
+
+def idea_fingerprint(idea: Idea) -> tuple[str, str, float, int]:
+    """Identity of a 15m Pass used to prove paper and live share a tick."""
+    return (
+        str(idea.market.ticker),
+        str(idea.side),
+        round(float(idea.limit_price), 4),
+        int(idea.contracts),
+    )
+
+
+def paper_ideas_for_window(
+    ideas: list[Idea],
+    *,
+    force_live: bool,
+    place: bool,
+    live_decided: bool,
+) -> list[Idea]:
+    """Which ideas to assume-fill on paper for this 15m window.
+
+    The live tick is the source of truth: paper shadows that Pass/Sit list.
+    A later scan must not journal a different decision. Classic dry boards
+    (scan with no live decision yet) still paper Passes. ``once`` stays dry.
+    """
+    if force_live:
+        return list(ideas)
+    if live_decided:
+        return []
+    if place:
+        return []
+    return list(ideas)
+
+
+def stamp_live_decision(
+    state: dict[str, Any],
+    *,
+    window_id: str,
+    ideas: list[Idea],
+) -> dict[str, Any]:
+    """Record this window's live Pass/Sit so a later scan cannot re-decide."""
+    stamp = {
+        "window_id": window_id,
+        "tickers": [idea.market.ticker for idea in ideas],
+        "n": len(ideas),
+        "ts": format_et(),
+    }
+    state["live_decision"] = stamp
+    return stamp
+
+
+def adopt_live_decision(
+    state: dict[str, Any],
+    path: Path,
+    window_id: str,
+) -> dict[str, Any] | None:
+    """Keep a parallel live oneshot's stamp; do not clobber it on save."""
+    ours = state.get("live_decision")
+    if isinstance(ours, dict) and str(ours.get("window_id") or "") == window_id:
+        return ours
+    if path.is_file():
+        disk = load_state(path)
+        disk_dec = disk.get("live_decision") if isinstance(disk, dict) else None
+        if isinstance(disk_dec, dict) and str(disk_dec.get("window_id") or "") == window_id:
+            state["live_decision"] = disk_dec
+            return disk_dec
+    return None
+
+
+def persist_fifteen_state(
+    path: Path,
+    state: dict[str, Any],
+    *,
+    window_id: str,
+) -> None:
+    adopt_live_decision(state, path, window_id)
+    save_state(path, state)
+
+
+def live_decision_for_window(
+    state: dict[str, Any],
+    *,
+    window_id: str,
+    scan_log_path: Path | None = None,
+    state_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Live Pass/Sit already recorded for this window, or None if scan-only."""
+    if state_path is not None:
+        adopted = adopt_live_decision(state, state_path, window_id)
+        if adopted is not None:
+            return adopted
+    stamp = state.get("live_decision")
+    if isinstance(stamp, dict) and str(stamp.get("window_id") or "") == window_id:
+        return stamp
+    if scan_log_path is None or not Path(scan_log_path).is_file():
+        return None
+    found: dict[str, Any] | None = None
+    for row in load_trades(Path(scan_log_path)):
+        if str(row.get("mode") or "") != "live":
+            continue
+        if str(row.get("window_id") or "") != window_id:
+            continue
+        tickers = [
+            str(item.get("ticker") or "")
+            for item in (row.get("ideas") or [])
+            if isinstance(item, dict) and item.get("ticker")
+        ]
+        found = {
+            "window_id": window_id,
+            "tickers": tickers,
+            "n": len(tickers),
+            "source": "scan_log",
+        }
+    return found
 
 
 def _is_live_entry(row: dict[str, Any]) -> bool:
@@ -522,6 +637,7 @@ def journal_live_places(
             fill_status=fill_status_from_order(order),
             filled_contracts=parse_count(order.get("fill_count")),
         )
+        row["window_id"] = fifteen_window_id()
         append_trade(journal_path, row)
         trades.append(row)
         written.append(row)
@@ -540,6 +656,27 @@ def journal_live_places(
     return written
 
 
+def _record_window_paper(
+    settings: FifteenSettings,
+    ideas: list[Idea],
+    spots: Any,
+    *,
+    window_id: str,
+    shadow: str,
+) -> list[dict[str, Any]]:
+    if not ideas:
+        return []
+    return record_printed_ideas(
+        Path(settings.paper_log_path),
+        ideas,
+        sources=(spots.sources if spots else {}),
+        default_source=(spots.source if spots else ""),
+        fill_model=FILL_ASSUMED_MAKER,
+        hourly_vol=(spots.hourly_vol if spots else None),
+        extra={"window_id": window_id, "shadow": shadow},
+    )
+
+
 def run_scan(
     settings: FifteenSettings,
     *,
@@ -551,6 +688,7 @@ def run_scan(
     Path(settings.artifacts_dir).mkdir(parents=True, exist_ok=True)
     state_path = Path(settings.state_path)
     state = load_state(state_path)
+    wid = fifteen_window_id()
     pot = load_pot(settings.pot_path)
     pot.start = settings.pot_start
     pot.double_at = settings.pot_double
@@ -591,13 +729,13 @@ def run_scan(
             series=FIFTEEN_SERIES,
             exchange_index=CRYPTO_SHARD,
         )
-        save_state(state_path, state)
+        persist_fifteen_state(state_path, state, window_id=wid)
         save_pot(pot, settings.pot_path)
 
     if force_live and pot.stopped:
         print(f"15m pot stopped at ${pot.balance:.2f}. Refusing new live entries.")
         save_pot(pot, settings.pot_path)
-        save_state(state_path, state)
+        persist_fifteen_state(state_path, state, window_id=wid)
         return EXIT_OK
 
     try:
@@ -624,7 +762,7 @@ def run_scan(
     print(f"=== 15m BTC/ETH edge loop ({mode}) @ {format_et()} ===")
     print(
         f"pot ${pot.balance:.2f} (room ${pot.room:.2f}) | bankroll ${bankroll:.2f} | "
-        f"window {fifteen_window_id()} | halted={settings.halted}"
+        f"window {wid} | halted={settings.halted}"
     )
     if pot.ask_to_continue:
         print(f"POT DOUBLE: ${pot.balance:.2f} >= ${pot.double_at:.2f} — ask Matt.")
@@ -634,37 +772,61 @@ def run_scan(
             tag = "settlement" if spots.settlement_ok(name) else "PROXY"
             print(f"  {name} {price:.2f} ({src}, {tag})")
 
+    # Live computes the window once. Stamp immediately so a later/parallel
+    # scan cannot paper a different Pass/Sit.
+    if force_live:
+        stamp_live_decision(state, window_id=wid, ideas=ideas)
+        persist_fifteen_state(state_path, state, window_id=wid)
+
+    decided = live_decision_for_window(
+        state,
+        window_id=wid,
+        scan_log_path=Path(settings.scan_log_path),
+        state_path=state_path,
+    )
+    to_paper = paper_ideas_for_window(
+        ideas,
+        force_live=force_live,
+        place=place,
+        live_decided=decided is not None,
+    )
+
     if not ideas:
         print("NO_ACTIONABLE_EDGE")
         for note in notes[:12]:
             print(f"  sit: {note}")
-        save_state(state_path, state)
-        save_pot(pot, settings.pot_path)
-        append_scan_log(settings, mode=mode, ideas=[], notes=notes, spots=spots)
-        return EXIT_OK
+    else:
+        for idea in ideas:
+            print(
+                f"PASS {idea.market.ticker} {idea.side} @ {idea.limit_price:.2f} "
+                f"x {idea.contracts} (fair {idea.fair:.2f}, edge {idea.net_edge:+.2f}, "
+                f"risk ${idea.risk_dollars:.2f})"
+            )
+            for line in idea.rationale:
+                print(f"  · {line}")
 
-    for idea in ideas:
-        print(
-            f"PASS {idea.market.ticker} {idea.side} @ {idea.limit_price:.2f} "
-            f"x {idea.contracts} (fair {idea.fair:.2f}, edge {idea.net_edge:+.2f}, "
-            f"risk ${idea.risk_dollars:.2f})"
-        )
-        for line in idea.rationale:
-            print(f"  · {line}")
-
-    if not place and not force_live:
-        written = record_printed_ideas(
-            Path(settings.paper_log_path),
-            ideas,
-            sources=(spots.sources if spots else {}),
-            fill_model=FILL_ASSUMED_MAKER,
-            hourly_vol=(spots.hourly_vol if spots else None),
+    if to_paper:
+        written = _record_window_paper(
+            settings,
+            to_paper,
+            spots,
+            window_id=wid,
+            shadow="live" if force_live else "scan",
         )
         for row in written:
             print(f"PAPER: logged {row.get('ticker')} (not live PnL)")
-        save_state(state_path, state)
+    elif decided is not None and not force_live and not place:
+        print(
+            f"PAPER: shadowing live decision for window {wid} "
+            "(not a later scan)"
+        )
+
+    if not ideas or (not place and not force_live):
+        persist_fifteen_state(state_path, state, window_id=wid)
         save_pot(pot, settings.pot_path)
-        append_scan_log(settings, mode=mode, ideas=ideas, notes=notes, spots=spots)
+        append_scan_log(
+            settings, mode=mode, ideas=ideas, notes=notes, spots=spots, window_id=wid
+        )
         return EXIT_OK
 
     go_live = bool(force_live and armed and not settings.halted and not pot.stopped)
@@ -682,7 +844,6 @@ def run_scan(
         exchange_index=CRYPTO_SHARD,
     )
     if go_live and result.get("placed"):
-        wid = fifteen_window_id()
         placed_tickers = {
             str(order.get("ticker") or order.get("market_ticker") or "")
             for order in result["placed"]
@@ -718,9 +879,11 @@ def run_scan(
     elif place or force_live:
         print("DRY-RUN: order payloads written (not live).")
 
-    save_state(state_path, state)
+    persist_fifteen_state(state_path, state, window_id=wid)
     save_pot(pot, settings.pot_path)
-    append_scan_log(settings, mode=mode, ideas=ideas, notes=notes, spots=spots)
+    append_scan_log(
+        settings, mode=mode, ideas=ideas, notes=notes, spots=spots, window_id=wid
+    )
     return EXIT_OK
 
 
@@ -863,7 +1026,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    scan = sub.add_parser("scan", help="Scan + paper on Pass")
+    scan = sub.add_parser("scan", help="Scan; paper shadows the live window decision")
     scan.add_argument("--asset", choices=["BTC", "ETH", "btc", "eth"], default=None)
     add_host_flags(scan)
 

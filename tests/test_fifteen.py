@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -32,7 +33,16 @@ from src.fifteen.edge import (
     revenge_until_after_loss,
     strike_decided,
 )
-from src.fifteen.main import collect_ideas, live_is_armed, main, normalize_argv
+from src.fifteen.main import (
+    collect_ideas,
+    idea_fingerprint,
+    live_decision_for_window,
+    live_is_armed,
+    main,
+    normalize_argv,
+    paper_ideas_for_window,
+    stamp_live_decision,
+)
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
 from src.journal import load_trades, new_trade_row, write_trades
 from src.fifteen.regime import CHOP_VETO_PHRASE
@@ -368,6 +378,20 @@ def _idea() -> Idea:
         rationale=["unit test"],
         post_maker=True,
     )
+
+
+def _spots() -> SpotSnapshot:
+    return SpotSnapshot(
+        prices={"BTC": 65000.0, "ETH": 2400.0},
+        hourly_vol={"BTC": 0.004, "ETH": 0.005},
+        sources={"BTC": "cfbenchmarks", "ETH": "cfbenchmarks"},
+        source="cfbenchmarks",
+    )
+
+
+def _idea_named(ticker: str) -> Idea:
+    idea = _idea()
+    return replace(idea, market=replace(idea.market, ticker=ticker))
 
 
 def test_fifteen_live_cancel_skips_hourly_rests(tmp_path: Path):
@@ -775,11 +799,12 @@ def _quiet_scan_client(*, fills=None, market=None, can_trade=True):
     return Client()
 
 
-def test_run_scan_live_journals_place_not_paper(monkeypatch, tmp_path):
+def test_run_scan_live_journals_place_and_shadows_paper(monkeypatch, tmp_path):
     idea = _idea()
+    spots = _spots()
 
     def fake_collect(*args, **kwargs):
-        return [idea], [], None
+        return [idea], [], spots
 
     def fake_execute(*args, **kwargs):
         return {
@@ -820,10 +845,20 @@ def test_run_scan_live_journals_place_not_paper(monkeypatch, tmp_path):
     assert row["limit_price"] == idea.limit_price
     assert row["risk_dollars"] == idea.risk_dollars
     assert row.get("kind") != "paper"
-    assert load_trades(tmp_path / "fifteen_paper_log.jsonl") == []
+    paper = load_trades(tmp_path / "fifteen_paper_log.jsonl")
+    assert len(paper) == 1
+    assert paper[0]["kind"] == "paper"
+    assert paper[0]["ticker"] == idea.market.ticker
+    assert paper[0]["side"] == idea.side
+    assert paper[0]["limit_price"] == idea.limit_price
+    assert paper[0]["contracts"] == idea.contracts
+    assert paper[0]["fill_status"] == "assumed-maker-fill"
+    assert paper[0]["shadow"] == "live"
+    assert paper[0]["window_id"] == row["window_id"]
     state = json.loads((tmp_path / "fifteen_state.json").read_text())
     assert state["tickets"][0]["ticker"] == idea.market.ticker
     assert state["tickets"][0]["order_id"] == "live-15"
+    assert state["live_decision"]["tickers"] == [idea.market.ticker]
 
 
 def test_run_scan_resolves_live_journal_fill_and_settlement(monkeypatch, tmp_path):
@@ -929,4 +964,132 @@ def test_run_scan_paper_does_not_write_live_journal(monkeypatch, tmp_path):
     assert len(paper) == 1
     assert paper[0]["kind"] == "paper"
     assert paper[0]["fill_status"] == "assumed-maker-fill"
+    assert paper[0]["shadow"] == "scan"
     assert load_trades(tmp_path / "fifteen_trade_log.jsonl") == []
+
+
+def test_paper_ideas_match_live_ideas_for_same_tick_inputs(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    kwargs = dict(
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    live_ideas, _, _ = collect_ideas(settings, **kwargs)
+    paper_ideas, _, _ = collect_ideas(settings, **kwargs)
+    live_keys = [idea_fingerprint(idea) for idea in live_ideas]
+    paper_keys = [idea_fingerprint(idea) for idea in paper_ideas]
+    assert live_keys == paper_keys
+    assert live_keys
+    shadowed = paper_ideas_for_window(
+        live_ideas, force_live=True, place=True, live_decided=False
+    )
+    classic = paper_ideas_for_window(
+        paper_ideas, force_live=False, place=False, live_decided=False
+    )
+    assert [idea_fingerprint(idea) for idea in shadowed] == live_keys
+    assert [idea_fingerprint(idea) for idea in classic] == live_keys
+    later = paper_ideas_for_window(
+        [_idea_named("KXBTC15M-LATER-T64000")],
+        force_live=False,
+        place=False,
+        live_decided=True,
+    )
+    assert later == []
+    assert paper_ideas_for_window([], force_live=True, place=True, live_decided=False) == []
+    assert paper_ideas_for_window(
+        live_ideas, force_live=False, place=True, live_decided=False
+    ) == []
+
+
+def test_later_scan_does_not_paper_a_different_pass(monkeypatch, tmp_path):
+    live_idea = _idea()
+    later_idea = _idea_named("KXBTC15M-LATER-T64000")
+    calls = {"n": 0}
+
+    def fake_collect(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return [live_idea], [], _spots()
+        return [later_idea], [], _spots()
+
+    def fake_execute(*args, **kwargs):
+        return {
+            "placed": [
+                {
+                    "order_id": "live-15",
+                    "ticker": live_idea.market.ticker,
+                    "fill_count": "0.00",
+                    "remaining_count": "2.00",
+                    "client_order_id": "cid-15",
+                }
+            ],
+            "orders": [{"ticker": live_idea.market.ticker, "client_order_id": "cid-15"}],
+            "errors": [],
+        }
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main.execute_ideas", fake_execute)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client())
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=True, force_live=True, armed=True) == 0
+    assert run_scan(settings, asset=None, place=False, force_live=False) == 0
+    paper = load_trades(tmp_path / "fifteen_paper_log.jsonl")
+    live = load_trades(tmp_path / "fifteen_trade_log.jsonl")
+    assert [row["ticker"] for row in live] == [live_idea.market.ticker]
+    assert [row["ticker"] for row in paper] == [live_idea.market.ticker]
+    assert later_idea.market.ticker not in {row["ticker"] for row in paper}
+
+
+def test_live_sit_blocks_later_scan_paper(monkeypatch, tmp_path):
+    later_idea = _idea()
+    calls = {"n": 0}
+
+    def fake_collect(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return [], ["sit"], _spots()
+        return [later_idea], [], _spots()
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client())
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=True, force_live=True, armed=True) == 0
+    assert run_scan(settings, asset=None, place=False, force_live=False) == 0
+    assert load_trades(tmp_path / "fifteen_paper_log.jsonl") == []
+    assert load_trades(tmp_path / "fifteen_trade_log.jsonl") == []
+    state = json.loads((tmp_path / "fifteen_state.json").read_text())
+    assert state["live_decision"]["n"] == 0
+    assert state["live_decision"]["tickers"] == []
+
+
+def test_live_decision_stamp_matches_window():
+    state: dict = {}
+    idea = _idea()
+    wid = fifteen_window_id(_et(10, 3))
+    stamp = stamp_live_decision(state, window_id=wid, ideas=[idea])
+    assert stamp["tickers"] == [idea.market.ticker]
+    assert live_decision_for_window(state, window_id=wid) is stamp
+    assert live_decision_for_window(state, window_id=fifteen_window_id(_et(10, 17))) is None

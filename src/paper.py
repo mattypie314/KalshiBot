@@ -250,6 +250,7 @@ def record_printed_ideas(
     default_source: str = "",
     fill_model: str = FILL_ASSUMED_MAKER,
     hourly_vol: dict[str, float] | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Append one paper ticket per printed dry-scan idea (deduped by ticker)."""
     dest = assert_paper_path(path)
@@ -267,6 +268,11 @@ def record_printed_ideas(
             fill_model=fill_model,
             hourly_vol=vols.get(idea.market.asset) or 0.0,
         )
+        if extra:
+            for key, value in extra.items():
+                if value is None or value == "":
+                    continue
+                row[key] = value
         append_trade(dest, row)
         written.append(row)
         existing.append(row)
