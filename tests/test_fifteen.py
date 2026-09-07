@@ -71,44 +71,47 @@ def _et(hour: int, minute: int, day: int = 28, month: int = 8, year: int = 2026)
     return datetime(year, month, day, hour, minute, tzinfo=ET)
 
 
-def test_entry_window_is_minutes_three_to_five():
-    assert not in_fifteen_entry_window(_et(10, 2))
+def test_entry_window_is_minutes_two_to_six():
+    assert in_fifteen_entry_window(_et(10, 2))
     assert in_fifteen_entry_window(_et(10, 3))
     assert in_fifteen_entry_window(_et(10, 4))
     assert in_fifteen_entry_window(_et(10, 5))
+    assert in_fifteen_entry_window(_et(10, 6))
+    assert in_fifteen_entry_window(_et(10, 17))
     assert in_fifteen_entry_window(_et(10, 18))
     assert in_fifteen_entry_window(_et(10, 33))
     assert in_fifteen_entry_window(_et(10, 50))
+    assert in_fifteen_entry_window(_et(10, 51))
     assert not in_fifteen_entry_window(_et(10, 0))
     assert not in_fifteen_entry_window(_et(10, 1))
-    assert not in_fifteen_entry_window(_et(10, 6))
+    assert not in_fifteen_entry_window(_et(10, 7))
     assert not in_fifteen_entry_window(_et(10, 12))
 
 
 def test_seconds_until_entry_window_waits_early_and_skips_late():
     early = seconds_until_entry_window(_et(10, 1))
-    assert early is not None and 110 <= early <= 120
+    assert early is not None and 50 <= early <= 60
+    assert seconds_until_entry_window(_et(10, 2)) == 0.0
     assert seconds_until_entry_window(_et(10, 3)) == 0.0
-    assert seconds_until_entry_window(_et(10, 5)) == 0.0
-    assert seconds_until_entry_window(_et(10, 6)) is None
+    assert seconds_until_entry_window(_et(10, 6)) == 0.0
+    assert seconds_until_entry_window(_et(10, 7)) is None
     assert seconds_until_entry_window(_et(10, 16)) is not None
-    assert seconds_until_entry_window(_et(10, 21)) is None
+    assert seconds_until_entry_window(_et(10, 22)) is None
 
 
-def test_systemd_timer_fires_once_at_minute_three():
-    """Live Pi unit is a single shot at :03/:18/:33/:48 — not :02 and not a :02–:05 spray."""
+def test_systemd_timer_fires_in_entry_window():
+    """kalshi-15m.timer must land in ENTRY_OFFSETS (regression vs :01 fires)."""
     timer = Path(__file__).resolve().parents[1] / "scripts" / "kalshi-15m.timer"
     text = timer.read_text()
     assert "America/New_York" in text
     assert "OnCalendar=" in text
     assert "AccuracySec=1s" in text
-    # Extract minute list from *:03,18,33,48:00
     import re
 
     match = re.search(r"OnCalendar=\S+\s+\*:([0-9,]+):", text)
     assert match, text
     minutes = [int(part) for part in match.group(1).split(",") if part.strip()]
-    assert minutes == [3, 18, 33, 48], minutes
+    assert 2 in minutes and 3 in minutes
     for minute in minutes:
         assert minute % 15 in ENTRY_OFFSETS, f"timer minute {minute} outside entry {ENTRY_OFFSETS}"
 
@@ -165,7 +168,7 @@ def test_collect_ideas_waits_on_wall_clock(monkeypatch):
 def test_collect_ideas_frozen_early_now_does_not_wait(monkeypatch):
     from tests.test_regime import trending_ohlc
 
-    now = _et(10, 2)
+    now = _et(10, 1)
     market = _pass_market(now)
     _patch_collect(monkeypatch, trending_ohlc(), market)
 
@@ -184,13 +187,34 @@ def test_collect_ideas_frozen_early_now_does_not_wait(monkeypatch):
         apply_chop_veto=True,
     )
     assert ideas == []
-    assert any("outside entry window" in note and "minute 2" in note for note in notes)
+    assert any("outside entry window" in note and "minute 1" in note for note in notes)
+
+
+def test_collect_ideas_minute_two_looks(monkeypatch):
+    """Pi oneshot next-fire was :02 — that must not sit."""
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 2)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert len(ideas) == 1
+    assert not any("outside entry window" in note for note in notes)
 
 
 def test_run_scan_does_not_wait_before_journal():
     text = Path(collect_ideas.__code__.co_filename).read_text()
     assert "Do not wait here. Journal / balance / exits" in text
-    assert "collect_ideas waits until 3–5" in text
+    assert "collect_ideas waits until 2–6" in text
 
 
 def test_install_pi_15m_units_copies_timer():

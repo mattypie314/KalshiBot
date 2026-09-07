@@ -46,6 +46,7 @@ from src.fifteen.edge import (
     pass_fail,
     record_fifteen_result,
     wait_for_entry_window,
+    entry_window_want,
 )
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
 from src.fifteen.regime import chop_veto_note, classify_regime
@@ -210,7 +211,7 @@ def collect_ideas(
     if now is None:
         wait_for_entry_window(
             announce=lambda secs: print(
-                f"waiting {secs:.0f}s for 15m entry window (minutes 3–5)…",
+                f"waiting {secs:.0f}s for 15m entry window (minutes {entry_window_want()})…",
                 flush=True,
             )
         )
@@ -244,7 +245,9 @@ def collect_ideas(
             if not assets:
                 return [], notes, None
         if not in_fifteen_entry_window(now):
-            notes.append(f"outside entry window (minute {now.minute % 15}; want 3-5)")
+            notes.append(
+                f"outside entry window (minute {now.minute % 15}; want {entry_window_want()})"
+            )
 
         spots_svc = SpotService(
             preferred=settings.spot_source,
@@ -961,7 +964,7 @@ def run_scan(
 ) -> int:
     Path(settings.artifacts_dir).mkdir(parents=True, exist_ok=True)
     # Do not wait here. Journal / balance / exits can run in minutes 0–2;
-    # collect_ideas waits until 3–5 so that work cannot push the look late.
+    # collect_ideas waits until 2–6 so that work cannot push the look late.
 
     state_path = Path(settings.state_path)
     state = load_state(state_path)

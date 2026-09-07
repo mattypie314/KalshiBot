@@ -1,14 +1,13 @@
 [Unit]
-Description=Run KalshiBot15 at :03/:18/:33/:48 Eastern (15m windows, minute 3)
+Description=Run KalshiBot15 at :02–:05 of each 15m block Eastern
 # Ship DISABLED — do not enable until armed. Hourly kalshi-hourly.timer is a
 # different unit under /home/KalshiBot — leave it alone.
 
 [Timer]
-# One shot per 15m block at minute 3 (entry wants 3–5). Matches live
-# /etc/systemd/system/kalshi-15m.timer on mattypi.
-# Do not fire at :02/:17/:32/:47 — that logs "outside entry window (minute 2)".
-# Do not spray *:02,03,04,05,17,... — one fire per window is enough.
-OnCalendar=*-*-* *:03,18,33,48:00 America/New_York
+# Fire across minutes 2–5 of each 15m block. The live Pi unit was :02, and a
+# single :03 oneshot plus 1min AccuracySec sat every window.
+# :01/:16/:31/:46 is still early — Python waits until minute 2.
+OnCalendar=*-*-* *:02,03,04,05,17,18,19,20,32,33,34,35,47,48,49,50:00 America/New_York
 # Default AccuracySec is 1min and can slip the oneshot past minute 5.
 AccuracySec=1s
 RandomizedDelaySec=0

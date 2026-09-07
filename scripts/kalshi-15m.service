@@ -4,7 +4,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-# Wait from minute 0–2 until 3–5, then scan. Default 90s kills that sleep.
+# Wait from minute 0–1 until 2–6, then scan. Default 90s kills that sleep.
 TimeoutStartSec=300
 User=mkubit
 WorkingDirectory=/home/KalshiBot15
