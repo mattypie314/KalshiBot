@@ -204,7 +204,7 @@ Rules:
 - Warm, short, plain. Lead with the result.
 - Put commands/code in fenced copy-paste blocks (raw commands only when he copies).
 - Label **paper** vs **live** every time.
-- On pot **$0**: quit and tell him.
+- On pot **$0**: refuse new live entries, tell him, do not auto-refill. He refills if he wants to continue.
 - On pot **$10**: tell him and ask whether to continue.
 - Do not paste API keys, PEMs, or tokens.
 

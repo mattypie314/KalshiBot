@@ -35,7 +35,6 @@ from src.hourly_pot import sync_hourly_pot
 from src.journal import (
     append_trade,
     bucket_underwater,
-    daily_loss_reason,
     fill_status_from_order,
     forced_ticket_fields,
     load_trades,
@@ -437,16 +436,8 @@ def run_scan(
             max_per_asset=1,
             max_ideas=settings.max_ideas_per_run,
         )
-        sit_day = daily_loss_reason(
-            trades,
-            now,
-            max_dollars=settings.max_daily_loss_dollars,
-            max_losses=settings.max_daily_losses,
-        )
-        if sit_day:
-            for idea in ideas:
-                extra.append(idea)
-            ideas = []
+        # Daily loss caps (max_daily_losses / max_daily_loss_dollars) do not sit
+        # live or paper. Pot empty / HALTED is the live stop; paper keeps collecting.
         open_tickets = open_hourly_tickets(client, state)
         kept: list[Idea] = []
         for idea in ideas:
@@ -464,9 +455,8 @@ def run_scan(
         ideas = kept
         for idea in extra:
             note = (
-                f"{idea.side} held back ({sit_day})"
-                if sit_day
-                else f"{idea.side} net {idea.net_edge:.1%} held back (one per asset; max {settings.max_ideas_per_run}/run)"
+                f"{idea.side} net {idea.net_edge:.1%} held back "
+                f"(one per asset; max {settings.max_ideas_per_run}/run)"
             )
             nearby.append(
                 FilterResult(

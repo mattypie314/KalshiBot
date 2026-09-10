@@ -44,7 +44,7 @@ How size is picked:
 4. One contract is allowed only if that one contract is still ≤ $2
 5. Do not stack four $2 tickets in one morning. Max 1 open hourly idea per coin (BTC+ETH both OK regardless of side).
 
-Anti-revenge: if the last live hourly ticket **filled** and settled against us (or a fill reports negative pnl), the next idea cannot size bigger than last time. If last size was zero, it sits. The ticket survives the Eastern `:00` hour roll so a just-settled loss still counts. Unfilled rests are not wins or losses. After 2 filled losses or $4 filled loss in one Eastern day, sit. Reports and settlements are America/New_York.
+Anti-revenge: if the last live hourly ticket **filled** and settled against us (or a fill reports negative pnl), the next idea cannot size bigger than last time. If last size was zero, it sits. The ticket survives the Eastern `:00` hour roll so a just-settled loss still counts. Unfilled rests are not wins or losses. Daily loss count / $ caps do **not** sit live or paper. Empty pot / HALTED is the live stop; do not auto-refill — the operator refills. Reports and settlements are America/New_York.
 
 ## The model
 
@@ -85,7 +85,7 @@ Skip unless every box is checked:
 - CPI window: sit 8:15–8:45 AM ET on CPI print days
 - FOMC window: sit 1:45–2:45 PM ET on FOMC days
 - If the close-strike / buy-No bucket in `artifacts/trade_log.jsonl` is underwater (3+ **filled** settled, net red), that rule turns off
-- Daily sit: 2 filled losses or $4 filled loss (ET day). Caps, not a fitted edge.
+- Daily loss count / $ caps do not sit. Empty pot / HALTED is the live stop (operator refills; no auto-refill).
 - Paper tape (`./kb scan` / `./kb once` → `artifacts/paper_log.jsonl`) is a counterfactual. Default assumed-maker-fill at the printed limit. PROXY / missing BRTI/ERTI = sit/unscored. Settle vs official 60s BRTI/ERTI average. Do not retune these rules from paper PnL.
 
 If nothing passes: print `NO_ACTIONABLE_EDGE` and do nothing. Sitting is a valid action.

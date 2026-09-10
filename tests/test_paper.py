@@ -8,7 +8,8 @@ from src.config import HourlySettings
 from src.evaluate import format_eval_report, summarize_scans, summarize_trades
 from src.filters import FilterResult, Idea
 from src.main import run_scan
-from src.journal import estimate_pnl, load_trades, new_trade_row
+from src.clock import to_et
+from src.journal import estimate_pnl, load_trades, new_trade_row, write_trades
 from src.markets import HourlyMarket
 from src.paper import (
     FILL_ASSUMED_MAKER,
@@ -538,6 +539,127 @@ def test_live_run_appends_paper_tickets_tagged_shadow_live(monkeypatch, tmp_path
     again = load_trades(tmp_path / "paper_log.jsonl")
     assert len(again) == 1
     assert again[0]["shadow"] == "live"
+
+
+def _filled_loss_row(*, ticker: str, pnl: float) -> dict:
+    now = to_et()
+    row = new_trade_row(
+        ticker=ticker,
+        asset="BTC",
+        side="No",
+        strike=77249.99,
+        spot=78100.0,
+        minutes_left=20,
+        fair=0.62,
+        kalshi_price=0.38,
+        limit_price=0.37,
+        contracts=4,
+        risk_dollars=abs(pnl),
+        hourly_vol=0.004,
+        source="cfbenchmarks",
+        fill_status="filled",
+    )
+    row["result"] = "loss"
+    row["pnl"] = pnl
+    row["resolved_ts"] = now.isoformat()
+    return row
+
+
+def _patch_hourly_pass_scan(monkeypatch, idea, *, can_trade=False):
+    from src.spot import SpotSnapshot
+
+    spots = SpotSnapshot(
+        prices={"BTC": 78100.0},
+        sources={"BTC": "cfbenchmarks"},
+        source="cfbenchmarks",
+        hourly_vol={"BTC": 0.004},
+    )
+
+    class FakeClient:
+        def get_fills(self, limit=50):
+            return []
+
+        def get_market(self, ticker):
+            return {}
+
+        def close(self):
+            pass
+
+    FakeClient.can_trade = can_trade
+
+    class FakeSpots:
+        def snapshot(self, *args, **kwargs):
+            return spots
+
+        def close(self):
+            pass
+
+    class FakeDiscovery:
+        def discover(self, *args, **kwargs):
+            return [idea.market]
+
+        def next_settlements(self, markets):
+            return []
+
+    placed: list = []
+
+    def fake_execute(ideas, **kwargs):
+        placed.append(list(ideas))
+        return {"placed": [], "orders": [], "errors": []}
+
+    monkeypatch.setattr("src.main.KalshiClient", lambda *a, **k: FakeClient())
+    monkeypatch.setattr("src.main.SpotService", lambda *a, **k: FakeSpots())
+    monkeypatch.setattr("src.main.MarketDiscovery", lambda *a, **k: FakeDiscovery())
+    monkeypatch.setattr(
+        "src.main.evaluate_market",
+        lambda *a, **k: FilterResult(market=idea.market, idea=idea),
+    )
+    monkeypatch.setattr("src.main.open_hourly_tickets", lambda *a, **k: [])
+    monkeypatch.setattr("src.main.blocks_new_idea", lambda *a, **k: None)
+    monkeypatch.setattr("src.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    monkeypatch.setattr("src.main.execute_ideas", fake_execute)
+    return placed
+
+
+def test_daily_loss_cap_does_not_wipe_scan_or_live_ideas(monkeypatch, tmp_path):
+    """2 filled losses / $4 must not sit paper or live. Ideas still record and place."""
+    idea = _idea()
+    write_trades(
+        tmp_path / "trade_log.jsonl",
+        [
+            _filled_loss_row(ticker="KXBTCD-LOSS-1", pnl=-2.00),
+            _filled_loss_row(ticker="KXBTCD-LOSS-2", pnl=-2.00),
+        ],
+    )
+    placed = _patch_hourly_pass_scan(monkeypatch, idea, can_trade=True)
+    settings = HourlySettings(
+        _env_file=None,
+        artifacts_dir=str(tmp_path),
+        state_path=str(tmp_path / "state.json"),
+        paper_log_path=str(tmp_path / "paper_log.jsonl"),
+        scan_log_path=str(tmp_path / "scan_log.jsonl"),
+        halted=False,
+        live_trading=True,
+        confirm_live="YES",
+        max_daily_loss_dollars=4.00,
+        max_daily_losses=2,
+    )
+
+    assert run_scan(settings, asset="BTC", place=False, force_live=False) == 0
+    paper = load_trades(tmp_path / "paper_log.jsonl")
+    assert [row["ticker"] for row in paper] == [idea.market.ticker]
+    assert paper[0]["shadow"] == "scan"
+    assert placed == []
+
+    assert run_scan(settings, asset="BTC", place=True, force_live=True, armed=True) == 0
+    assert placed, "live must still receive Pass ideas after daily-loss would have sat"
+    assert [idea.market.ticker for idea in placed[-1]] == [idea.market.ticker]
+    again = load_trades(tmp_path / "paper_log.jsonl")
+    assert [row["ticker"] for row in again] == [idea.market.ticker]
 
 
 def test_parse_cf_history_ticks_kalshi_envelope():
