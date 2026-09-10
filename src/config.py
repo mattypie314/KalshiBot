@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from pydantic import field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -121,6 +121,12 @@ class HourlySettings(BaseSettings):
     scan_log_path: str = "artifacts/scan_log.jsonl"
     # Counterfactual dry-scan tape. Never mixed with live fills in trade_log.jsonl.
     paper_log_path: str = "artifacts/paper_log.jsonl"
+    # Live pot. Scan/eval credit filled settlements here (ledger-idempotent).
+    # HOURLY_POT_PATH only — do not bind POT_PATH (that's the 15m file).
+    pot_path: str = Field(
+        default="artifacts/hourly_pot.json",
+        validation_alias=AliasChoices("HOURLY_POT_PATH", "pot_path"),
+    )
     # assumed-maker-fill: score at the printed maker limit ("if we got that quote").
     # unfilled: leave tickets unscored until/unless a real fill exists (stricter).
     paper_fill_model: str = "assumed-maker-fill"
