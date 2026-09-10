@@ -1,0 +1,1 @@
+{"kind": "paper", "ticker": "KXBTCD-26SEP0917-T76500", "asset": "BTC", "side": "No", "strike": 76500.0, "close_time": "2026-09-09T17:00:00-04:00", "settlement_print": 77300.0, "settlement_result": "yes", "result": "win", "pnl": 999.0, "fill_model": "assumed-maker-fill"}

@@ -1,0 +1,1 @@
+{"ts": "2026-09-09 4:03 PM EDT", "mode": "scan", "window_id": "2026-09-09T16:00:00-04:00", "ideas": [{"ticker": "KXBTC15M-26SEP091615-T77000", "side": "Yes", "limit": 0.47, "fair": 0.52, "contracts": 2, "risk": 1.0}], "notes": ["KXETH15M-26SEP091615-T2400: spread wider than edge"], "spots": {"BTC": 77010.0}}
