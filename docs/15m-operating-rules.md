@@ -72,15 +72,15 @@ This is the directional / mispricing pass.
 **Windows (ET)** start at `:00`, `:15`, `:30`, `:45`.
 
 **Pass/Fail**
-1. Compute model-fair vs live mid / executable price.
+1. Compute model-fair vs the maker join (Yes → live Yes bid; No → Yes ask / No complement), after the same taker-fee haircut hourly uses vs its executable ask. Do not use the mid — a wide book can invent ~4¢ of mid “edge” you cannot rest as a maker.
 2. **Fail → skip.** Do not “just scalp it.”
 3. **Pass → one limit**, not a market. **One idea per asset per window** (best BTC and best ETH if both Pass).
 
 **Hard skips**
 - Under ~**8 minutes** left unless the strike is already decided.
-- Spread wider than the edge.
+- Spread wider than the net edge vs join.
 - News candle in progress (CPI, FOMC, major ETF flow headline, war tape).
-- Model and mid within **~4¢**.
+- Model and join within **~4¢** after the taker-fee haircut.
 - Revenge window after a loser.
 - **Three 15m losses in a row** this ET day → stop the session.
 - Pot stopped / room too small.

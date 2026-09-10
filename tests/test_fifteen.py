@@ -26,6 +26,8 @@ from src.fifteen.edge import (
     in_fifteen_entry_window,
     in_fifteen_revenge,
     in_fifteen_settlement,
+    labeled_join_price,
+    net_edge_vs_join,
     news_blackout,
     next_et_midnight,
     pass_fail,
@@ -134,14 +136,19 @@ def test_settlement_and_window_id():
     assert "10:15:00" in fifteen_window_id(_et(10, 17))
 
 
-def test_pass_when_fair_clears_mid_by_four_cents():
+def test_pass_when_fair_clears_join_plus_fee_by_four_cents():
     decision = pass_fail(
         model_yes=0.62, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4
     )
     assert decision.passed
     assert decision.side == "yes"
     assert decision.join_price == 0.54
+    assert "vs join 0.54" in decision.line
+    assert "vs mid" not in decision.line
     assert decision.line.startswith("PASS")
+    yes_net = net_edge_vs_join(0.62, labeled_join_price("yes", 0.54, 0.56))
+    assert yes_net == pytest.approx(decision.edge)
+    assert yes_net >= 0.04
 
 
 def test_pass_no_joins_yes_ask():
@@ -151,6 +158,8 @@ def test_pass_no_joins_yes_ask():
     assert decision.passed
     assert decision.side == "no"
     assert decision.join_price == 0.56
+    no_net = net_edge_vs_join(0.62, labeled_join_price("no", 0.54, 0.56))
+    assert no_net == pytest.approx(-decision.edge)
 
 
 def _idea_from_decision(decision, *, now=None, **settings_kw):
@@ -233,11 +242,64 @@ def test_fail_within_four_cents_and_wide_spread():
     )
     assert not tight.passed
     assert "FAIL" in tight.line
+    # 10¢ book: mid looks like +4¢ (0.57 vs 0.53) but join+fee net < spread.
     wide = pass_fail(
-        model_yes=0.60, yes_bid=0.48, yes_ask=0.58, secs_left=12 * 60, sigma=0.4
+        model_yes=0.57, yes_bid=0.48, yes_ask=0.58, secs_left=12 * 60, sigma=0.4
     )
     assert not wide.passed
     assert "spread" in wide.line.lower()
+
+
+def test_pass_fail_wide_spread_mid_illusion_vs_join():
+    """Wide book: mid can show ~4¢ Yes edge you cannot rest as a maker.
+
+    bid 0.48 / ask 0.58 → mid 0.53. model 0.57 is +4¢ vs mid (old Pass bar)
+    but is not restable. Yes join is 0.48; after the taker-fee haircut the
+    net is still under the spread, so Pass fails the spread≤edge gate.
+    """
+    model_yes, yes_bid, yes_ask = 0.57, 0.48, 0.58
+    mid = (yes_bid + yes_ask) / 2.0
+    assert mid == pytest.approx(0.53)
+    assert model_yes - mid == pytest.approx(0.04)
+
+    yes_net = net_edge_vs_join(model_yes, labeled_join_price("yes", yes_bid, yes_ask))
+    spread = yes_ask - yes_bid
+    assert yes_net > 0
+    assert spread > yes_net
+
+    decision = pass_fail(
+        model_yes=model_yes,
+        yes_bid=yes_bid,
+        yes_ask=yes_ask,
+        secs_left=12 * 60,
+        sigma=0.4,
+    )
+    assert not decision.passed
+    assert decision.side == "yes"
+    assert decision.join_price == yes_bid
+    assert "vs join 0.48" in decision.line
+    assert "spread" in decision.line.lower()
+    assert "vs mid" not in decision.line
+
+
+def test_pass_fail_fee_haircut_rejects_four_cent_mid_edge():
+    """Tight book: +4¢ vs mid, but join + taker fee is under the 4¢ net bar."""
+    model_yes, yes_bid, yes_ask = 0.59, 0.54, 0.56
+    mid = (yes_bid + yes_ask) / 2.0
+    assert model_yes - mid == pytest.approx(0.04)
+    yes_net = net_edge_vs_join(model_yes, labeled_join_price("yes", yes_bid, yes_ask))
+    assert yes_net < 0.04
+
+    decision = pass_fail(
+        model_yes=model_yes,
+        yes_bid=yes_bid,
+        yes_ask=yes_ask,
+        secs_left=12 * 60,
+        sigma=0.4,
+    )
+    assert not decision.passed
+    assert decision.join_price == yes_bid
+    assert decision.fail_reason == "within 4 cents"
 
 
 def test_fail_under_eight_minutes_unless_decided():
