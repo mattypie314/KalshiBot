@@ -529,7 +529,7 @@ def run_scan(
         )
 
         try_settle_paper(settings, client)
-        if ideas and not force_live:
+        if ideas:
             written = record_printed_ideas(
                 Path(settings.paper_log_path),
                 ideas,
@@ -537,6 +537,7 @@ def run_scan(
                 default_source=spots.source,
                 fill_model=settings.paper_fill_model,
                 hourly_vol=spots.hourly_vol,
+                extra={"shadow": "live" if force_live else "scan"},
             )
             for row in written:
                 print(describe_paper_append(row))
