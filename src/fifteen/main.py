@@ -1271,6 +1271,8 @@ def normalize_argv(argv: list[str] | None) -> list[str]:
         "7": "paper",
         "livescore": "livescore",
         "score": "score",
+        "calibrate": "calibrate",
+        "c": "calibrate",
     }
     if not raw:
         return ["scan"]
@@ -1303,6 +1305,17 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("paper", help="Same as eval")
     sub.add_parser("score", help="Termius 15m PAPER board (not live)")
     sub.add_parser("livescore", help="Termius 15m LIVE board (not paper)")
+    cal = sub.add_parser(
+        "calibrate",
+        help="Model Yes calibration from scan strikes vs official settlement (no orders)",
+    )
+    cal.add_argument("--artifacts", default=None)
+    cal.add_argument("--scan-log", default=None)
+    cal.add_argument("--settlements", action="append", default=None)
+    cal.add_argument("--out", default=None)
+    cal.add_argument("--all-scans", action="store_true")
+    cal.add_argument("--include-proxy", action="store_true")
+    cal.add_argument("--fetch-prints", action="store_true")
 
     args = parser.parse_args(normalize_argv(argv))
     configure_logging()
@@ -1333,6 +1346,25 @@ def main(argv: list[str] | None = None) -> int:
         from src.scoreboard import run_board
 
         return run_board(args.command, fifteen_root=Path.cwd())
+    if args.command == "calibrate":
+        from src.calibrate import run_calibrate_cli
+
+        extra: list[str] = ["--fifteen"]
+        if args.artifacts:
+            extra.extend(["--artifacts", args.artifacts])
+        if args.scan_log:
+            extra.extend(["--scan-log", args.scan_log])
+        for path in args.settlements or []:
+            extra.extend(["--settlements", path])
+        if args.out:
+            extra.extend(["--out", args.out])
+        if args.all_scans:
+            extra.append("--all-scans")
+        if args.include_proxy:
+            extra.append("--include-proxy")
+        if args.fetch_prints:
+            extra.append("--fetch-prints")
+        return run_calibrate_cli(settings, fifteen=True, argv=extra)
     return EXIT_CONFIG
 
 

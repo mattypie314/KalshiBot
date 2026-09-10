@@ -45,6 +45,7 @@ Pick a mode from a menu, or pass it on the command line:
 ./kb live --prod
 ./kb eval            # also: v  or  6   paper PnL + live journal / scan-log (no orders)
 ./kb paper           # also: p  or  7   same report; paper tape is listed separately
+./kb calibrate       # also: c          model Yes vs official BRTI/ETHUSD_RTI (no orders)
 ```
 
 `python -m src.main …` and (after `pip install -e .`) `kalshibot` / `kb` do the same thing. No args on a TTY opens the menu; no args in a script defaults to `scan`.
@@ -55,6 +56,7 @@ Pick a mode from a menu, or pass it on the command line:
 ./kb15 scan            # also: python -m src.fifteen scan   or   ./kb fifteen scan
 ./kb15 once
 ./kb15 eval
+./kb15 calibrate       # all-strike tape only if fifteen_scan_log has markets[]
 ```
 
 See `docs/15m.md`. Do not enable `kalshi-15m.timer` until armed. Do not touch `kalshi-hourly.timer`.
@@ -207,6 +209,18 @@ After that contract’s hour, `scan` / `once` / `eval` / `paper` settle pending 
 
 `./kb eval` reports paper n tickets, wins/losses, assumed-fill PnL, pending, and sit/unscored. This is **not live profitability**. Live stays dual-gated and off (`HALTED=true`, `LIVE_TRADING=false`, `CONFIRM_LIVE=NO`). Do not retune the 6% edge, close-strike, or size caps from this tape.
 
+### Model calibration (every scanned strike)
+
+`./kb calibrate` (Pi: `/home/KalshiBot`) rebuilds one row per strike in `artifacts/scan_log.jsonl` — taken or not — and joins official BRTI / ETHUSD_RTI 60-second averages. It does **not** use paper assumed-maker-fill PnL. Bucket Yes-rates print only at n ≥ 20. How-to: [`docs/calibration.md`](docs/calibration.md).
+
+```bash
+cd /home/KalshiBot
+./kb calibrate
+# writes artifacts/calibration_rows.jsonl
+```
+
+15m `fifteen_scan_log.jsonl` does not currently store every scanned strike (`markets[]`). `./kb15 calibrate` will say so until that log grows the hourly shape.
+
 Termius PLAY/SIT boards (paper and live never mix): `score` / `livescore` are **15m**; `score-hourly` / `livescore-hourly` are hourly; `scoreall` / `livescore-all` combine both. Install: `scripts/install-pi-scoreboards.sh`. Notes: [`docs/scoreboards.md`](docs/scoreboards.md).
 
 ```bash
@@ -228,6 +242,7 @@ chmod +x kb15
 ./kb15 live         # dual-gated live; type LIVE or --confirm LIVE (l / 4)
 ./kb15 eval         # paper + pot summary (v / 6)
 ./kb15 paper        # same as eval (p / 7)
+./kb15 calibrate    # model Yes vs official settlement (c)
 ```
 
 Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, Python entry ET minutes **:03–:05** of each 15m window, live Pi timer **once** per block at `:03/:18/:33/:48` (not `:02` / not `:02–:05`), Pass needs ≥**4¢** model-vs-mid with spread ≤ edge, sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.
