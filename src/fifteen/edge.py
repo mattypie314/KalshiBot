@@ -1,7 +1,7 @@
-"""15m edge loop: minutes 3–5 of each ET window, Pass/Fail vs join+fee + tape gate.
+"""15m edge loop: minutes 2–6 of each ET window, Pass/Fail vs join+fee + tape gate.
 
-Waits through the first couple minutes so a micro-trend can form, then
-requires Pass vs the maker join (not the mid) after a taker-fee haircut,
+Minute 0–1 waits; a :02 oneshot (the Pi's live timer) looks immediately.
+Requires Pass vs the maker join (not the mid) after a taker-fee haircut,
 plus a BB/RSI/ADX sit-gate. Maker (last 3 min 74–93¢) and the hourly
 scanner stay separate.
 """
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -20,7 +21,9 @@ from src.indicators import TapeReading, tape_fail_reason
 
 ET = ZoneInfo("America/New_York")
 
-ENTRY_OFFSETS = frozenset({3, 4, 5})
+# Pi timer next-fire was :02. {3,4,5} sat every oneshot. 2–6 covers that
+# calendar plus a few minutes of journal work after the fire.
+ENTRY_OFFSETS = frozenset({2, 3, 4, 5, 6})
 # Net vs maker join after taker-fee haircut. Do not retune from paper PnL.
 MIN_EDGE = 0.04
 MIN_TIME_SECONDS = 8 * 60
@@ -126,14 +129,18 @@ def fifteen_window_id(now: datetime | None = None) -> str:
     return fifteen_window_start(now).isoformat()
 
 
+def entry_window_want() -> str:
+    return f"{min(ENTRY_OFFSETS)}-{max(ENTRY_OFFSETS)}"
+
+
 def in_fifteen_entry_window(now: datetime | None = None) -> bool:
     return now_et(now).minute % 15 in ENTRY_OFFSETS
 
 
 def seconds_until_entry_window(now: datetime | None = None) -> float | None:
-    """Seconds to sleep until minutes 3–5 open, or None if already past entry.
+    """Seconds to sleep until minutes 2–6 open, or None if already past entry.
 
-    Returns 0 when already inside the entry window. Early fires (offsets 0–2,
+    Returns 0 when already inside the entry window. Early fires (offsets 0–1,
     including a stale :01 timer) should wait; late fires sit without waiting
     for the next block.
     """
@@ -146,6 +153,22 @@ def seconds_until_entry_window(now: datetime | None = None) -> float | None:
         return None
     target = fifteen_window_start(local) + timedelta(minutes=earliest)
     return max(0.0, (target - local).total_seconds())
+
+
+def wait_for_entry_window(*, sleeper=None, announce=None) -> float | None:
+    """Sleep until minutes 2–6 of this block. None if the window is already gone.
+
+    Used right before collect_ideas so journal/balance work during :00–:01
+    cannot push the look past minute 6. Frozen `now=` callers skip this.
+    """
+    wait_s = seconds_until_entry_window()
+    if wait_s is None:
+        return None
+    if wait_s > 0:
+        if announce:
+            announce(wait_s)
+        (sleeper or time.sleep)(wait_s)
+    return wait_s
 
 
 def in_fifteen_settlement(now: datetime | None = None) -> bool:

@@ -6,7 +6,6 @@ import argparse
 import json
 import logging
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -46,7 +45,8 @@ from src.fifteen.edge import (
     news_blackout,
     pass_fail,
     record_fifteen_result,
-    seconds_until_entry_window,
+    wait_for_entry_window,
+    entry_window_want,
 )
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
 from src.fifteen.regime import chop_veto_note, classify_regime
@@ -206,7 +206,18 @@ def collect_ideas(
     apply_chop_veto: bool | None = None,
     scanned_markets: list[HourlyMarket] | None = None,
 ) -> tuple[list[Idea], list[str], Any]:
-    now = to_et(now)
+    # Wall-clock scans wait here (after journal work). Tests pass a frozen now
+    # and must not sleep.
+    if now is None:
+        wait_for_entry_window(
+            announce=lambda secs: print(
+                f"waiting {secs:.0f}s for 15m entry window (minutes {entry_window_want()})…",
+                flush=True,
+            )
+        )
+        now = to_et()
+    else:
+        now = to_et(now)
     notes: list[str] = []
     requested = [asset.upper()] if asset else list(settings.asset_list)
     working = [name for name in requested if fifteen_working(state, now, asset=name)]
@@ -234,7 +245,9 @@ def collect_ideas(
             if not assets:
                 return [], notes, None
         if not in_fifteen_entry_window(now):
-            notes.append(f"outside entry window (minute {now.minute % 15}; want 3-5)")
+            notes.append(
+                f"outside entry window (minute {now.minute % 15}; want {entry_window_want()})"
+            )
 
         spots_svc = SpotService(
             preferred=settings.spot_source,
@@ -950,15 +963,8 @@ def run_scan(
     armed: bool = False,
 ) -> int:
     Path(settings.artifacts_dir).mkdir(parents=True, exist_ok=True)
-    # Early oneshots (stale :01 timer, manual kick at :00–:02) wait for minutes
-    # 3–5. Past the window → collect_ideas sits without sleeping into the next block.
-    wait_s = seconds_until_entry_window()
-    if wait_s and wait_s > 0:
-        print(
-            f"waiting {wait_s:.0f}s for 15m entry window (minutes 3–5)…",
-            flush=True,
-        )
-        time.sleep(wait_s)
+    # Do not wait here. Journal / balance / exits can run in minutes 0–2;
+    # collect_ideas waits until 2–6 so that work cannot push the look late.
 
     state_path = Path(settings.state_path)
     state = load_state(state_path)
