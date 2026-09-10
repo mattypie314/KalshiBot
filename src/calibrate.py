@@ -4,13 +4,13 @@ Uses every scanned strike from scan logs — taken or not. Settlement truth is
 the official CF Benchmarks 60-second average (BRTI / ETHUSD_RTI), never
 Coinbase last tick and never paper assumed-maker-fill PnL.
 
-Hourly ``artifacts/scan_log.jsonl`` already stores ``markets[]`` (ticker,
-strike, book) plus spots/vol. ``last_run.json`` only lists ticker strings, so
-it cannot expand strikes on its own.
+Hourly ``artifacts/scan_log.jsonl`` stores ``markets[]`` (ticker, strike, book)
+plus spots/vol on every scan/live tick. ``last_run.json`` only lists ticker
+strings, so it cannot expand strikes on its own.
 
-15m ``fifteen_scan_log.jsonl`` currently logs Pass ideas only (no ``markets[]``).
-Those snapshots cannot produce an all-strike tape; the expander supports the
-hourly shape if a future 15m log grows it.
+15m ``fifteen_scan_log.jsonl`` now writes the same ``markets[]`` objects (every
+scanned strike) plus the Pass-idea / notes fields boards already read. Older
+idea-only lines still cannot expand.
 """
 
 from __future__ import annotations
@@ -829,7 +829,7 @@ def run_calibrate_cli(
         "--fifteen",
         action="store_true",
         default=fifteen,
-        help="Read fifteen_scan_log.jsonl (only useful if it has markets[])",
+        help="Read fifteen_scan_log.jsonl (needs markets[] on each row)",
     )
     parser.add_argument(
         "--all-scans",

@@ -844,6 +844,29 @@ def test_collect_ideas_trend_still_passes(monkeypatch):
     assert not any(CHOP_VETO_PHRASE in note for note in notes)
 
 
+def test_collect_ideas_scanned_markets_includes_sits(monkeypatch):
+    from tests.test_regime import choppy_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, choppy_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    scanned: list[HourlyMarket] = []
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+        scanned_markets=scanned,
+    )
+    assert ideas == []
+    assert any(CHOP_VETO_PHRASE in note for note in notes)
+    assert [row.ticker for row in scanned] == [market.ticker]
+
+
 def test_collect_ideas_chop_override_false_still_passes(monkeypatch):
     from tests.test_regime import choppy_ohlc
 

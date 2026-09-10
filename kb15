@@ -8,7 +8,7 @@
 #   ./kb15 live     (l / 4)
 #   ./kb15 eval     (v / 6)  bookkeeping dump
 #   ./kb15 paper    (p / 7)  same as eval
-#   ./kb15 calibrate (c)     model Yes vs official settlement (needs markets[])
+#   ./kb15 calibrate (c)     model Yes vs official settlement (from markets[])
 #   ./kb15 score             Termius 15m paper board
 #   ./kb15 livescore         Termius 15m live board
 # Also: ./kb fifteen scan

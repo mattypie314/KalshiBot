@@ -56,7 +56,7 @@ Pick a mode from a menu, or pass it on the command line:
 ./kb15 scan            # also: python -m src.fifteen scan   or   ./kb fifteen scan
 ./kb15 once
 ./kb15 eval
-./kb15 calibrate       # all-strike tape only if fifteen_scan_log has markets[]
+./kb15 calibrate       # all-strike tape from fifteen_scan_log markets[]
 ```
 
 See `docs/15m.md`. Do not enable `kalshi-15m.timer` until armed. Do not touch `kalshi-hourly.timer`.
@@ -219,7 +219,7 @@ cd /home/KalshiBot
 # writes artifacts/calibration_rows.jsonl
 ```
 
-15m `fifteen_scan_log.jsonl` does not currently store every scanned strike (`markets[]`). `./kb15 calibrate` will say so until that log grows the hourly shape.
+15m `fifteen_scan_log.jsonl` now stores every scanned strike in `markets[]` (plus Pass ideas / notes). Older idea-only lines cannot expand; `./kb15 calibrate` will say so until new ticks land. On the Pi, snapshot before `git pull`.
 
 Termius PLAY/SIT boards (paper and live never mix): `score` / `livescore` are **15m**; `score-hourly` / `livescore-hourly` are hourly; `scoreall` / `livescore-all` combine both. Install: `scripts/install-pi-scoreboards.sh`. Notes: [`docs/scoreboards.md`](docs/scoreboards.md).
 

@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from src.calibrate import (
     MIN_N_FOR_RATE,
@@ -240,6 +241,97 @@ def test_fifteen_scan_with_markets_uses_minutes():
     taken = {row["ticker"]: row["taken_or_not"] for row in rows}
     assert taken["KXBTC15M-26SEP091615-T76500"] is True
     assert taken["KXBTC15M-26SEP091615-T77250"] is False
+
+
+def test_hourly_scan_log_row_new_shape_expands():
+    from src.config import HourlySettings
+    from src.main import scan_log_row
+    from src.spot import SpotSnapshot
+    from tests.test_paper import _market
+
+    now = datetime(2026, 9, 9, 16, 20, tzinfo=ZoneInfo("America/New_York"))
+    close = parse_ts("2026-09-09T17:00:00-04:00")
+    market = _market(
+        ticker="KXBTCD-26SEP0917-T77250",
+        threshold=77249.99,
+        close_time=close,
+    )
+    spots = SpotSnapshot(
+        prices={"BTC": 77000.0},
+        sources={"BTC": "cfbenchmarks"},
+        hourly_vol={"BTC": 0.004},
+    )
+    row = scan_log_row(
+        now=now,
+        spots=spots,
+        markets=[market],
+        ideas=[],
+        nearby=[],
+        avoided=[],
+        settings=HourlySettings(_env_file=None, halted=True),
+        action="scan",
+    )
+    assert isinstance(row["markets"][0], dict)
+    for key in ("ticker", "asset", "strike", "spot", "vol", "yes_bid", "yes_ask", "close_time"):
+        assert row["markets"][0].get(key) is not None
+    expanded = expand_scan_snapshot(row)
+    assert len(expanded) >= 1
+    assert expanded[0]["ticker"] == market.ticker
+    assert expanded[0]["model_prob"] is not None
+    assert expanded[0]["taken_or_not"] is False
+
+
+def test_fifteen_append_scan_log_new_shape_expands(tmp_path):
+    from src.fifteen.config import FifteenSettings
+    from src.fifteen.main import append_scan_log
+    from src.spot import SpotSnapshot
+    from tests.test_fifteen import _et, _idea, _pass_market
+
+    from dataclasses import replace
+
+    now = _et(16, 3)
+    sit = _pass_market(now, ticker="KXBTC15M-26SEP091615-T77250", threshold=77249.99)
+    idea = replace(
+        _idea(),
+        market=_pass_market(now, ticker="KXBTC15M-26SEP091615-T76500", threshold=76500.0),
+    )
+    spots = SpotSnapshot(
+        prices={"BTC": 77000.0},
+        sources={"BTC": "cfbenchmarks"},
+        hourly_vol={"BTC": 0.004},
+    )
+    settings = FifteenSettings(
+        _env_file=None,
+        artifacts_dir=str(tmp_path),
+        scan_log_path=str(tmp_path / "fifteen_scan_log.jsonl"),
+    )
+    append_scan_log(
+        settings,
+        mode="scan",
+        ideas=[idea],
+        notes=["KXBTC15M-26SEP091615-T77250: sit"],
+        spots=spots,
+        window_id="2026-09-09T16:00:00-04:00",
+        markets=[sit, idea.market],
+        now=now,
+    )
+    snapshots = load_scan_snapshots(Path(settings.scan_log_path))
+    assert snapshots
+    row = snapshots[0]
+    assert row["notes"] == ["KXBTC15M-26SEP091615-T77250: sit"]
+    assert row["ideas"][0]["ticker"] == idea.market.ticker
+    assert row["ideas"][0]["limit"] == idea.limit_price
+    assert row["ideas"][0]["fair"] == idea.fair
+    assert row["ideas"][0]["contracts"] == idea.contracts
+    assert row["ideas"][0]["risk"] == idea.risk_dollars
+    assert len(row["markets"]) == 2
+    assert isinstance(row["markets"][0], dict)
+    expanded = expand_scans(snapshots)
+    assert len(expanded) >= 1
+    taken = {item["ticker"]: item["taken_or_not"] for item in expanded}
+    assert taken[idea.market.ticker] is True
+    assert taken[sit.ticker] is False
+    assert all(item["horizon"] == "15m" for item in expanded)
 
 
 def test_run_calibration_writes_rows_and_ignores_paper_pnl(tmp_path):
