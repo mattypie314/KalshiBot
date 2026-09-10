@@ -57,7 +57,7 @@ Prod is live Kalshi — real cash (`external-api.kalshi.com`). Demo is paper (`d
 - Sit out CPI 8:15–8:45 AM ET and FOMC 1:45–2:45 PM ET on those days. Sit a coin when vol is 2× typical (war-tape hook). Set `NEWS_PAUSE=true` to sit everything without scraping headlines.
 - Maker only. If the book cannot rest a post-only limit, sit — do not lift for a 6% edge.
 - If the last live hourly ticket **filled** and settled against you, the next idea cannot size up.
-- After 2 filled losses or $4 filled loss in an Eastern day, sit.
+- Daily loss count / $ caps do not sit live or paper. Empty pot / HALTED is the live stop; refill the pot yourself (no auto-refill).
 - Every live ticket is logged (strike distance, time left, fair %, Kalshi price, fill status, result). A red close-No bucket (filled only) turns that rule off.
 - `./kb eval` / `./kb paper` summarize the paper tape and the live journal separately. Paper is a counterfactual (assumed maker fill at the printed limit, settled on BRTI/ERTI). It does not claim the strategy is profitable and must not retune the 6% / close-strike / size rules.
 
@@ -129,7 +129,7 @@ When unhalted, at minute 3 Eastern of every hour the Pi runs:
 
 That only arms if `.env` also has `HALTED=false`, `LIVE_TRADING=true`, and `CONFIRM_LIVE=YES`. `--confirm LIVE` by itself is not enough without a TTY.
 
-Same caps: one open idea, about $1.75, $2 max, post-only, far strikes only, sit after 2 filled losses or $4 filled loss in the Eastern day. If the Pi was off at :03, it does not fire late. If nothing clears 6% edge, it sits. Unfilled maker rests are not counted as wins or losses.
+Same caps: one open idea, about $1.75, $2 max, post-only, far strikes only. Daily loss count / $ caps do not sit. Empty pot / HALTED is the live stop. If the Pi was off at :03, it does not fire late. If nothing clears 6% edge, it sits. Unfilled maker rests are not counted as wins or losses.
 
 On (real money every hour):
 

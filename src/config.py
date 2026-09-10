@@ -100,8 +100,8 @@ class HourlySettings(BaseSettings):
     min_minutes_left: float = 3
     max_spread: float = 0.06
     min_visible_depth_contracts: int = 5
-    # Sit the rest of the Eastern day after this much settled, filled loss.
-    # Safety cap, not a fitted edge. Two $2 tickets = $4.
+    # Legacy knobs. Not applied: daily loss count / $ cap do not sit live or paper.
+    # Live stop is pot empty / HALTED. Operator refills an empty pot (no auto-refill).
     max_daily_loss_dollars: float = 4.00
     max_daily_losses: int = 2
 

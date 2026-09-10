@@ -458,6 +458,12 @@ def test_pot_double_ask_and_empty_stop(tmp_path: Path):
     empty_msg = credit_pot(reloaded, -20.0)
     assert reloaded.stopped
     assert empty_msg is not None
+    save_pot(reloaded, path)
+    again = load_pot(path)
+    assert again.stopped
+    assert again.balance <= 0
+    # Empty pot stays empty. Operator refills; load/save must not reset to $5.
+    assert again.balance != 5.0
 
 
 def test_fifteen_series_and_window_filter():
@@ -803,6 +809,67 @@ def _patch_collect(monkeypatch, candles, market, extra_markets=None):
     monkeypatch.setattr("src.fifteen.main.MarketDiscovery", Discovery)
 
 
+def _stopped_state(now: datetime) -> dict:
+    state: dict = {}
+    record_fifteen_result(state, -0.2, now)
+    record_fifteen_result(state, -0.2, now + timedelta(minutes=15))
+    msg = record_fifteen_result(state, -0.2, now + timedelta(minutes=30))
+    assert msg is not None
+    assert fifteen_stopped(state, now + timedelta(minutes=31))
+    return state
+
+
+def test_collect_ideas_session_stop_does_not_wipe_passes(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    # Third loss is at 10:33 → revenge until 11:00, session stop until midnight.
+    # Collect after revenge expires so only the (disabled) session stop is in play.
+    loss_at = _et(10, 3)
+    now = _et(11, 3)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    state = _stopped_state(loss_at)
+    assert fifteen_stopped(state, now)
+    assert not in_fifteen_revenge(state, now)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state=state,
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert len(ideas) == 1
+    assert ideas[0].market.ticker == market.ticker
+    assert not any("session stopped" in note.lower() for note in notes)
+
+
+def test_collect_ideas_revenge_sits_live_and_paper(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    loss_at = _et(10, 3)
+    now = _et(10, 18)
+    market = _pass_market(now)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    state: dict = {}
+    record_fifteen_result(state, -0.40, loss_at)
+    assert in_fifteen_revenge(state, now)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state=state,
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert ideas == []
+    assert any("revenge window after a loser" in note for note in notes)
+
+
 def test_collect_ideas_chops_veto_after_pass(monkeypatch):
     from tests.test_regime import choppy_ohlc
 
@@ -1065,6 +1132,76 @@ def _quiet_scan_client(*, fills=None, market=None, can_trade=True):
 
     Client.can_trade = can_trade
     return Client()
+
+
+def test_run_scan_live_refuses_when_pot_empty(monkeypatch, tmp_path, capsys):
+    """Empty pot blocks new live risk and must not auto-refill to $5."""
+    idea = _idea()
+    executed: list = []
+
+    def fake_collect(*args, **kwargs):
+        return [idea], [], _spots()
+
+    def fake_execute(*args, **kwargs):
+        executed.append(kwargs)
+        return {"placed": [{"order_id": "should-not-fire"}], "orders": [], "errors": []}
+
+    pot_path = tmp_path / "fifteen_pot.json"
+    pot = load_pot(pot_path)
+    credit_pot(pot, -5.0)
+    save_pot(pot, pot_path)
+    assert pot.stopped
+    assert pot.balance <= 0
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main.execute_ideas", fake_execute)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client())
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr("src.fifteen.main.seconds_until_entry_window", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.fifteen.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=True, force_live=True, armed=True) == 0
+    assert executed == []
+    assert load_trades(tmp_path / "fifteen_trade_log.jsonl") == []
+    out = capsys.readouterr().out
+    assert "pot empty" in out.lower()
+    assert "not auto-refill" in out.lower()
+    reloaded = load_pot(pot_path)
+    assert reloaded.stopped
+    assert reloaded.balance <= 0
+    assert reloaded.balance != 5.0
+
+
+def test_run_scan_paper_still_collects_when_pot_empty(monkeypatch, tmp_path):
+    idea = _idea()
+
+    def fake_collect(*args, **kwargs):
+        return [idea], [], _spots()
+
+    pot_path = tmp_path / "fifteen_pot.json"
+    pot = load_pot(pot_path)
+    credit_pot(pot, -5.0)
+    save_pot(pot, pot_path)
+
+    monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
+    monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client(can_trade=False))
+    monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr("src.fifteen.main.seconds_until_entry_window", lambda *a, **k: None)
+    from src.fifteen.main import run_scan
+
+    settings = _fifteen_settings(tmp_path)
+    assert run_scan(settings, asset=None, place=False, force_live=False) == 0
+    paper = load_trades(tmp_path / "fifteen_paper_log.jsonl")
+    assert [row["ticker"] for row in paper] == [idea.market.ticker]
+    assert load_trades(tmp_path / "fifteen_trade_log.jsonl") == []
+    reloaded = load_pot(pot_path)
+    assert reloaded.stopped
+    assert reloaded.balance <= 0
 
 
 def test_run_scan_live_journals_place_and_shadows_paper(monkeypatch, tmp_path):

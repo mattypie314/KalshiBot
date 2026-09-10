@@ -39,7 +39,6 @@ from src.fifteen.config import (
 from src.fifteen.edge import (
     enough_room,
     fifteen_stake,
-    fifteen_stopped,
     fifteen_window_id,
     fifteen_working,
     in_fifteen_entry_window,
@@ -223,8 +222,8 @@ def collect_ideas(
         news = news_blackout(now)
         if news:
             return [], [f"news blackout ({news})"], None
-        if fifteen_stopped(state, now):
-            return [], ["15m session stopped (3 losses)"], None
+        # 3-loss session stop is recorded on state but does not sit live or paper.
+        # Revenge cooldown still sits both. Empty pot is the live stop.
         if in_fifteen_revenge(state, now):
             return [], ["revenge window after a loser"], None
         if working:
@@ -1008,7 +1007,10 @@ def run_scan(
         save_pot(pot, settings.pot_path)
 
     if force_live and pot.stopped:
-        print(f"15m pot stopped at ${pot.balance:.2f}. Refusing new live entries.")
+        print(
+            f"15m pot empty (${pot.balance:.2f}). Refusing new live entries. "
+            "Not auto-refilling — refill the pot to resume."
+        )
         save_pot(pot, settings.pot_path)
         persist_fifteen_state(state_path, state, window_id=wid)
         return EXIT_OK
