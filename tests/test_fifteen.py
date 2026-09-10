@@ -1274,7 +1274,6 @@ def test_run_scan_live_refuses_when_pot_empty(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("src.fifteen.main.execute_ideas", fake_execute)
     monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client())
     monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
-    monkeypatch.setattr("src.fifteen.main.seconds_until_entry_window", lambda *a, **k: None)
     monkeypatch.setattr(
         "src.fifteen.main.manage_open_positions",
         lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
@@ -1308,7 +1307,6 @@ def test_run_scan_paper_still_collects_when_pot_empty(monkeypatch, tmp_path):
     monkeypatch.setattr("src.fifteen.main.collect_ideas", fake_collect)
     monkeypatch.setattr("src.fifteen.main._client", lambda settings: _quiet_scan_client(can_trade=False))
     monkeypatch.setattr("src.fifteen.main.try_settle_paper", lambda *a, **k: None)
-    monkeypatch.setattr("src.fifteen.main.seconds_until_entry_window", lambda *a, **k: None)
     from src.fifteen.main import run_scan
 
     settings = _fifteen_settings(tmp_path)
