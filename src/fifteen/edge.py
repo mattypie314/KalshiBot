@@ -25,7 +25,11 @@ ET = ZoneInfo("America/New_York")
 # calendar plus a few minutes of journal work after the fire.
 ENTRY_OFFSETS = frozenset({2, 3, 4, 5, 6})
 # Net vs maker join after taker-fee haircut. Do not retune from paper PnL.
-MIN_EDGE = 0.04
+# Must match FifteenSettings.min_net_edge / FIFTEEN_MIN_NET_EDGE / MIN_NET_EDGE.
+MIN_EDGE = 0.10
+# After Pass: sit cheap BTC Yes and rich Yes on either coin.
+BTC_YES_MIN = 0.45
+YES_MAX_ENTRY = 0.55
 MIN_TIME_SECONDS = 8 * 60
 DECIDED_SIGMA = 2.0
 DECIDED_YES = 0.96
@@ -275,6 +279,28 @@ def _cents(value: float) -> str:
     return f"{int(round(100 * value))}¢"
 
 
+def sit_yes_entry(*, asset: str, side: str, join_price: float) -> str | None:
+    """After Pass: sit cheap BTC Yes or Yes above 55¢. Live and paper share this."""
+    if str(side or "").lower() not in {"yes", "y"}:
+        return None
+    price = float(join_price)
+    coin = str(asset or "").strip().upper()
+    if coin == "BTC" and price < BTC_YES_MIN - 1e-12:
+        return f"BTC Yes @{_cents(price)} under 45¢"
+    if price > YES_MAX_ENTRY + 1e-12:
+        return f"Yes @{_cents(price)} over 55¢ max"
+    return None
+
+
+def cap_one_fifteen_pass(ideas: list) -> tuple[list, list]:
+    """If BTC and ETH both Pass this window, keep the higher |net_edge| only."""
+    if len(ideas) <= 1:
+        return list(ideas), []
+    winner = max(ideas, key=lambda row: abs(float(getattr(row, "net_edge", 0.0) or 0.0)))
+    extra = [row for row in ideas if row is not winner]
+    return [winner], extra
+
+
 def news_blackout(now: datetime | None = None) -> str | None:
     """CPI / FOMC calendar, plus NEWS_BLACKOUT=1 for a headline candle."""
     flag = os.environ.get("NEWS_BLACKOUT", "").strip().lower()
@@ -312,13 +338,15 @@ def pass_fail(
     sigma: float,
     news: str | None = None,
     tape: TapeReading | None = None,
+    min_edge: float | None = None,
 ) -> FifteenDecision:
     """Pass/Fail vs maker join + taker-fee haircut, then BB/RSI/ADX sit-gate.
 
     Side and edge are vs the restable join (Yes → live Yes bid; No → Yes ask /
     No complement), not ``(bid+ask)/2``. A wide book can invent ~4¢ of mid
-    “edge” you cannot rest; the 4¢ bar and the spread≤edge gate use net edge
+    “edge” you cannot rest; the 10¢ bar and the spread≤edge gate use net edge
     after the same taker-fee haircut hourly uses. Tape stays a sit-gate only.
+    ``min_edge`` defaults to ``MIN_EDGE`` (0.10) so settings and env agree.
     """
     if yes_bid <= 0 or yes_ask <= 0 or yes_ask < yes_bid:
         return FifteenDecision(
@@ -349,6 +377,7 @@ def pass_fail(
     # Signed net: Yes positive, No negative — collect_ideas uses abs(edge).
     edge = net if side == "yes" else -net
     abs_edge = abs(edge)
+    edge_bar = MIN_EDGE if min_edge is None else float(min_edge)
     fair_vs_join = f"fair {model_yes:.2f} vs join {join:.2f}"
 
     if news:
@@ -364,7 +393,7 @@ def pass_fail(
             spread=spread,
             fail_reason=f"news candle ({news})",
         )
-    if abs_edge < MIN_EDGE - 1e-12:
+    if abs_edge < edge_bar - 1e-12:
         return FifteenDecision(
             passed=False,
             line=f"FAIL {fair_vs_join} · only {_cents(abs_edge)}",
@@ -375,7 +404,7 @@ def pass_fail(
             mid=mid,
             edge=edge,
             spread=spread,
-            fail_reason="within 4 cents",
+            fail_reason=f"within {int(round(100 * edge_bar))} cents",
         )
     if spread > abs_edge + 1e-12:
         return FifteenDecision(

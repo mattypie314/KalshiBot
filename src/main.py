@@ -56,6 +56,7 @@ def _filter_cfg(settings: HourlySettings, state: dict[str, Any]) -> FilterConfig
     return FilterConfig(
         min_net_edge=settings.min_net_edge,
         soft_net_edge=settings.soft_net_edge,
+        min_yes_price=settings.min_yes_price,
         max_spread=settings.max_spread,
         min_minutes_left=settings.min_minutes_left,
         min_visible_depth=settings.min_visible_depth_contracts,

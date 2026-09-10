@@ -74,13 +74,15 @@ This is the directional / mispricing pass.
 **Pass/Fail**
 1. Compute model-fair vs the maker join (Yes → live Yes bid; No → Yes ask / No complement), after the same taker-fee haircut hourly uses vs its executable ask. Do not use the mid — a wide book can invent ~4¢ of mid “edge” you cannot rest as a maker.
 2. **Fail → skip.** Do not “just scalp it.”
-3. **Pass → one limit**, not a market. **One idea per asset per window** (best BTC and best ETH if both Pass).
+3. **Pass → one limit**, not a market. **One Pass per 15m window** (if BTC and ETH both would Pass, keep the higher |net_edge| only).
 
 **Hard skips**
 - Under ~**8 minutes** left unless the strike is already decided.
 - Spread wider than the net edge vs join.
 - News candle in progress (CPI, FOMC, major ETF flow headline, war tape).
-- Model and join within **~4¢** after the taker-fee haircut.
+- Model and join within **10¢** after the taker-fee haircut (`MIN_NET_EDGE` / `FIFTEEN_MIN_NET_EDGE` = 0.10).
+- BTC Yes under **45¢**; any Yes over **55¢**.
+- Dual-asset stack: if both coins would Pass, sit the weaker |net_edge|.
 - Revenge window after a loser.
 - **Three 15m losses in a row** this ET day → stop the session.
 - Pot stopped / room too small.
@@ -168,6 +170,7 @@ Writes go through signed Kalshi REST V2 order endpoints (or the sanctioned MCP p
 ## 9. Timing & cadence
 
 - Prefer watches at the **start** of each 15m window (minutes 2–6), not the end — unless running the last-minute maker submodule.
+- This filter pack does **not** change the systemd timer. Leave the shipped `kalshi-15m.timer` cadence as-is (do not retune it to “fix” cheap-Yes losses).
 - Suggested dry cadence if automated: every 15m at `:02–:05` / `:17–:20` / `:32–:35` / `:47–:50` ET on weekdays (aligned with the entry window). Adjust to Matt’s waking hours.
 - Stay quiet on sit-only runs unless Matt asked for noisy updates.
 
@@ -212,7 +215,7 @@ Rules:
 ## 12. Hard bans
 
 - No sports / parlays / non-BTC-ETH 15m (unless Matt expands).
-- No stacking multiple correlated 15m tickets in one window.
+- No stacking multiple correlated 15m tickets in one window (one Pass/window; sit the weaker coin).
 - No revenge sizing.
 - No live while halted.
 - No pretending Coinbase is settlement.
@@ -248,4 +251,4 @@ Suggested first live day: dry-only until paper or attended makers prove the jour
 
 ## 15. One-line standing order
 
-**Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one idea per asset per window (BTC+ETH both OK), $1–$2 risk, $5 pot — quit at $0, ask at $10, flat is fine.**
+**Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one Pass per window (higher |net_edge| if both would Pass), 10¢ net floor, sit BTC Yes under 45¢ and any Yes over 55¢, $1–$2 risk, $5 pot — quit at $0, ask at $10, flat is fine.**
