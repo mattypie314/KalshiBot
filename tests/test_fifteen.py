@@ -822,14 +822,20 @@ def _stopped_state(now: datetime) -> dict:
 def test_collect_ideas_session_stop_does_not_wipe_passes(monkeypatch):
     from tests.test_regime import trending_ohlc
 
-    now = _et(10, 3)
+    # Third loss is at 10:33 → revenge until 11:00, session stop until midnight.
+    # Collect after revenge expires so only the (disabled) session stop is in play.
+    loss_at = _et(10, 3)
+    now = _et(11, 3)
     market = _pass_market(now)
     _patch_collect(monkeypatch, trending_ohlc(), market)
     settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    state = _stopped_state(loss_at)
+    assert fifteen_stopped(state, now)
+    assert not in_fifteen_revenge(state, now)
     ideas, notes, _spots = collect_ideas(
         settings,
         client=MagicMock(),
-        state=_stopped_state(now),
+        state=state,
         pot_room=5.0,
         bankroll=5.0,
         now=now,
@@ -840,7 +846,7 @@ def test_collect_ideas_session_stop_does_not_wipe_passes(monkeypatch):
     assert not any("session stopped" in note.lower() for note in notes)
 
 
-def test_collect_ideas_revenge_does_not_wipe_passes(monkeypatch):
+def test_collect_ideas_revenge_sits_live_and_paper(monkeypatch):
     from tests.test_regime import trending_ohlc
 
     loss_at = _et(10, 3)
@@ -860,9 +866,8 @@ def test_collect_ideas_revenge_does_not_wipe_passes(monkeypatch):
         now=now,
         apply_chop_veto=True,
     )
-    assert len(ideas) == 1
-    assert ideas[0].market.ticker == market.ticker
-    assert not any("revenge" in note.lower() for note in notes)
+    assert ideas == []
+    assert any("revenge window after a loser" in note for note in notes)
 
 
 def test_collect_ideas_chops_veto_after_pass(monkeypatch):

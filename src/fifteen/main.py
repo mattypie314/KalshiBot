@@ -42,6 +42,7 @@ from src.fifteen.edge import (
     fifteen_window_id,
     fifteen_working,
     in_fifteen_entry_window,
+    in_fifteen_revenge,
     news_blackout,
     pass_fail,
     record_fifteen_result,
@@ -221,8 +222,10 @@ def collect_ideas(
         news = news_blackout(now)
         if news:
             return [], [f"news blackout ({news})"], None
-        # Session-stop (3 losses) and revenge window are recorded on state
-        # but do not sit live or paper. Empty pot is the live stop.
+        # 3-loss session stop is recorded on state but does not sit live or paper.
+        # Revenge cooldown still sits both. Empty pot is the live stop.
+        if in_fifteen_revenge(state, now):
+            return [], ["revenge window after a loser"], None
         if working:
             note = "already working a 15m ticket this window"
             if assets:
