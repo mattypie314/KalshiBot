@@ -356,6 +356,10 @@ def test_combined_live_tags_bots_and_totals(tmp_path: Path):
     assert "KXETHD-HOUR" in text
     assert "KXBTC15M-RECON" not in text
     assert "KXBTCD-PAPER" not in text
+    assert "LAST TICK  Pass / Sit" in text
+    assert "chop veto" in text
+    assert "KXETHD close strike" in text
+    assert "score / livescore" in text
 
 
 def test_combined_paper_excludes_live_fills(tmp_path: Path):

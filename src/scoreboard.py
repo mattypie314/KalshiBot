@@ -20,6 +20,7 @@ from typing import Any, Iterable
 from src.clock import ET, format_et, hour_key, parse_ts, same_et_day, to_et
 from src.evaluate import summarize_trades
 from src.journal import counts_as_filled, load_trades
+from src.scoreboard_all import last_scan_lines
 from src.paper import (
     FILL_SIT_UNSCORED,
     RESULT_LOSS,
@@ -971,6 +972,15 @@ def format_combined_board(
         lines.append(
             f"  Journal {combined.n_journal} rows  ·  skipped {combined.n_backfills} kind=backfill recon"
         )
+    fifteen_row = None
+    hourly_row = None
+    for tape in tapes:
+        row = tape.scan_rows[-1] if tape.scan_rows else None
+        if tape.bot == "15m":
+            fifteen_row = row
+        elif tape.bot == "hourly":
+            hourly_row = row
+    lines.extend(last_scan_lines(fifteen_row, hourly_row, color=enabled))
     lines.extend(_pending_and_timeline(combined, color=enabled, show_bot=True))
     lines.extend(
         [

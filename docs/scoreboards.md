@@ -85,6 +85,7 @@ livescore-all
 - ASCII pot sparkline + meter from play-only PnL
 - Real `HALTED` / `LIVE_TRADING` / `CONFIRM_LIVE` from that checkout’s `.env`
 - Combined: per-bot pot, W/L, PnL, and a **TOTAL** line; every timeline row tagged `15m` or `hourly`
+- Combined LAST TICK: latest Pass/Sit from `fifteen_scan_log.jsonl` + hourly `scan_log.jsonl` (so the board is not “dead” between PLAY rows). Full PLAY+SIT timeline: `score` / `livescore`
 - `kind=backfill` recon rows stay in the jsonl and are skipped on the board
 
 Do not retune Pass/Sit from paper. Do not treat paper assumed fills as live cash.

@@ -45,8 +45,11 @@ DEFAULT_FIFTEEN_ROOT = "/home/KalshiBot15"
 
 FIFTEEN_JOURNAL = "fifteen_trade_log.jsonl"
 FIFTEEN_POT = "fifteen_pot.json"
+FIFTEEN_SCAN_LOG = "fifteen_scan_log.jsonl"
 HOURLY_JOURNAL = "trade_log.jsonl"
+HOURLY_SCAN_LOG = "scan_log.jsonl"
 HOURLY_POT_CANDIDATES = ("hourly_pot.json", "pot.json")
+LAST_TICK_NOTE_LIMIT = 8
 
 FIFTEEN_START_DEFAULT = 5.0
 FIFTEEN_ASK_DEFAULT = 10.0
@@ -98,6 +101,8 @@ class BotSnapshot:
     gates: dict[str, Any] = field(default_factory=dict)
     skipped_paper: int = 0
     skipped_other: int = 0
+    scan_path: Path | None = None
+    last_scan: dict[str, Any] | None = None
 
 
 def use_color(*, stream: Any | None = None) -> bool:
@@ -475,6 +480,116 @@ def _env_float(env: dict[str, str], key: str) -> float | None:
         return None
 
 
+def load_last_scan_row(path: Path | None) -> dict[str, Any] | None:
+    """Latest jsonl object from a scan log. Missing / unreadable → None."""
+    if path is None or not path.is_file():
+        return None
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return None
+    for raw in reversed(lines):
+        if not raw.strip():
+            continue
+        try:
+            row = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            return row
+    return None
+
+
+def _scan_idea_line(idea: object) -> str:
+    if not isinstance(idea, dict):
+        return str(idea or "").strip()
+    ticker = str(idea.get("ticker") or "").strip()
+    side = str(idea.get("side") or "").strip()
+    raw = idea.get("limit")
+    if raw in (None, ""):
+        raw = idea.get("limit_price")
+    if raw in (None, ""):
+        raw = idea.get("kalshi_price")
+    try:
+        limit_s = f"@{float(raw):.2f}" if raw not in (None, "") else ""
+    except (TypeError, ValueError):
+        limit_s = str(raw or "").strip()
+    return " ".join(part for part in (ticker, side, limit_s) if part)
+
+
+def _scan_sit_notes(row: dict[str, Any]) -> list[str]:
+    notes: list[str] = []
+    for key in ("notes", "nearby"):
+        raw = row.get(key) or []
+        if isinstance(raw, str):
+            raw = [raw]
+        if not isinstance(raw, list):
+            continue
+        for item in raw:
+            text = " ".join(str(item or "").split())
+            if text:
+                notes.append(text)
+    return notes
+
+
+def _scan_when(row: dict[str, Any]) -> str:
+    raw = row.get("ts") or row.get("ts_iso")
+    stamp = parse_ts(raw)
+    if stamp is not None:
+        return short_time(stamp)
+    text = str(raw or "").strip()
+    return text or "—"
+
+
+def _scan_mode(row: dict[str, Any]) -> str:
+    text = str(row.get("mode") or row.get("action") or "").strip()
+    return text or "—"
+
+
+def format_last_scan_block(*, label: str, row: dict[str, Any] | None, color: bool) -> list[str]:
+    tag = paint(f"{label:<3}", _bot_color(label) + BOLD, color)
+    if row is None:
+        return [f"  {tag}  —  no scan log yet"]
+    when = _scan_when(row)
+    mode = _scan_mode(row)
+    lines = [f"  {tag}  {when:<9} {mode}"]
+    ideas = [item for item in (row.get("ideas") or []) if item]
+    if ideas:
+        for idea in ideas[:LAST_TICK_NOTE_LIMIT]:
+            body = _clip(_scan_idea_line(idea), WIDTH - 16)
+            kind = paint("PASS", GREEN + BOLD, color)
+            lines.append(f"       {kind}  {body}")
+    else:
+        lines.append(f"       {paint('PASS', DIM, color)}  (none)")
+    sits = _scan_sit_notes(row)
+    if sits:
+        shown = sits[:LAST_TICK_NOTE_LIMIT]
+        for note in shown:
+            kind = paint("SIT ", YELLOW, color)
+            lines.append(f"       {kind}  {_clip(note, WIDTH - 16)}")
+        extra = len(sits) - len(shown)
+        if extra > 0:
+            lines.append(f"       … {extra} more sit note(s)")
+    else:
+        lines.append(f"       {paint('SIT ', DIM, color)}  (none)")
+    return lines
+
+
+def last_scan_lines(
+    fifteen_row: dict[str, Any] | None,
+    hourly_row: dict[str, Any] | None,
+    *,
+    color: bool,
+) -> list[str]:
+    """LAST TICK Pass/Sit from the latest 15m + hourly scan-log rows."""
+    return [
+        "  " + _hr("LAST TICK  Pass / Sit"),
+        *format_last_scan_block(label=BOT_15M, row=fifteen_row, color=color),
+        *format_last_scan_block(label=BOT_1H, row=hourly_row, color=color),
+        "    Full PLAY+SIT timeline: score / livescore",
+    ]
+
+
 def snapshot_bot(
     *,
     label: str,
@@ -486,6 +601,7 @@ def snapshot_bot(
     ask_default: float,
     bankroll_env_key: str | None = None,
     now: datetime | None = None,
+    scan_path: Path | None = None,
 ) -> BotSnapshot:
     raw_rows = load_trades(journal_path) if journal_path.is_file() else []
     live_rows, skipped_paper, skipped_other = filter_live_rows(raw_rows)
@@ -525,6 +641,8 @@ def snapshot_bot(
         gates=gate_status(env),
         skipped_paper=skipped_paper,
         skipped_other=skipped_other,
+        scan_path=scan_path,
+        last_scan=load_last_scan_row(scan_path),
     )
 
 
@@ -561,6 +679,7 @@ def load_snapshots(
         ask_default=FIFTEEN_ASK_DEFAULT,
         bankroll_env_key="FIFTEEN_BANKROLL",
         now=now,
+        scan_path=fifteen_art / FIFTEEN_SCAN_LOG,
     )
     hourly_pot_path = Path(hourly_pot) if hourly_pot else find_hourly_pot(hourly_art)
     hourly = snapshot_bot(
@@ -573,6 +692,7 @@ def load_snapshots(
         ask_default=HOURLY_START_DEFAULT * 2.0,
         bankroll_env_key="BANKROLL",
         now=now,
+        scan_path=hourly_art / HOURLY_SCAN_LOG,
     )
     return fifteen, hourly
 
@@ -729,6 +849,8 @@ def format_combined_scoreboard(
     else:
         lines.append("    none — no open live tickets waiting to settle")
 
+    lines.extend(last_scan_lines(fifteen.last_scan, hourly.last_scan, color=enabled))
+
     timeline = [event for event in (*fifteen.plays, *hourly.plays)]
     timeline.sort(
         key=lambda event: (
@@ -751,6 +873,8 @@ def format_combined_scoreboard(
         [
             "  " + "-" * (WIDTH - 2),
             "  PLAY 15M = fifteen_trade_log.  PLAY 1H = hourly trade_log.",
+            "  LAST TICK reads fifteen_scan_log.jsonl + hourly scan_log.jsonl.",
+            "  Full PLAY+SIT timeline: score / livescore (this board keeps PLAY below).",
             "  Paper journals are never mixed into this live combined board.",
         ]
     )

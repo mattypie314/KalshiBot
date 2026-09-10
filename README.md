@@ -246,7 +246,7 @@ chmod +x kb15
 ./kb15 calibrate    # model Yes vs official settlement (c)
 ```
 
-Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, entry ET minutes **:02–:06** of each 15m window (timer cadence unchanged by this filter pack), Pass needs ≥**10¢** model vs join after taker-fee haircut with spread ≤ edge, sit BTC Yes under **45¢**, sit any Yes over **55¢**, **one Pass per window** (higher |net_edge| if both coins would Pass). Sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.
+Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, entry ET minutes **:02–:06** of each 15m window (timer cadence unchanged by this filter pack), Pass needs ≥**10¢** model vs join after taker-fee haircut with spread ≤ edge, sit any Yes under **45¢**, sit any Yes over **55¢**, **one Pass per window** (higher |net_edge| if both coins would Pass). Sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.
 
 ETH settlement API id is **`ETHUSD_RTI`** (human docs may still say ERTI). Missing/PROXY index → sit.
 

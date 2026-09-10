@@ -15,6 +15,8 @@ from src.scoreboard_all import (
     format_combined_scoreboard,
     is_live_play_row,
     is_paper_row,
+    last_scan_lines,
+    load_last_scan_row,
     load_snapshots,
     main,
     resolve_pot,
@@ -172,6 +174,23 @@ def test_combined_board_labels_bots_and_totals_pots(tmp_path):
         fifteen_root / "artifacts" / "fifteen_pot.json",
         {"balance": 4.83, "start": 5.0, "realized_pnl": -0.17, "double_at": 10},
     )
+    _write_jsonl(
+        fifteen_root / "artifacts" / "fifteen_scan_log.jsonl",
+        [
+            {
+                "ts": "2026-09-07 11:03 AM EDT",
+                "mode": "live",
+                "ideas": [
+                    {
+                        "ticker": "KXBTC15M-26SEP071130-30",
+                        "side": "Yes",
+                        "limit": 0.48,
+                    }
+                ],
+                "notes": ["KXETH15M-26SEP071130-15: ETH Yes @19¢ under 45¢"],
+            }
+        ],
+    )
     (fifteen_root / ".env").write_text("HALTED=true\nLIVE_TRADING=false\nCONFIRM_LIVE=NO\n")
 
     _write_jsonl(
@@ -205,6 +224,17 @@ def test_combined_board_labels_bots_and_totals_pots(tmp_path):
         ],
     )
     _write_json(hourly_root / "artifacts" / "hourly_pot.json", {"balance_usd": 41.20, "start_usd": 40.0})
+    _write_jsonl(
+        hourly_root / "artifacts" / "scan_log.jsonl",
+        [
+            {
+                "ts": "2026-09-07 11:01 AM EDT",
+                "action": "scan",
+                "ideas": [],
+                "nearby": ["KXETHD close strike / net edge too thin"],
+            }
+        ],
+    )
     (hourly_root / ".env").write_text("HALTED=true\nBANKROLL=40\nLIVE_TRADING=false\nCONFIRM_LIVE=NO\n")
 
     # Paper files exist but must not be opened / mixed in.
@@ -253,6 +283,12 @@ def test_combined_board_labels_bots_and_totals_pots(tmp_path):
     assert "hourly_pot.json" in text
     assert "HALTED" in text
     assert "paper tapes not opened" in text
+    assert "LAST TICK  Pass / Sit" in text
+    assert "ETH Yes @19¢ under 45¢" in text
+    assert "KXBTC15M-26SEP071130-30" in text
+    assert "Yes @0.48" in text
+    assert "KXETHD close strike / net edge too thin" in text
+    assert "score / livescore" in text
 
 
 def test_hourly_snapshot_uses_bankroll_when_pot_file_absent(tmp_path):
@@ -287,8 +323,12 @@ def test_missing_artifacts_do_not_crash(tmp_path):
     text = format_combined_scoreboard(fifteen, hourly, now=NOW, color=False)
     assert "KB COMBINED LIVE SCOREBOARD" in text
     assert "no live PLAY rows yet" in text
+    assert "LAST TICK  Pass / Sit" in text
+    assert "no scan log yet" in text
     assert fifteen.journal_missing is True
     assert hourly.journal_missing is True
+    assert fifteen.last_scan is None
+    assert hourly.last_scan is None
 
 
 def test_pi_wrappers_point_at_combined_module():
@@ -331,3 +371,44 @@ def test_cli_smoke_prints_board(tmp_path, capsys):
     assert "ALL   pot $46.40" in out
     assert "KXBTC15M-X" in out
     assert "KXBTCD-X" in out
+
+
+def test_load_last_scan_row_reads_latest_object(tmp_path):
+    path = tmp_path / "fifteen_scan_log.jsonl"
+    _write_jsonl(
+        path,
+        [
+            {"ts": "2026-09-07 10:01 AM EDT", "mode": "scan", "ideas": [], "notes": ["old"]},
+            {"ts": "2026-09-07 11:03 AM EDT", "mode": "live", "ideas": [{"ticker": "KXETH15M-1", "side": "Yes", "limit": 0.19}], "notes": ["ETH Yes @19¢ under 45¢"]},
+        ],
+    )
+    row = load_last_scan_row(path)
+    assert row is not None
+    assert row["mode"] == "live"
+    assert row["notes"] == ["ETH Yes @19¢ under 45¢"]
+    assert load_last_scan_row(tmp_path / "missing.jsonl") is None
+
+
+def test_last_scan_lines_show_pass_and_sit():
+    fifteen = {
+        "ts": "2026-09-07 11:03 AM EDT",
+        "mode": "live",
+        "ideas": [{"ticker": "KXBTC15M-1", "side": "Yes", "limit": 0.48}],
+        "notes": ["KXETH15M-1: ETH Yes @19¢ under 45¢"],
+    }
+    hourly = {
+        "ts": "2026-09-07 11:01 AM EDT",
+        "action": "scan",
+        "ideas": [],
+        "nearby": ["KXETHD close strike / net edge too thin"],
+    }
+    text = "\n".join(last_scan_lines(fifteen, hourly, color=False))
+    assert "LAST TICK  Pass / Sit" in text
+    assert "live" in text
+    assert "scan" in text
+    assert "KXBTC15M-1 Yes @0.48" in text
+    assert "ETH Yes @19¢ under 45¢" in text
+    assert "KXETHD close strike / net edge too thin" in text
+    assert "score / livescore" in text
+    empty = "\n".join(last_scan_lines(None, None, color=False))
+    assert "no scan log yet" in empty

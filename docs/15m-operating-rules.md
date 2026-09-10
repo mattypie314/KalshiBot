@@ -81,7 +81,7 @@ This is the directional / mispricing pass.
 - Spread wider than the net edge vs join.
 - News candle in progress (CPI, FOMC, major ETF flow headline, war tape).
 - Model and join within **10¢** after the taker-fee haircut (`MIN_NET_EDGE` / `FIFTEEN_MIN_NET_EDGE` = 0.10).
-- BTC Yes under **45¢**; any Yes over **55¢**.
+- Any Yes under **45¢** (BTC, ETH, …); any Yes over **55¢**.
 - Dual-asset stack: if both coins would Pass, sit the weaker |net_edge|.
 - Revenge window after a loser.
 - **Three 15m losses in a row** this ET day → stop the session.
@@ -251,4 +251,4 @@ Suggested first live day: dry-only until paper or attended makers prove the jour
 
 ## 15. One-line standing order
 
-**Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one Pass per window (higher |net_edge| if both would Pass), 10¢ net floor, sit BTC Yes under 45¢ and any Yes over 55¢, $1–$2 risk, $5 pot — quit at $0, ask at $10, flat is fine.**
+**Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one Pass per window (higher |net_edge| if both would Pass), 10¢ net floor, sit any Yes under 45¢ and any Yes over 55¢, $1–$2 risk, $5 pot — quit at $0, ask at $10, flat is fine.**
