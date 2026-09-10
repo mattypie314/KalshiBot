@@ -1199,7 +1199,7 @@ def test_collect_ideas_btc_working_sits_eth_same_window(monkeypatch):
     assert any("one 15m Pass/window" in note and "already working" in note for note in notes)
 
 
-def test_sit_yes_entry_btc_under_45_and_max_55():
+def test_sit_yes_entry_any_coin_under_45_and_max_55():
     assert BTC_YES_MIN == pytest.approx(0.45)
     assert YES_MAX_ENTRY == pytest.approx(0.55)
     assert sit_yes_entry(asset="BTC", side="yes", join_price=0.30) == "BTC Yes @30¢ under 45¢"
@@ -1207,9 +1207,13 @@ def test_sit_yes_entry_btc_under_45_and_max_55():
     assert sit_yes_entry(asset="BTC", side="yes", join_price=0.45) is None
     assert sit_yes_entry(asset="BTC", side="yes", join_price=0.55) is None
     assert sit_yes_entry(asset="BTC", side="yes", join_price=0.56) == "Yes @56¢ over 55¢ max"
-    assert sit_yes_entry(asset="ETH", side="yes", join_price=0.30) is None
+    assert sit_yes_entry(asset="ETH", side="yes", join_price=0.19) == "ETH Yes @19¢ under 45¢"
+    assert sit_yes_entry(asset="ETH", side="yes", join_price=0.30) == "ETH Yes @30¢ under 45¢"
+    assert sit_yes_entry(asset="ETH", side="yes", join_price=0.45) is None
     assert sit_yes_entry(asset="ETH", side="yes", join_price=0.56) == "Yes @56¢ over 55¢ max"
+    assert sit_yes_entry(asset="SOL", side="yes", join_price=0.22) == "SOL Yes @22¢ under 45¢"
     assert sit_yes_entry(asset="BTC", side="no", join_price=0.30) is None
+    assert sit_yes_entry(asset="ETH", side="no", join_price=0.19) is None
 
 
 def test_cap_one_fifteen_pass_keeps_higher_abs_net_edge():
@@ -1241,6 +1245,32 @@ def test_collect_ideas_sits_btc_yes_at_30_cents(monkeypatch):
     )
     assert ideas == []
     assert any("BTC Yes @30¢ under 45¢" in note for note in notes)
+
+
+def test_collect_ideas_sits_eth_yes_under_45_cents(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(
+        now,
+        "KXETH15M-TEST-T2300",
+        asset="ETH",
+        yes_bid=0.19,
+        yes_ask=0.21,
+    )
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert ideas == []
+    assert any("ETH Yes @19¢ under 45¢" in note for note in notes)
 
 
 def test_collect_ideas_sits_yes_over_55_cents_both_coins(monkeypatch):

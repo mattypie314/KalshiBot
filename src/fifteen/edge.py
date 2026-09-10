@@ -27,8 +27,9 @@ ENTRY_OFFSETS = frozenset({2, 3, 4, 5, 6})
 # Net vs maker join after taker-fee haircut. Do not retune from paper PnL.
 # Must match FifteenSettings.min_net_edge / FIFTEEN_MIN_NET_EDGE / MIN_NET_EDGE.
 MIN_EDGE = 0.10
-# After Pass: sit cheap BTC Yes and rich Yes on either coin.
+# After Pass: sit cheap Yes on any coin, and rich Yes on any coin.
 BTC_YES_MIN = 0.45
+YES_MIN_ENTRY = BTC_YES_MIN
 YES_MAX_ENTRY = 0.55
 MIN_TIME_SECONDS = 8 * 60
 DECIDED_SIGMA = 2.0
@@ -280,13 +281,16 @@ def _cents(value: float) -> str:
 
 
 def sit_yes_entry(*, asset: str, side: str, join_price: float) -> str | None:
-    """After Pass: sit cheap BTC Yes or Yes above 55¢. Live and paper share this."""
+    """After Pass: sit Yes under 45¢ on any coin, or Yes above 55¢.
+
+    Live and paper share this via collect_ideas. Cheap Yes used to be BTC-only.
+    """
     if str(side or "").lower() not in {"yes", "y"}:
         return None
     price = float(join_price)
-    coin = str(asset or "").strip().upper()
-    if coin == "BTC" and price < BTC_YES_MIN - 1e-12:
-        return f"BTC Yes @{_cents(price)} under 45¢"
+    coin = str(asset or "").strip().upper() or "?"
+    if price < YES_MIN_ENTRY - 1e-12:
+        return f"{coin} Yes @{_cents(price)} under 45¢"
     if price > YES_MAX_ENTRY + 1e-12:
         return f"Yes @{_cents(price)} over 55¢ max"
     return None

@@ -2,6 +2,7 @@
 
 from src.fifteen.edge import (
     BTC_YES_MIN,
+    YES_MIN_ENTRY,
     CPI_DATES,
     FOMC_DATES,
     MIN_EDGE,
@@ -33,6 +34,7 @@ from src.fifteen.edge import (
 
 __all__ = [
     "BTC_YES_MIN",
+    "YES_MIN_ENTRY",
     "CPI_DATES",
     "FOMC_DATES",
     "MIN_EDGE",
