@@ -440,12 +440,104 @@ def test_dry_scan_writes_paper_row_not_live_journal(monkeypatch, tmp_path, capsy
     assert len(rows) == 1
     assert rows[0]["fill_model"] == FILL_ASSUMED_MAKER
     assert rows[0]["spot_source"] == "BRTI"
+    assert rows[0]["shadow"] == "scan"
     live_rows = load_trades(tmp_path / "trade_log.jsonl")
     assert live_rows == []
     assert all(row.get("kind") == "paper" for row in rows)
     out = capsys.readouterr().out
     assert "assumed-maker-fill" in out
     assert "not a real fill" in out
+
+
+def test_live_run_appends_paper_tickets_tagged_shadow_live(monkeypatch, tmp_path):
+    """Pass ideas on a live tick must hit paper_log even with open-ticket holdback later."""
+    idea = _idea()
+    from src.spot import SpotSnapshot
+
+    spots = SpotSnapshot(
+        prices={"BTC": 78100.0},
+        sources={"BTC": "cfbenchmarks"},
+        source="cfbenchmarks",
+        hourly_vol={"BTC": 0.004},
+    )
+
+    class FakeClient:
+        can_trade = True
+
+        def get_fills(self, limit=50):
+            return []
+
+        def get_market(self, ticker):
+            return {}
+
+        def close(self):
+            pass
+
+    class FakeSpots:
+        def snapshot(self, *args, **kwargs):
+            return spots
+
+        def close(self):
+            pass
+
+    class FakeDiscovery:
+        def discover(self, *args, **kwargs):
+            return [idea.market]
+
+        def next_settlements(self, markets):
+            return []
+
+    monkeypatch.setattr("src.main.KalshiClient", lambda *a, **k: FakeClient())
+    monkeypatch.setattr("src.main.SpotService", lambda *a, **k: FakeSpots())
+    monkeypatch.setattr("src.main.MarketDiscovery", lambda *a, **k: FakeDiscovery())
+    monkeypatch.setattr(
+        "src.main.evaluate_market",
+        lambda *a, **k: FilterResult(market=idea.market, idea=idea),
+    )
+    monkeypatch.setattr("src.main.open_hourly_tickets", lambda *a, **k: [])
+    monkeypatch.setattr("src.main.blocks_new_idea", lambda *a, **k: None)
+    monkeypatch.setattr("src.main.try_settle_paper", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.main.manage_open_positions",
+        lambda *a, **k: {"signals": [], "placed": [], "errors": [], "dry_run": [], "journal": []},
+    )
+    monkeypatch.setattr(
+        "src.main.execute_ideas",
+        lambda *a, **k: {"placed": [], "orders": [], "errors": []},
+    )
+
+    settings = HourlySettings(
+        _env_file=None,
+        artifacts_dir=str(tmp_path),
+        state_path=str(tmp_path / "state.json"),
+        paper_log_path=str(tmp_path / "paper_log.jsonl"),
+        scan_log_path=str(tmp_path / "scan_log.jsonl"),
+        halted=False,
+        live_trading=True,
+        confirm_live="YES",
+    )
+    assert run_scan(settings, asset="BTC", place=True, force_live=True, armed=True) == 0
+    paper = load_trades(tmp_path / "paper_log.jsonl")
+    assert len(paper) == 1
+    assert paper[0]["kind"] == "paper"
+    assert paper[0]["ticker"] == idea.market.ticker
+    assert paper[0]["shadow"] == "live"
+    assert paper[0]["fill_model"] == FILL_ASSUMED_MAKER
+
+    # Follow-up dry scan with the live ticket already open must not be the
+    # only paper path — holdback blanks ideas, live already wrote the row.
+    monkeypatch.setattr(
+        "src.main.open_hourly_tickets",
+        lambda *a, **k: [{"ticker": idea.market.ticker, "side": idea.side, "asset": "BTC"}],
+    )
+    monkeypatch.setattr(
+        "src.main.blocks_new_idea",
+        lambda tickets, idea: "already 1 open hourly ticket for BTC",
+    )
+    assert run_scan(settings, asset="BTC", place=False, force_live=False) == 0
+    again = load_trades(tmp_path / "paper_log.jsonl")
+    assert len(again) == 1
+    assert again[0]["shadow"] == "live"
 
 
 def test_parse_cf_history_ticks_kalshi_envelope():

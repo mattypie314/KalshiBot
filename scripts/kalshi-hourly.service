@@ -16,6 +16,9 @@ EnvironmentFile=-/home/KalshiBot/.env
 # Halted until further notice. Was: ... -m src.main live --prod --confirm LIVE
 # Re-enable only after HALTED=false AND LIVE_TRADING=true AND CONFIRM_LIVE=YES
 # in .env (unattended has no TTY; --confirm LIVE alone will not arm).
+# Pi kb60-tick (outside this repo) must run paper/scan BEFORE live so a
+# post-live scan is not blanked by open-ticket holdback. Live itself now
+# also appends Pass ideas to paper_log.jsonl (shadow=live).
 ExecStart=/bin/true
 
 [Install]
