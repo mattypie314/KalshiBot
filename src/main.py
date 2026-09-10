@@ -31,6 +31,7 @@ from src.filters import (
     news_blackout_active,
     rank_actionable_ideas,
 )
+from src.hourly_pot import sync_hourly_pot
 from src.journal import (
     append_trade,
     bucket_underwater,
@@ -334,6 +335,7 @@ def run_scan(
         fills_available=fills_available,
     )
     write_trades(journal_path, trades)
+    sync_hourly_pot(settings, trades)
     state["kill_close_no"] = bucket_underwater(trades, "close_no")
     state["kill_close_yes"] = bucket_underwater(trades, "close_yes")
     if "hour_key" not in state:

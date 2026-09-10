@@ -14,6 +14,7 @@ from typing import Any
 
 from src.config import EXIT_OK, HourlySettings
 from src.filters import FilterConfig, evaluate_market
+from src.hourly_pot import sync_hourly_pot
 from src.journal import counts_as_filled, load_trades
 from src.markets import HourlyMarket
 from src.paper import format_paper_section, load_paper, summarize_paper, try_settle_paper
@@ -266,7 +267,9 @@ def format_eval_report(
 def run_eval(settings: HourlySettings) -> int:
     artifacts = Path(settings.artifacts_dir)
     try_settle_paper(settings)
-    trades = summarize_trades(load_trades(artifacts / "trade_log.jsonl"))
+    live_rows = load_trades(artifacts / "trade_log.jsonl")
+    sync_hourly_pot(settings, live_rows)
+    trades = summarize_trades(live_rows)
     scans = summarize_scans(load_jsonl(Path(settings.scan_log_path)))
     historical = replay_historical_actionables()
     paper = summarize_paper(load_paper(Path(settings.paper_log_path)))

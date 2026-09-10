@@ -8,8 +8,9 @@ Default Pi roots (override with env or flags):
 - 15m:    /home/KalshiBot15  · fifteen_trade_log.jsonl + fifteen_pot.json
 - hourly: /home/KalshiBot    · trade_log.jsonl + hourly_pot.json (optional)
 
-Hourly has no in-repo pot writer. If `hourly_pot.json` is missing, the board
-reconstructs cash as BANKROLL (default $40) plus filled live PnL.
+Hourly scan/eval write `hourly_pot.json` on filled live settlement (ledger-idempotent).
+If the file is missing, the board reconstructs cash as BANKROLL (default $40)
+plus filled live PnL.
 """
 
 from __future__ import annotations

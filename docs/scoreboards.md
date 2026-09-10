@@ -57,7 +57,7 @@ source ~/.bashrc
 | Bot | Pi path | Journals | Pot |
 | --- | --- | --- | --- |
 | 15m | `/home/KalshiBot15` | `artifacts/fifteen_paper_log.jsonl`, `artifacts/fifteen_trade_log.jsonl` | start $5 / ask $10 (`fifteen_pot.json` is display-only) |
-| hourly | `/home/KalshiBot` | `artifacts/paper_log.jsonl`, `artifacts/trade_log.jsonl` | start `BANKROLL` (default $40) |
+| hourly | `/home/KalshiBot` | `artifacts/paper_log.jsonl`, `artifacts/trade_log.jsonl` | start `BANKROLL` (default $40); `hourly_pot.json` is written on filled live settle |
 
 Combined boards read **both** trees. Override if you move them:
 
