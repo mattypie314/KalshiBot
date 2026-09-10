@@ -230,7 +230,7 @@ chmod +x kb15
 ./kb15 paper        # same as eval (p / 7)
 ```
 
-Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, Python entry ET minutes **:03–:05** of each 15m window, live Pi timer **once** per block at `:03/:18/:33/:48` (not `:02` / not `:02–:05`), Pass needs ≥**4¢** model-vs-mid with spread ≤ edge, sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.
+Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, Python entry ET minutes **:03–:05** of each 15m window, live Pi timer **once** per block at `:03/:18/:33/:48` (not `:02` / not `:02–:05`), Pass needs ≥**4¢** model vs join after taker-fee haircut with spread ≤ edge, sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.
 
 ETH settlement API id is **`ETHUSD_RTI`** (human docs may still say ERTI). Missing/PROXY index → sit.
 

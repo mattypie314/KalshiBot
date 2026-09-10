@@ -1,8 +1,9 @@
-"""15m edge loop: minutes 3–5 of each ET window, Pass/Fail vs mid + tape gate, one idea per asset.
+"""15m edge loop: minutes 3–5 of each ET window, Pass/Fail vs join+fee + tape gate.
 
 Waits through the first couple minutes so a micro-trend can form, then
-requires Pass vs mid plus a BB/RSI/ADX tape check. Maker (last 3 min
-74–93¢) and the hourly scanner stay separate.
+requires Pass vs the maker join (not the mid) after a taker-fee haircut,
+plus a BB/RSI/ADX sit-gate. Maker (last 3 min 74–93¢) and the hourly
+scanner stay separate.
 """
 
 from __future__ import annotations
@@ -14,11 +15,13 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from src.exposure import row_asset
+from src.fees import ev_per_contract, taker_fee_per_contract
 from src.indicators import TapeReading, tape_fail_reason
 
 ET = ZoneInfo("America/New_York")
 
 ENTRY_OFFSETS = frozenset({3, 4, 5})
+# Net vs maker join after taker-fee haircut. Do not retune from paper PnL.
 MIN_EDGE = 0.04
 MIN_TIME_SECONDS = 8 * 60
 DECIDED_SIGMA = 2.0
@@ -81,6 +84,29 @@ def join_price(side: str, yes_bid: float, yes_ask: float) -> float:
     if str(side or "").lower() in {"yes", "y"}:
         return float(yes_bid)
     return float(yes_ask)
+
+
+def labeled_join_price(side: str, yes_bid: float, yes_ask: float) -> float:
+    """Dollars to buy the labeled side at the maker join.
+
+    Yes pays the live Yes bid. No pays ``1 − Yes ask`` (the No complement of
+    joining the Yes ask).
+    """
+    if str(side or "").lower() in {"yes", "y"}:
+        return float(yes_bid)
+    return 1.0 - float(yes_ask)
+
+
+def net_edge_vs_join(model_prob: float, price: float) -> float:
+    """Fair minus join, minus taker fee — same haircut style as hourly.
+
+    Hourly filters vs the executable ask + taker fee even when it later posts
+    maker. 15m is maker-only, so the executable rest is the join; the fee
+    haircut is still the taker schedule (maker is a better fill, not the filter).
+    """
+    fee = taker_fee_per_contract(price)
+    _gross, net = ev_per_contract(model_prob, price, fee)
+    return net
 
 
 def now_et(now: datetime | None = None) -> datetime:
@@ -264,7 +290,13 @@ def pass_fail(
     news: str | None = None,
     tape: TapeReading | None = None,
 ) -> FifteenDecision:
-    """Pass/Fail vs the live mid, then optional 1m BB/RSI/ADX tape gate."""
+    """Pass/Fail vs maker join + taker-fee haircut, then BB/RSI/ADX sit-gate.
+
+    Side and edge are vs the restable join (Yes → live Yes bid; No → Yes ask /
+    No complement), not ``(bid+ask)/2``. A wide book can invent ~4¢ of mid
+    “edge” you cannot rest; the 4¢ bar and the spread≤edge gate use net edge
+    after the same taker-fee haircut hourly uses. Tape stays a sit-gate only.
+    """
     if yes_bid <= 0 or yes_ask <= 0 or yes_ask < yes_bid:
         return FifteenDecision(
             passed=False,
@@ -280,21 +312,26 @@ def pass_fail(
         )
     mid = (yes_bid + yes_ask) / 2.0
     spread = yes_ask - yes_bid
-    edge = model_yes - mid
-    if edge >= 0:
+    yes_net = net_edge_vs_join(model_yes, labeled_join_price("yes", yes_bid, yes_ask))
+    no_net = net_edge_vs_join(1.0 - model_yes, labeled_join_price("no", yes_bid, yes_ask))
+    if yes_net >= no_net:
         side = "yes"
         model_prob = model_yes
+        net = yes_net
     else:
         side = "no"
         model_prob = 1.0 - model_yes
-    abs_edge = abs(edge)
+        net = no_net
     join = join_price(side, yes_bid, yes_ask)
-    fair_vs_mid = f"fair {model_yes:.2f} vs mid {mid:.2f}"
+    # Signed net: Yes positive, No negative — collect_ideas uses abs(edge).
+    edge = net if side == "yes" else -net
+    abs_edge = abs(edge)
+    fair_vs_join = f"fair {model_yes:.2f} vs join {join:.2f}"
 
     if news:
         return FifteenDecision(
             passed=False,
-            line=f"FAIL {fair_vs_mid} · news candle ({news})",
+            line=f"FAIL {fair_vs_join} · news candle ({news})",
             side=side,
             join_price=join,
             model_yes=model_yes,
@@ -307,7 +344,7 @@ def pass_fail(
     if abs_edge < MIN_EDGE - 1e-12:
         return FifteenDecision(
             passed=False,
-            line=f"FAIL {fair_vs_mid} · only {_cents(abs_edge)}",
+            line=f"FAIL {fair_vs_join} · only {_cents(abs_edge)}",
             side=side,
             join_price=join,
             model_yes=model_yes,
@@ -320,7 +357,7 @@ def pass_fail(
     if spread > abs_edge + 1e-12:
         return FifteenDecision(
             passed=False,
-            line=f"FAIL {fair_vs_mid} · spread {_cents(spread)} > edge {_cents(abs_edge)}",
+            line=f"FAIL {fair_vs_join} · spread {_cents(spread)} > edge {_cents(abs_edge)}",
             side=side,
             join_price=join,
             model_yes=model_yes,
@@ -333,7 +370,7 @@ def pass_fail(
     if secs_left < MIN_TIME_SECONDS and not strike_decided(model_yes, sigma):
         return FifteenDecision(
             passed=False,
-            line=f"FAIL {fair_vs_mid} · {secs_left / 60:.0f}m left (need 8m unless decided)",
+            line=f"FAIL {fair_vs_join} · {secs_left / 60:.0f}m left (need 8m unless decided)",
             side=side,
             join_price=join,
             model_yes=model_yes,
@@ -347,7 +384,7 @@ def pass_fail(
     if tape_reason:
         return FifteenDecision(
             passed=False,
-            line=f"FAIL {fair_vs_mid} · {tape_reason}",
+            line=f"FAIL {fair_vs_join} · {tape_reason}",
             side=side,
             join_price=join,
             model_yes=model_yes,
@@ -373,7 +410,7 @@ def pass_fail(
             tape_note = " · " + " ".join(bits)
     return FifteenDecision(
         passed=True,
-        line=f"PASS {fair_vs_mid} · edge {sign}{_cents(edge)}{tape_note}",
+        line=f"PASS {fair_vs_join} · edge {sign}{_cents(edge)}{tape_note}",
         side=side,
         join_price=join,
         model_yes=model_yes,
