@@ -1,6 +1,7 @@
 #!/bin/sh
 # Termius scoreboard dispatcher. Aliases in this directory exec this file.
 # Boards: score | livescore | score-hourly | livescore-hourly | scoreall | livescore-all
+# Live combined aliases: allscore | kbcombined | livescoreall
 # Follows this file if it is a symlink so ~/.local/bin/* works.
 set -e
 export FORCE_COLOR="${FORCE_COLOR:-1}"
@@ -12,7 +13,16 @@ fi
 scripts_dir=$(CDPATH= cd -- "$(dirname "$here")" && pwd)
 root=$(CDPATH= cd -- "$scripts_dir/.." && pwd)
 if [ ! -f "$root/src/scoreboard.py" ]; then
+  for alt in "${KALSHIBOT15_ROOT:-/home/KalshiBot15}" "${KALSHIBOT_ROOT:-/home/KalshiBot}"; do
+    if [ -f "$alt/src/scoreboard.py" ]; then
+      root=$alt
+      break
+    fi
+  done
+fi
+if [ ! -f "$root/src/scoreboard.py" ]; then
   echo "kb-scoreboard: cannot find src/scoreboard.py next to $scripts_dir" >&2
+  echo "Pull main in /home/KalshiBot15 and /home/KalshiBot, then rerun scripts/install-pi-scoreboards.sh" >&2
   exit 1
 fi
 export PYTHONPATH="${PYTHONPATH:-$root}"
@@ -33,7 +43,8 @@ if [ -z "$board" ]; then
     kbscore-hourly|score-hourly|hscore) board=score-hourly ;;
     kbscore-hourly-live|livescore-hourly|hlivescore) board=livescore-hourly ;;
     scoreall|score-all) board=scoreall ;;
-    livescore-all|livescoreall) board=livescore-all ;;
+    livescore-all|livescoreall|live-all|allscore|kbcombined) board=livescore-all ;;
+    hourscore) board=livescore-hourly ;;
     *) board=score ;;
   esac
   shift_n=0

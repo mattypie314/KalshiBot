@@ -24,7 +24,7 @@ That drops leftover files in `~/.local/bin` and symlinks:
 | `score-hourly` / `hscore` / `kbscore-hourly` | paper | hourly (`paper_log.jsonl`) |
 | `livescore-hourly` / `hlivescore` / `kbscore-hourly-live` | live cash | hourly (`trade_log.jsonl`) |
 | `scoreall` / `score-all` | paper | 15m + hourly |
-| `livescore-all` | live cash | 15m + hourly |
+| `livescore-all` / `allscore` / `livescoreall` | live cash | 15m + hourly |
 
 Same boards from a checkout:
 
@@ -32,6 +32,7 @@ Same boards from a checkout:
 cd /home/KalshiBot15
 ./kb15 score          # 15m paper
 ./kb15 livescore      # 15m live
+./kb15 livescore-all  # combined live (same as allscore)
 ./kb15 eval           # bookkeeping dump (paper + live sections)
 
 cd /home/KalshiBot
@@ -45,11 +46,19 @@ python3 -m src.scoreboard livescore-all --no-color
 
 Wrappers set `FORCE_COLOR=1` for Termius. Use `NO_COLOR=1` or `--no-color` to strip ANSI.
 
-If Termius cannot find `score` / `livescore`:
+If Termius cannot find `score` / `livescore` / `livescore-all`:
 
 ```bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
+/home/KalshiBot15/scripts/install-pi-scoreboards.sh
+hash -r
+```
+
+`allscore` was an older leftover live wrapper. After install it is the same board as `livescore-all`. Until PATH is updated, run the script directly:
+
+```bash
+/home/KalshiBot15/scripts/livescore-all
 ```
 
 ## Checkouts

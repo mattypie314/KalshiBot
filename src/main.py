@@ -736,6 +736,12 @@ MODE_ALIASES = {
     "livescore-hourly": "livescore",
     "calibrate": "calibrate",
     "c": "calibrate",
+    "scoreall": "scoreall",
+    "score-all": "scoreall",
+    "livescore-all": "livescore-all",
+    "livescoreall": "livescore-all",
+    "allscore": "livescore-all",
+    "kbcombined": "livescore-all",
 }
 
 MODE_MENU = """\
@@ -905,6 +911,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("paper", help="Same as eval; paper PnL is listed separately from live")
     sub.add_parser("score", help="Termius hourly PAPER board (not live)")
     sub.add_parser("livescore", help="Termius hourly LIVE board (not paper)")
+    sub.add_parser("scoreall", help="Termius combined PAPER board (15m + hourly)")
+    sub.add_parser("livescore-all", help="Termius combined LIVE board (15m + hourly)")
     cal = sub.add_parser(
         "calibrate",
         help="Model Yes calibration from scan strikes vs official BRTI/ETHUSD_RTI (no orders)",
@@ -971,6 +979,10 @@ def main(argv: list[str] | None = None) -> int:
 
         name = "score-hourly" if args.command == "score" else "livescore-hourly"
         return run_board(name, hourly_root=Path.cwd())
+    if args.command in {"scoreall", "livescore-all"}:
+        from src.scoreboard import run_board
+
+        return run_board(args.command, hourly_root=Path.cwd())
     if args.command == "calibrate":
         from src.calibrate import run_calibrate_cli
 

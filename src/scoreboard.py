@@ -1074,6 +1074,9 @@ def resolve_board(
         "hlivescore": "livescore-hourly",
         "score-all": "scoreall",
         "livescoreall": "livescore-all",
+        "allscore": "livescore-all",
+        "kbcombined": "livescore-all",
+        "hourscore": "livescore-hourly",
         "fifteen-paper": "score",
         "fifteen-live": "livescore",
         "hourly-paper": "score-hourly",
@@ -1118,7 +1121,7 @@ def main(argv: list[str] | None = None) -> int:
         default="score",
         help=(
             "score | livescore | score-hourly | livescore-hourly | "
-            "scoreall | livescore-all"
+            "scoreall | livescore-all | allscore"
         ),
     )
     parser.add_argument("--fifteen-root", default=None)

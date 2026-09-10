@@ -11,6 +11,7 @@
 #   ./kb15 calibrate (c)     model Yes vs official settlement (from markets[])
 #   ./kb15 score             Termius 15m paper board
 #   ./kb15 livescore         Termius 15m live board
+#   ./kb15 livescore-all     combined live (15m + hourly); also: allscore
 # Also: ./kb fifteen scan
 root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 export PYTHONPATH="${PYTHONPATH:-$root}"
