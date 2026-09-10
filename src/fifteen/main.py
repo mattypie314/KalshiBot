@@ -36,6 +36,7 @@ from src.fifteen.config import (
     load_fifteen_settings,
 )
 from src.fifteen.edge import (
+    cap_one_fifteen_pass,
     enough_room,
     fifteen_stake,
     fifteen_window_id,
@@ -45,6 +46,7 @@ from src.fifteen.edge import (
     news_blackout,
     pass_fail,
     record_fifteen_result,
+    sit_yes_entry,
     wait_for_entry_window,
     entry_window_want,
 )
@@ -166,6 +168,7 @@ def idea_from_pass(
     fee_total = taker_fee_dollars(sized.contracts, limit)
     fee_each = fee_total / sized.contracts
     gross = fair - limit
+    net = abs(float(decision.edge))
     return Idea(
         market=market,
         side=side,
@@ -173,7 +176,7 @@ def idea_from_pass(
         limit_price=limit,
         fair=fair,
         gross_edge=gross,
-        net_edge=gross,
+        net_edge=net,
         fee_per_contract=fee_each,
         fee_total=fee_total,
         z=z,
@@ -321,9 +324,18 @@ def collect_ideas(
                     secs_left=secs,
                     sigma=model_z(spot, market.threshold, vol, hrs),
                     tape=tape,
+                    min_edge=settings.min_net_edge,
                 )
                 if not decision.passed:
                     notes.append(f"{market.ticker}: {decision.line}")
+                    continue
+                sit = sit_yes_entry(
+                    asset=market.asset,
+                    side=decision.side,
+                    join_price=decision.join_price,
+                )
+                if sit:
+                    notes.append(f"{market.ticker}: {decision.line} · sit {sit}")
                     continue
                 if market.spread > settings.max_spread + 1e-12 and abs(decision.edge) <= market.spread:
                     notes.append(f"{market.ticker}: spread wider than edge")
@@ -362,6 +374,28 @@ def collect_ideas(
                     f"{idea.market.ticker}: held back (one per asset; "
                     f"max {settings.max_ideas_per_run}/run)"
                 )
+            working_now = [
+                name for name in requested if fifteen_working(state, now, asset=name)
+            ]
+            if working_now:
+                for idea in chosen:
+                    notes.append(
+                        f"{idea.market.ticker}: sit — one 15m Pass/window "
+                        f"(already working {' and '.join(working_now)})"
+                    )
+                chosen = []
+            else:
+                chosen, correlated = cap_one_fifteen_pass(chosen)
+                kept = chosen[0] if chosen else None
+                for idea in correlated:
+                    if kept is None:
+                        label = "none"
+                    else:
+                        cents = int(round(100 * abs(kept.net_edge)))
+                        label = f"{kept.market.ticker} |net_edge| {cents}¢"
+                    notes.append(
+                        f"{idea.market.ticker}: sit — one 15m Pass/window (kept {label})"
+                    )
             return chosen, notes, spots
         finally:
             spots_svc.close()

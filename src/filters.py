@@ -17,6 +17,8 @@ from src.sizer import maker_cost_per_contract, size_idea
 TURBO_MIN_NET_EDGE = 0.0
 TURBO_PREFERRED_RISK_DOLLARS = 1.50
 TURBO_MIN_PREFERRED_RISK_DOLLARS = 0.75
+# Cheap-Yes sit (hourly). Applies in Turbo too — do not loosen.
+MIN_YES_PRICE = 0.40
 
 # Remaining 2026 CPI prints (8:30 AM ET) and FOMC statements (2:00 PM ET).
 CPI_DATES = frozenset(
@@ -58,6 +60,7 @@ class FilterConfig:
     min_visible_depth: int = 5
     min_price: float = 0.05
     max_price: float = 0.95
+    min_yes_price: float = MIN_YES_PRICE
     fat_tail_z: float = 2.5
     fat_tail_edge: float = 0.08
     news_blackout: bool = False
@@ -283,6 +286,12 @@ def evaluate_market(
             if net >= 0.02:
                 nearby_note = f"{side} net {net:.1%} vs {ask:.2f} (need {strict_min_edge:.0%})"
             reasons.append(f"{side}: net edge {net:.3f} < {min_edge:.2f} (fair {p_hat:.3f} ask {ask:.3f} fee {fee_each:.4f})")
+            continue
+
+        if side == "Yes" and ask + 1e-12 < cfg.min_yes_price:
+            reasons.append(
+                f"{side}: ask {ask:.2f} under {int(round(100 * cfg.min_yes_price))}¢ cheap-Yes sit"
+            )
             continue
 
         lifting = limit is None or abs(limit - ask) < 1e-9

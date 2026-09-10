@@ -14,7 +14,11 @@ import pytest
 from src.executor import execute_ideas, is_fifteen_rest, is_hourly_rest
 from src.fifteen.config import EXIT_CONFIG, FifteenSettings
 from src.fifteen.edge import (
+    BTC_YES_MIN,
     CPI_DATES,
+    MIN_EDGE,
+    YES_MAX_ENTRY,
+    cap_one_fifteen_pass,
     enough_room,
     fifteen_session_date,
     fifteen_stake,
@@ -34,6 +38,7 @@ from src.fifteen.edge import (
     record_fifteen_result,
     revenge_until_after_loss,
     seconds_until_entry_window,
+    sit_yes_entry,
     strike_decided,
     wait_for_entry_window,
     ENTRY_OFFSETS,
@@ -253,9 +258,16 @@ def test_settlement_and_window_id():
     assert "10:15:00" in fifteen_window_id(_et(10, 17))
 
 
-def test_pass_when_fair_clears_join_plus_fee_by_four_cents():
+def test_fifteen_min_net_edge_code_and_settings_agree():
+    assert MIN_EDGE == pytest.approx(0.10)
+    assert FifteenSettings.model_fields["min_net_edge"].default == pytest.approx(0.10)
+    settings = FifteenSettings(_env_file=None)
+    assert settings.min_net_edge == pytest.approx(MIN_EDGE)
+
+
+def test_pass_when_fair_clears_join_plus_fee_by_ten_cents():
     decision = pass_fail(
-        model_yes=0.62, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4
+        model_yes=0.70, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4
     )
     assert decision.passed
     assert decision.side == "yes"
@@ -263,9 +275,9 @@ def test_pass_when_fair_clears_join_plus_fee_by_four_cents():
     assert "vs join 0.54" in decision.line
     assert "vs mid" not in decision.line
     assert decision.line.startswith("PASS")
-    yes_net = net_edge_vs_join(0.62, labeled_join_price("yes", 0.54, 0.56))
+    yes_net = net_edge_vs_join(0.70, labeled_join_price("yes", 0.54, 0.56))
     assert yes_net == pytest.approx(decision.edge)
-    assert yes_net >= 0.04
+    assert yes_net >= MIN_EDGE
 
 
 def test_pass_no_joins_yes_ask():
@@ -305,7 +317,7 @@ def _idea_from_decision(decision, *, now=None, **settings_kw):
 def test_idea_from_pass_no_via_sell_yes_never_exceeds_max_risk():
     """Cheap Yes ask must not size as if each No contract only costs that ask."""
     decision = pass_fail(
-        model_yes=0.18, yes_bid=0.22, yes_ask=0.24, secs_left=12 * 60, sigma=0.4
+        model_yes=0.08, yes_bid=0.22, yes_ask=0.24, secs_left=12 * 60, sigma=0.4
     )
     assert decision.passed
     assert decision.side == "no"
@@ -325,7 +337,7 @@ def test_idea_from_pass_no_via_sell_yes_never_exceeds_max_risk():
 
 def test_idea_from_pass_yes_via_buy_yes_sizes_on_limit():
     decision = pass_fail(
-        model_yes=0.62, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4
+        model_yes=0.70, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4
     )
     assert decision.passed and decision.side == "yes"
     now = _et(10, 3)
@@ -359,12 +371,13 @@ def test_fail_within_four_cents_and_wide_spread():
     )
     assert not tight.passed
     assert "FAIL" in tight.line
-    # 10¢ book: mid looks like +4¢ (0.57 vs 0.53) but join+fee net < spread.
+    assert tight.fail_reason == "within 10 cents"
+    # 10¢ book: mid looks like +4¢ (0.57 vs 0.53) but join+fee net is only 7¢.
     wide = pass_fail(
         model_yes=0.57, yes_bid=0.48, yes_ask=0.58, secs_left=12 * 60, sigma=0.4
     )
     assert not wide.passed
-    assert "spread" in wide.line.lower()
+    assert wide.fail_reason == "within 10 cents"
 
 
 def test_pass_fail_wide_spread_mid_illusion_vs_join():
@@ -382,6 +395,7 @@ def test_pass_fail_wide_spread_mid_illusion_vs_join():
     yes_net = net_edge_vs_join(model_yes, labeled_join_price("yes", yes_bid, yes_ask))
     spread = yes_ask - yes_bid
     assert yes_net > 0
+    assert yes_net < MIN_EDGE
     assert spread > yes_net
 
     decision = pass_fail(
@@ -395,17 +409,17 @@ def test_pass_fail_wide_spread_mid_illusion_vs_join():
     assert decision.side == "yes"
     assert decision.join_price == yes_bid
     assert "vs join 0.48" in decision.line
-    assert "spread" in decision.line.lower()
+    assert decision.fail_reason == "within 10 cents"
     assert "vs mid" not in decision.line
 
 
 def test_pass_fail_fee_haircut_rejects_four_cent_mid_edge():
-    """Tight book: +4¢ vs mid, but join + taker fee is under the 4¢ net bar."""
+    """Tight book: +4¢ vs mid, but join + taker fee is under the 10¢ net bar."""
     model_yes, yes_bid, yes_ask = 0.59, 0.54, 0.56
     mid = (yes_bid + yes_ask) / 2.0
     assert model_yes - mid == pytest.approx(0.04)
     yes_net = net_edge_vs_join(model_yes, labeled_join_price("yes", yes_bid, yes_ask))
-    assert yes_net < 0.04
+    assert yes_net < MIN_EDGE
 
     decision = pass_fail(
         model_yes=model_yes,
@@ -416,7 +430,7 @@ def test_pass_fail_fee_haircut_rejects_four_cent_mid_edge():
     )
     assert not decision.passed
     assert decision.join_price == yes_bid
-    assert decision.fail_reason == "within 4 cents"
+    assert decision.fail_reason == "within 10 cents"
 
 
 def test_fail_under_eight_minutes_unless_decided():
@@ -425,7 +439,7 @@ def test_fail_under_eight_minutes_unless_decided():
     )
     assert not early.passed
     decided = pass_fail(
-        model_yes=0.98, yes_bid=0.90, yes_ask=0.92, secs_left=5 * 60, sigma=2.4
+        model_yes=0.98, yes_bid=0.80, yes_ask=0.82, secs_left=5 * 60, sigma=2.4
     )
     assert decided.passed
     assert strike_decided(0.98, 0.4)
@@ -821,7 +835,7 @@ def test_pass_fail_rejects_overbought_rsi_on_yes():
         bars=40,
     )
     decision = pass_fail(
-        model_yes=0.62, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4, tape=tape
+        model_yes=0.70, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4, tape=tape
     )
     assert not decision.passed
     assert "RSI overbought" in (decision.fail_reason or "")
@@ -841,7 +855,7 @@ def test_pass_fail_rejects_adx_chop():
         bars=40,
     )
     decision = pass_fail(
-        model_yes=0.62, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4, tape=tape
+        model_yes=0.70, yes_bid=0.54, yes_ask=0.56, secs_left=12 * 60, sigma=0.4, tape=tape
     )
     assert not decision.passed
     assert "ADX chop" in (decision.fail_reason or "")
@@ -1090,12 +1104,16 @@ def test_collect_ideas_default_uses_settings_chop_veto(monkeypatch):
     assert any(CHOP_VETO_PHRASE in note for note in notes)
 
 
-def test_collect_ideas_both_assets_pass(monkeypatch):
+def test_collect_ideas_both_assets_keeps_higher_net_edge(monkeypatch):
     from tests.test_regime import trending_ohlc
 
     now = _et(10, 3)
-    btc = _pass_market(now, "KXBTC15M-TEST-T64000", asset="BTC")
-    eth = _pass_market(now, "KXETH15M-TEST-T2300", asset="ETH")
+    btc = _pass_market(
+        now, "KXBTC15M-TEST-T64000", asset="BTC", yes_bid=0.50, yes_ask=0.52
+    )
+    eth = _pass_market(
+        now, "KXETH15M-TEST-T2300", asset="ETH", yes_bid=0.52, yes_ask=0.54
+    )
     _patch_collect(monkeypatch, trending_ohlc(), btc, extra_markets=[eth])
     settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
     ideas, notes, _spots = collect_ideas(
@@ -1107,7 +1125,8 @@ def test_collect_ideas_both_assets_pass(monkeypatch):
         now=now,
         apply_chop_veto=True,
     )
-    assert {idea.market.asset for idea in ideas} == {"BTC", "ETH"}
+    assert [idea.market.asset for idea in ideas] == ["BTC"]
+    assert any("KXETH15M-TEST-T2300" in note and "one 15m Pass/window" in note for note in notes)
     assert not any(CHOP_VETO_PHRASE in note for note in notes)
 
 
@@ -1128,8 +1147,8 @@ def test_collect_ideas_two_btc_passes_keeps_best(monkeypatch):
         "KXBTC15M-TEST-T63000",
         asset="BTC",
         threshold=63000.0,
-        yes_bid=0.78,
-        yes_ask=0.80,
+        yes_bid=0.52,
+        yes_ask=0.54,
     )
     _patch_collect(monkeypatch, trending_ohlc(), better, extra_markets=[worse])
     settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
@@ -1146,7 +1165,7 @@ def test_collect_ideas_two_btc_passes_keeps_best(monkeypatch):
     assert any("KXBTC15M-TEST-T63000" in note and "held back" in note for note in notes)
 
 
-def test_collect_ideas_btc_working_still_allows_eth(monkeypatch):
+def test_collect_ideas_btc_working_sits_eth_same_window(monkeypatch):
     from tests.test_regime import trending_ohlc
 
     now = _et(10, 3)
@@ -1175,8 +1194,98 @@ def test_collect_ideas_btc_working_still_allows_eth(monkeypatch):
         now=now,
         apply_chop_veto=True,
     )
-    assert [idea.market.asset for idea in ideas] == ["ETH"]
+    assert ideas == []
     assert any("already working" in note and "BTC" in note for note in notes)
+    assert any("one 15m Pass/window" in note and "already working" in note for note in notes)
+
+
+def test_sit_yes_entry_btc_under_45_and_max_55():
+    assert BTC_YES_MIN == pytest.approx(0.45)
+    assert YES_MAX_ENTRY == pytest.approx(0.55)
+    assert sit_yes_entry(asset="BTC", side="yes", join_price=0.30) == "BTC Yes @30¢ under 45¢"
+    assert sit_yes_entry(asset="BTC", side="Yes", join_price=0.44)
+    assert sit_yes_entry(asset="BTC", side="yes", join_price=0.45) is None
+    assert sit_yes_entry(asset="BTC", side="yes", join_price=0.55) is None
+    assert sit_yes_entry(asset="BTC", side="yes", join_price=0.56) == "Yes @56¢ over 55¢ max"
+    assert sit_yes_entry(asset="ETH", side="yes", join_price=0.30) is None
+    assert sit_yes_entry(asset="ETH", side="yes", join_price=0.56) == "Yes @56¢ over 55¢ max"
+    assert sit_yes_entry(asset="BTC", side="no", join_price=0.30) is None
+
+
+def test_cap_one_fifteen_pass_keeps_higher_abs_net_edge():
+    btc = _idea()
+    eth = replace(_eth_idea(), net_edge=0.06)
+    btc = replace(btc, net_edge=0.12)
+    chosen, extra = cap_one_fifteen_pass([btc, eth])
+    assert [row.market.asset for row in chosen] == ["BTC"]
+    assert [row.market.asset for row in extra] == ["ETH"]
+    only, none = cap_one_fifteen_pass([eth])
+    assert only == [eth] and none == []
+
+
+def test_collect_ideas_sits_btc_yes_at_30_cents(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now, yes_bid=0.30, yes_ask=0.32)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert ideas == []
+    assert any("BTC Yes @30¢ under 45¢" in note for note in notes)
+
+
+def test_collect_ideas_sits_yes_over_55_cents_both_coins(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    btc = _pass_market(now, "KXBTC15M-TEST-T64000", asset="BTC", yes_bid=0.56, yes_ask=0.58)
+    eth = _pass_market(now, "KXETH15M-TEST-T2300", asset="ETH", yes_bid=0.56, yes_ask=0.58)
+    _patch_collect(monkeypatch, trending_ohlc(), btc, extra_markets=[eth])
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert ideas == []
+    assert any("KXBTC15M-TEST-T64000" in note and "over 55¢ max" in note for note in notes)
+    assert any("KXETH15M-TEST-T2300" in note and "over 55¢ max" in note for note in notes)
+
+
+def test_collect_ideas_allows_btc_yes_in_45_to_55_band(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    market = _pass_market(now, yes_bid=0.45, yes_ask=0.47)
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert len(ideas) == 1
+    assert ideas[0].side == "Yes"
+    assert ideas[0].market.asset == "BTC"
+    assert ideas[0].limit_price == pytest.approx(0.45)
+    assert not any("under 45¢" in note or "over 55¢" in note for note in notes)
 
 
 def test_run_scan_live_and_paper_share_chop_veto(monkeypatch, tmp_path):

@@ -4,7 +4,10 @@ from datetime import datetime, timedelta, timezone
 
 from dataclasses import replace
 
+import pytest
+
 from src.filters import (
+    MIN_YES_PRICE,
     TURBO_PREFERRED_RISK_DOLLARS,
     FilterConfig,
     evaluate_market,
@@ -97,6 +100,69 @@ def test_filters_use_ask_not_mid_for_edge():
         cfg=CFG,
     )
     assert result.idea is None
+
+
+def test_filters_sit_yes_under_40_cents():
+    market = _market(
+        threshold=77000.0,
+        yes_bid=0.28,
+        yes_ask=0.30,
+        no_bid=0.70,
+        no_ask=0.72,
+        yes_sub_title="$77,000 or above",
+    )
+    result = evaluate_market(
+        market,
+        spot=78120.0,
+        hourly_vol=0.004,
+        now=datetime.now(timezone.utc),
+        cfg=CFG,
+    )
+    assert MIN_YES_PRICE == pytest.approx(0.40)
+    assert CFG.min_yes_price == pytest.approx(0.40)
+    assert result.idea is None
+    assert any("cheap-yes" in r.lower() and "40" in r for r in result.avoid_reasons)
+
+
+def test_filters_allow_yes_at_40_cents():
+    market = _market(
+        threshold=77000.0,
+        yes_bid=0.38,
+        yes_ask=0.40,
+        no_bid=0.60,
+        no_ask=0.62,
+        yes_sub_title="$77,000 or above",
+    )
+    result = evaluate_market(
+        market,
+        spot=78120.0,
+        hourly_vol=0.004,
+        now=datetime.now(timezone.utc),
+        cfg=CFG,
+    )
+    assert result.idea is not None
+    assert result.idea.side == "Yes"
+    assert result.idea.entry_price == pytest.approx(0.40)
+
+
+def test_force_near_rule_still_sits_cheap_yes():
+    market = _market(
+        threshold=77000.0,
+        yes_bid=0.28,
+        yes_ask=0.30,
+        no_bid=0.70,
+        no_ask=0.72,
+        yes_sub_title="$77,000 or above",
+    )
+    result = evaluate_market(
+        market,
+        spot=78120.0,
+        hourly_vol=0.004,
+        now=datetime.now(timezone.utc),
+        cfg=replace(CFG, force_near_rule=True),
+    )
+    assert result.idea is None
+    assert any("cheap-yes" in r.lower() for r in result.avoid_reasons)
 
 
 def test_filters_pass_clear_yes_edge_on_executable_ask():

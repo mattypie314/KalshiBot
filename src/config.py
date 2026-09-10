@@ -79,6 +79,8 @@ class HourlySettings(BaseSettings):
     bankroll: float = 40.00
     min_net_edge: float = 0.06
     soft_net_edge: float = 0.06
+    # Sit hourly Yes under this executable ask (cheap-Yes adverse selection).
+    min_yes_price: float = 0.40
     max_risk_pct: float = 0.05
     max_risk_dollars: float = 2.00
     preferred_risk_dollars: float = 1.75

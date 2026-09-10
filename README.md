@@ -175,6 +175,7 @@ Logs: `journalctl -u kalshi-hourly.service -n 80 --no-pager`
 | --- | --- | --- |
 | Bankroll | $40 | `BANKROLL` |
 | Min net edge | 6% | `MIN_NET_EDGE` |
+| Sit hourly Yes under | 40¢ | `MIN_YES_PRICE` |
 | Soft edge (no longer a discount) | 6% | `SOFT_NET_EDGE` |
 | Risk % cap | 5% | `MAX_RISK_PCT` |
 | Preferred risk | $1.75 | `PREFERRED_RISK_DOLLARS` |
@@ -245,7 +246,7 @@ chmod +x kb15
 ./kb15 calibrate    # model Yes vs official settlement (c)
 ```
 
-Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, entry ET minutes **:02–:06** of each 15m window (timer `:02–:05` of each block), Pass needs ≥**4¢** model vs join after taker-fee haircut with spread ≤ edge, sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.
+Defaults: **$5** pot (ask at **$10**, quit live at **$0**), preferred risk ~**$1.50**, entry ET minutes **:02–:06** of each 15m window (timer cadence unchanged by this filter pack), Pass needs ≥**10¢** model vs join after taker-fee haircut with spread ≤ edge, sit BTC Yes under **45¢**, sit any Yes over **55¢**, **one Pass per window** (higher |net_edge| if both coins would Pass). Sit under ~**8m** left unless strike decided. Live stays off (`HALTED=true`) until you clear the same dual gates as hourly. Artifacts are separate: `artifacts/fifteen_*.json(l)`.
 
 ETH settlement API id is **`ETHUSD_RTI`** (human docs may still say ERTI). Missing/PROXY index → sit.
 

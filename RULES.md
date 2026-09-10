@@ -2,7 +2,7 @@
 
 These are the live rules of **hourly** KalshiBot: BTC and ETH “above/below this dollar line” contracts only (`KXBTCD`, `KXETHD`). Not sports.
 
-A separate 15-minute BTC/ETH bot (`KXBTC15M` / `KXETH15M`, own $5 pot, shard 2) is documented in `docs/15m.md`. Hourly must not load those books. Standing 15m one-liner: Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, one idea per asset per window (BTC+ETH both OK), $0.10–$1.50 risk, own $5 pot (separate from hourly) — quit at $0, ask at $10, flat is fine.
+A separate 15-minute BTC/ETH bot (`KXBTC15M` / `KXETH15M`, own $5 pot, shard 2) is documented in `docs/15m.md`. Hourly must not load those books. Standing 15m one-liner: Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, **one Pass per 15m window** (higher |net_edge| if both coins would Pass), 10¢ net edge floor, sit BTC Yes under 45¢ and any Yes over 55¢, $0.10–$1.50 risk, own $5 pot (separate from hourly) — quit at $0, ask at $10, flat is fine.
 
 This is **not financial advice**. A wrong contract can go to $0.
 
@@ -74,6 +74,7 @@ Skip unless every box is checked:
 - Market is open
 - At least 3 minutes left
 - Ask is between 5¢ and 95¢ (no 99¢ favorites, no 1¢ lottery tickets)
+- Sit Yes under **40¢** (cheap-Yes adverse selection). Turbo does not loosen this.
 - Spread (ask − bid) ≤ 6¢, unless net edge is already ≥ 10%
 - If it would have to lift the ask, visible size must be ≥ 5 contracts
 - Net edge ≥ 6% after fees. No 4% tight-book exception. No edge = sit

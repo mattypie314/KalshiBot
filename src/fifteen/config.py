@@ -53,7 +53,7 @@ class FifteenSettings(BaseSettings):
     )
     bankroll: float = Field(default=5.00, validation_alias=AliasChoices("FIFTEEN_BANKROLL"))
     min_net_edge: float = Field(
-        default=0.04,
+        default=0.10,
         validation_alias=AliasChoices("FIFTEEN_MIN_NET_EDGE", "MIN_NET_EDGE", "MID_TOLERANCE"),
     )
     max_risk_pct: float = Field(
@@ -78,7 +78,7 @@ class FifteenSettings(BaseSettings):
 
     assets: str = "BTC,ETH"
     max_markets_per_asset: int = 8
-    # Total cap after the 1-per-asset pick. 2 lets BTC and ETH both rest.
+    # Total cap after the 1-per-asset pick. Correlation still keeps one Pass/window.
     max_ideas_per_run: int = Field(
         default=2,
         validation_alias=AliasChoices(

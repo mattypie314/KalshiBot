@@ -271,6 +271,7 @@ def test_default_bankroll_is_forty(monkeypatch):
     assert settings.preferred_risk_dollars == 1.75
     assert settings.min_net_edge == 0.06
     assert settings.soft_net_edge == 0.06
+    assert settings.min_yes_price == 0.40
     assert settings.min_strike_distance_pct == 0.005
     assert settings.max_daily_loss_dollars == 4.00
     assert settings.max_daily_losses == 2
