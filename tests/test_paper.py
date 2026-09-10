@@ -420,12 +420,22 @@ def test_dry_scan_writes_paper_row_not_live_journal(monkeypatch, tmp_path, capsy
         artifacts_dir=str(tmp_path),
         state_path=str(tmp_path / "state.json"),
         paper_log_path=str(tmp_path / "paper_log.jsonl"),
+        scan_log_path=str(tmp_path / "scan_log.jsonl"),
         halted=True,
         live_trading=False,
         confirm_live="NO",
     )
     assert settings.live_enabled is False
     assert run_scan(settings, asset="BTC", place=False, force_live=False) == 0
+    from src.calibrate import expand_scans, load_scan_snapshots
+
+    snapshots = load_scan_snapshots(tmp_path / "scan_log.jsonl")
+    assert snapshots
+    assert snapshots[0]["action"] == "scan"
+    assert snapshots[0]["markets"]
+    assert isinstance(snapshots[0]["markets"][0], dict)
+    assert snapshots[0]["markets"][0]["ticker"] == idea.market.ticker
+    assert expand_scans(snapshots)
     rows = load_trades(tmp_path / "paper_log.jsonl")
     assert len(rows) == 1
     assert rows[0]["fill_model"] == FILL_ASSUMED_MAKER

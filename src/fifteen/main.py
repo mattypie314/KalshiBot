@@ -52,7 +52,7 @@ from src.fifteen.edge import (
 from src.fifteen.pot import credit_pot, load_pot, save_pot, set_open_risk
 from src.fifteen.regime import chop_veto_note, classify_regime
 from src.kalshi_client import AuthConfigError, ForbiddenError, KalshiClient, RateLimitedError
-from src.markets import HourlyMarket, MarketDiscovery
+from src.markets import HourlyMarket, MarketDiscovery, scan_log_market
 from src.model import fair_prob, hours_left, model_z
 from src.paper import FILL_ASSUMED_MAKER, record_printed_ideas, try_settle_paper
 from src.sizer import (
@@ -205,6 +205,7 @@ def collect_ideas(
     asset: str | None = None,
     now: datetime | None = None,
     apply_chop_veto: bool | None = None,
+    scanned_markets: list[HourlyMarket] | None = None,
 ) -> tuple[list[Idea], list[str], Any]:
     now = to_et(now)
     notes: list[str] = []
@@ -214,142 +215,147 @@ def collect_ideas(
     # Live and paper share this stack. FIFTEEN_CHOP_VETO=false is the only off switch.
     veto_chop = settings.chop_veto if apply_chop_veto is None else apply_chop_veto
     regimes: dict[str, Any] = {}
+    markets: list[HourlyMarket] = []
 
-    if settings.news_pause:
-        return [], ["NEWS_PAUSE — operator sit"], None
-    news = news_blackout(now)
-    if news:
-        return [], [f"news blackout ({news})"], None
-    if fifteen_stopped(state, now):
-        return [], ["15m session stopped (3 losses)"], None
-    if in_fifteen_revenge(state, now):
-        return [], ["revenge window after a loser"], None
-    if working:
-        note = "already working a 15m ticket this window"
-        if assets:
-            note = f"{note} on {' and '.join(working)}"
-        notes.append(note)
-        if not assets:
-            return [], notes, None
-    if not in_fifteen_entry_window(now):
-        notes.append(f"outside entry window (minute {now.minute % 15}; want 3-5)")
-
-    spots_svc = SpotService(
-        preferred=settings.spot_source,
-        kalshi=client,
-        index_id_fn=fifteen_index_id_for,
-        vol_lookback_minutes=settings.vol_lookback_minutes,
-        settlement_labels=dict(FIFTEEN_INDEX_BY_ASSET),
-    )
     try:
-        spots = spots_svc.snapshot(
-            requested,
-            fallbacks={
-                "BTC": settings.hourly_vol_fallback_btc,
-                "ETH": settings.hourly_vol_fallback_eth,
-            },
-        )
-
-        markets = MarketDiscovery(client).discover_fifteen(
-            assets,
-            now=now,
-            max_per_asset=settings.max_markets_per_asset,
-            spots=spots.prices,
-            require_exchange_index=CRYPTO_SHARD,
-        )
-        if not markets:
-            notes.append("no live KXBTC15M/KXETH15M books")
-            return [], notes, spots
+        if settings.news_pause:
+            return [], ["NEWS_PAUSE — operator sit"], None
+        news = news_blackout(now)
+        if news:
+            return [], [f"news blackout ({news})"], None
+        if fifteen_stopped(state, now):
+            return [], ["15m session stopped (3 losses)"], None
+        if in_fifteen_revenge(state, now):
+            return [], ["revenge window after a loser"], None
+        if working:
+            note = "already working a 15m ticket this window"
+            if assets:
+                note = f"{note} on {' and '.join(working)}"
+            notes.append(note)
+            if not assets:
+                return [], notes, None
         if not in_fifteen_entry_window(now):
-            return [], notes, spots
+            notes.append(f"outside entry window (minute {now.minute % 15}; want 3-5)")
 
-        candidates: list[Idea] = []
-        tape_cache: dict[str, Any] = {}
-        for market in markets:
-            spot = spots.prices.get(market.asset)
-            vol = spots.hourly_vol.get(market.asset) or vol_fallback(settings, market.asset)
-            if not spot:
-                notes.append(f"{market.asset}: no spot")
-                continue
-            if settings.require_settlement_index and not spots.settlement_ok(market.asset):
-                notes.append(f"{market.asset}: PROXY spot — sit")
-                continue
-            secs = (market.close_time - now).total_seconds()
-            hrs = hours_left(secs)
-            if hrs is None:
-                continue
-            if market.asset not in tape_cache:
-                tape = None
-                # Closed 15m CCXT+pandas-ta signals (RSI/MACD/BB/ADX).
-                # 1m ADX/BB chop stays on regime.classify_regime — do not double-gate
-                # the same bars with a second threshold set.
-                try:
-                    payload = signals_for_asset(market.asset)
-                    tape = tape_from_15m_signals(payload)
-                    if tape is not None:
-                        logger.info(
-                            "15m tape %s RSI=%.1f ADX=%.1f MACDh=%.4f BBw=%s",
-                            market.asset,
-                            tape.rsi or 0,
-                            tape.adx or 0,
-                            tape.macd_hist or 0,
-                            f"{tape.bb_bandwidth:.4f}" if tape.bb_bandwidth is not None else "?",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    logger.info("15m CCXT tape failed for %s: %s", market.asset, exc)
-                tape_cache[market.asset] = tape
-            tape = tape_cache[market.asset]
-            decision = pass_fail(
-                model_yes=fair_prob(spot, market.threshold, vol, hrs),
-                yes_bid=market.yes_bid,
-                yes_ask=market.yes_ask,
-                secs_left=secs,
-                sigma=model_z(spot, market.threshold, vol, hrs),
-                tape=tape,
-            )
-            if not decision.passed:
-                notes.append(f"{market.ticker}: {decision.line}")
-                continue
-            if market.spread > settings.max_spread + 1e-12 and abs(decision.edge) <= market.spread:
-                notes.append(f"{market.ticker}: spread wider than edge")
-                continue
-            if veto_chop:
-                if market.asset not in regimes:
-                    bars = (getattr(spots, "candles", None) or {}).get(market.asset)
-                    regimes[market.asset] = classify_regime(bars)
-                skipped = chop_veto_note(market.ticker, regimes[market.asset])
-                if skipped:
-                    notes.append(skipped)
-                    continue
-            idea = idea_from_pass(
-                market,
-                decision,
-                spot=spot,
-                vol=vol,
-                bankroll=bankroll,
-                room=pot_room,
-                settings=settings,
-                now=now,
-            )
-            if idea is None:
-                notes.append(f"{market.ticker}: PASS but size/room failed")
-                continue
-            candidates.append(idea)
-
-        candidates.sort(key=lambda i: abs(i.net_edge), reverse=True)
-        chosen, extra = select_ideas_per_asset(
-            candidates,
-            max_per_asset=1,
-            max_ideas=settings.max_ideas_per_run,
+        spots_svc = SpotService(
+            preferred=settings.spot_source,
+            kalshi=client,
+            index_id_fn=fifteen_index_id_for,
+            vol_lookback_minutes=settings.vol_lookback_minutes,
+            settlement_labels=dict(FIFTEEN_INDEX_BY_ASSET),
         )
-        for idea in extra:
-            notes.append(
-                f"{idea.market.ticker}: held back (one per asset; "
-                f"max {settings.max_ideas_per_run}/run)"
+        try:
+            spots = spots_svc.snapshot(
+                requested,
+                fallbacks={
+                    "BTC": settings.hourly_vol_fallback_btc,
+                    "ETH": settings.hourly_vol_fallback_eth,
+                },
             )
-        return chosen, notes, spots
+
+            markets = MarketDiscovery(client).discover_fifteen(
+                assets,
+                now=now,
+                max_per_asset=settings.max_markets_per_asset,
+                spots=spots.prices,
+                require_exchange_index=CRYPTO_SHARD,
+            )
+            if not markets:
+                notes.append("no live KXBTC15M/KXETH15M books")
+                return [], notes, spots
+            if not in_fifteen_entry_window(now):
+                return [], notes, spots
+
+            candidates: list[Idea] = []
+            tape_cache: dict[str, Any] = {}
+            for market in markets:
+                spot = spots.prices.get(market.asset)
+                vol = spots.hourly_vol.get(market.asset) or vol_fallback(settings, market.asset)
+                if not spot:
+                    notes.append(f"{market.asset}: no spot")
+                    continue
+                if settings.require_settlement_index and not spots.settlement_ok(market.asset):
+                    notes.append(f"{market.asset}: PROXY spot — sit")
+                    continue
+                secs = (market.close_time - now).total_seconds()
+                hrs = hours_left(secs)
+                if hrs is None:
+                    continue
+                if market.asset not in tape_cache:
+                    tape = None
+                    # Closed 15m CCXT+pandas-ta signals (RSI/MACD/BB/ADX).
+                    # 1m ADX/BB chop stays on regime.classify_regime — do not double-gate
+                    # the same bars with a second threshold set.
+                    try:
+                        payload = signals_for_asset(market.asset)
+                        tape = tape_from_15m_signals(payload)
+                        if tape is not None:
+                            logger.info(
+                                "15m tape %s RSI=%.1f ADX=%.1f MACDh=%.4f BBw=%s",
+                                market.asset,
+                                tape.rsi or 0,
+                                tape.adx or 0,
+                                tape.macd_hist or 0,
+                                f"{tape.bb_bandwidth:.4f}" if tape.bb_bandwidth is not None else "?",
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.info("15m CCXT tape failed for %s: %s", market.asset, exc)
+                    tape_cache[market.asset] = tape
+                tape = tape_cache[market.asset]
+                decision = pass_fail(
+                    model_yes=fair_prob(spot, market.threshold, vol, hrs),
+                    yes_bid=market.yes_bid,
+                    yes_ask=market.yes_ask,
+                    secs_left=secs,
+                    sigma=model_z(spot, market.threshold, vol, hrs),
+                    tape=tape,
+                )
+                if not decision.passed:
+                    notes.append(f"{market.ticker}: {decision.line}")
+                    continue
+                if market.spread > settings.max_spread + 1e-12 and abs(decision.edge) <= market.spread:
+                    notes.append(f"{market.ticker}: spread wider than edge")
+                    continue
+                if veto_chop:
+                    if market.asset not in regimes:
+                        bars = (getattr(spots, "candles", None) or {}).get(market.asset)
+                        regimes[market.asset] = classify_regime(bars)
+                    skipped = chop_veto_note(market.ticker, regimes[market.asset])
+                    if skipped:
+                        notes.append(skipped)
+                        continue
+                idea = idea_from_pass(
+                    market,
+                    decision,
+                    spot=spot,
+                    vol=vol,
+                    bankroll=bankroll,
+                    room=pot_room,
+                    settings=settings,
+                    now=now,
+                )
+                if idea is None:
+                    notes.append(f"{market.ticker}: PASS but size/room failed")
+                    continue
+                candidates.append(idea)
+
+            candidates.sort(key=lambda i: abs(i.net_edge), reverse=True)
+            chosen, extra = select_ideas_per_asset(
+                candidates,
+                max_per_asset=1,
+                max_ideas=settings.max_ideas_per_run,
+            )
+            for idea in extra:
+                notes.append(
+                    f"{idea.market.ticker}: held back (one per asset; "
+                    f"max {settings.max_ideas_per_run}/run)"
+                )
+            return chosen, notes, spots
+        finally:
+            spots_svc.close()
     finally:
-        spots_svc.close()
+        if scanned_markets is not None:
+            scanned_markets.extend(markets)
 
 
 
@@ -361,13 +367,27 @@ def append_scan_log(
     notes: list[str],
     spots: Any,
     window_id: str | None = None,
+    markets: list[HourlyMarket] | None = None,
+    now: datetime | None = None,
 ) -> None:
     path = Path(settings.scan_log_path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    stamp = to_et(now)
+    prices = getattr(spots, "prices", {}) if spots else {}
+    vols = dict(getattr(spots, "hourly_vol", {}) or {}) if spots else {}
+    sources = getattr(spots, "sources", {}) if spots else {}
+    settlement_ok = {}
+    if spots is not None and hasattr(spots, "settlement_ok"):
+        for asset in prices:
+            settlement_ok[asset] = bool(spots.settlement_ok(asset))
+    scanned = list(markets or [])
+    for market in scanned:
+        if market.asset not in vols or not vols[market.asset]:
+            vols[market.asset] = vol_fallback(settings, market.asset)
     row = {
-        "ts": format_et(),
+        "ts": format_et(stamp),
         "mode": mode,
-        "window_id": window_id or fifteen_window_id(),
+        "window_id": window_id or fifteen_window_id(stamp),
         "ideas": [
             {
                 "ticker": i.market.ticker,
@@ -380,7 +400,19 @@ def append_scan_log(
             for i in ideas
         ],
         "notes": notes[:20],
-        "spots": getattr(spots, "prices", {}) if spots else {},
+        "spots": prices,
+        "spot_sources": sources,
+        "vol": vols,
+        "settlement_ok": settlement_ok,
+        "markets": [
+            scan_log_market(
+                market,
+                now=stamp,
+                spot=prices.get(market.asset),
+                vol=vols.get(market.asset),
+            )
+            for market in scanned
+        ],
     }
     with path.open("a") as handle:
         handle.write(json.dumps(row, default=str) + "\n")
@@ -981,6 +1013,7 @@ def run_scan(
         persist_fifteen_state(state_path, state, window_id=wid)
         return EXIT_OK
 
+    scanned: list[HourlyMarket] = []
     try:
         ideas, notes, spots = collect_ideas(
             settings,
@@ -990,6 +1023,7 @@ def run_scan(
             bankroll=bankroll,
             asset=asset,
             apply_chop_veto=bool(settings.chop_veto),
+            scanned_markets=scanned,
         )
     except RateLimitedError as exc:
         print(f"rate limited: {exc}", file=sys.stderr)
@@ -1068,7 +1102,13 @@ def run_scan(
         persist_fifteen_state(state_path, state, window_id=wid)
         save_pot(pot, settings.pot_path)
         append_scan_log(
-            settings, mode=mode, ideas=ideas, notes=notes, spots=spots, window_id=wid
+            settings,
+            mode=mode,
+            ideas=ideas,
+            notes=notes,
+            spots=spots,
+            window_id=wid,
+            markets=scanned,
         )
         return EXIT_OK
 
@@ -1141,7 +1181,13 @@ def run_scan(
     persist_fifteen_state(state_path, state, window_id=wid)
     save_pot(pot, settings.pot_path)
     append_scan_log(
-        settings, mode=mode, ideas=ideas, notes=notes, spots=spots, window_id=wid
+        settings,
+        mode=mode,
+        ideas=ideas,
+        notes=notes,
+        spots=spots,
+        window_id=wid,
+        markets=scanned,
     )
     return EXIT_OK
 

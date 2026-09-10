@@ -45,7 +45,7 @@ from src.journal import (
     write_trades,
 )
 from src.kalshi_client import AuthConfigError, ForbiddenError, KalshiClient, RateLimitedError
-from src.markets import MarketDiscovery
+from src.markets import MarketDiscovery, scan_log_market
 from src.report import format_report
 from src.spot import SpotService
 
@@ -171,19 +171,12 @@ def scan_log_row(
         "vol": spots.hourly_vol,
         "vol_source": getattr(spots, "vol_source", {}) or {},
         "markets": [
-            {
-                "ticker": market.ticker,
-                "asset": market.asset,
-                "threshold": market.threshold,
-                "yes_bid": market.yes_bid,
-                "yes_ask": market.yes_ask,
-                "no_bid": market.no_bid,
-                "no_ask": market.no_ask,
-                "yes_ask_size": market.yes_ask_size,
-                "no_ask_size": market.no_ask_size,
-                "close_time": market.close_time.isoformat(),
-                "status": market.status,
-            }
+            scan_log_market(
+                market,
+                now=now,
+                spot=(getattr(spots, "prices", None) or {}).get(market.asset),
+                vol=(getattr(spots, "hourly_vol", None) or {}).get(market.asset),
+            )
             for market in markets
         ],
         "ideas": [
@@ -518,6 +511,20 @@ def run_scan(
             **forced_ticket_fields(forced=settings.force_near_rule),
         }
         (artifacts / "last_run.json").write_text(json.dumps(scan_blob, indent=2, default=str))
+        action = "live" if force_live else ("once" if place else "scan")
+        append_scan_log(
+            Path(settings.scan_log_path),
+            scan_log_row(
+                now=now,
+                spots=spots,
+                markets=markets,
+                ideas=ideas,
+                nearby=nearby,
+                avoided=avoided,
+                settings=settings,
+                action=action,
+            ),
+        )
 
         try_settle_paper(settings, client)
         if ideas and not force_live:

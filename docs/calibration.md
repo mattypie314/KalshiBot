@@ -8,7 +8,7 @@ Rates (Yes frequency, majority-call hit) are printed only when a bucket has **n 
 
 ## What the scan log already has
 
-Hourly `artifacts/scan_log.jsonl` stores `markets[]` (ticker, strike, book, close), plus spots, vol, and which tickers were ideas. That is enough to rebuild `model_prob` / `z` / ask-or-join.
+Hourly `artifacts/scan_log.jsonl` stores `markets[]` (ticker, strike, book, close, plus spot/vol/fair/z when the tick had them), plus spots, vol, and which tickers were ideas. That is enough to rebuild `model_prob` / `z` / ask-or-join. Scan and live both append a line each run.
 
 `artifacts/last_run.json` only lists ticker strings. It cannot expand strikes by itself.
 
@@ -20,7 +20,9 @@ Settlement is **joined**, not stored on every scan row. Sources, in order:
 
 ## 15m
 
-Current `artifacts/fifteen_scan_log.jsonl` logs Pass ideas only (no `markets[]`). The calibrator will say it cannot emit every scanned strike. If a future 15m log grows the hourly `markets[]` shape, `./kb15 calibrate` will use it.
+Current ticks append `markets[]` (every scanned strike) on `artifacts/fifteen_scan_log.jsonl` and keep the Pass-idea / notes fields the boards already read. Older idea-only lines cannot expand; `./kb15 calibrate` will say so until new ticks land.
+
+On the Pi, snapshot before `git pull` so a mid-pull crash does not strand a dirty checkout.
 
 ## On the Pi
 
@@ -36,7 +38,7 @@ python3 -m src.calibrate --artifacts artifacts
 
 Writes `artifacts/calibration_rows.jsonl` (one row per strike/window) and prints bucket summaries.
 
-15m checkout (`/home/KalshiBot15`), only useful once that log has `markets[]`:
+15m checkout (`/home/KalshiBot15`):
 
 ```bash
 cd /home/KalshiBot15

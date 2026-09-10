@@ -72,6 +72,73 @@ class HourlyMarket:
         return max(0.0, (self.close_time - to_et()).total_seconds() / 60.0)
 
 
+def scan_log_market(
+    market: HourlyMarket,
+    *,
+    now: datetime | None = None,
+    spot: float | None = None,
+    vol: float | None = None,
+) -> dict[str, Any]:
+    """One scanned strike for scan_log.jsonl / fifteen_scan_log.jsonl.
+
+    Enough for offline calibration: ticker, asset, strike, book, close, plus
+    spot/vol/fair/z/join when the scan had them. Boards ignore extra keys.
+    """
+    from src.filters import maker_limit
+    from src.model import fair_prob, hours_left, model_z
+
+    stamp = to_et(now) if now is not None else None
+    secs = (market.close_time - stamp).total_seconds() if stamp is not None else None
+    hrs = hours_left(secs) if secs is not None else None
+    if hrs is None and secs is not None and secs <= 0:
+        hrs = 0.0
+    minutes = (hrs * 60.0) if hrs is not None else None
+
+    model_p: float | None = None
+    z: float | None = None
+    if (
+        spot
+        and spot > 0
+        and market.threshold
+        and market.threshold > 0
+        and vol
+        and vol > 0
+        and hrs is not None
+    ):
+        model_p = fair_prob(spot, market.threshold, vol, hrs)
+        z = model_z(spot, market.threshold, vol, hrs) if hrs > 0 else 0.0
+
+    yes_join = maker_limit("Yes", market.yes_bid, market.yes_ask)
+    no_join = maker_limit("No", market.no_bid, market.no_ask)
+    favored = "Yes" if model_p is None or model_p >= 0.5 else "No"
+    return {
+        "ticker": market.ticker,
+        "asset": market.asset,
+        "threshold": market.threshold,
+        "strike": market.threshold,
+        "yes_bid": market.yes_bid,
+        "yes_ask": market.yes_ask,
+        "no_bid": market.no_bid,
+        "no_ask": market.no_ask,
+        "yes_ask_size": market.yes_ask_size,
+        "no_ask_size": market.no_ask_size,
+        "close_time": market.close_time.isoformat(),
+        "status": market.status,
+        "spot": spot,
+        "vol": vol,
+        "model_prob": model_p,
+        "fair": model_p,
+        "z": z,
+        "hours_left": hrs,
+        "minutes_left": minutes,
+        "yes_join": yes_join,
+        "no_join": no_join,
+        "join": yes_join if favored == "Yes" else no_join,
+        "side": favored,
+        "sides": ["Yes", "No"],
+    }
+
+
 def parse_dollars(value: object) -> float | None:
     if value is None or value == "":
         return None

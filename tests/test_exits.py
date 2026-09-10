@@ -506,6 +506,7 @@ def test_hourly_once_manages_even_without_new_ideas(monkeypatch, tmp_path):
         artifacts_dir=str(tmp_path),
         state_path=str(tmp_path / "state.json"),
         paper_log_path=str(tmp_path / "paper_log.jsonl"),
+        scan_log_path=str(tmp_path / "scan_log.jsonl"),
         halted=True,
     )
     from src.main import run_scan
@@ -513,6 +514,10 @@ def test_hourly_once_manages_even_without_new_ideas(monkeypatch, tmp_path):
     assert run_scan(settings, asset="BTC", place=True, force_live=False) == 0
     assert called["live"] is False
     assert "KXBTCD" in called["series"]
+    logged = (tmp_path / "scan_log.jsonl").read_text().strip()
+    assert logged
+    assert '"action": "once"' in logged
+    assert '"markets": []' in logged
 
 
 def test_minutes_until_settlement_from_close_time():
