@@ -27,10 +27,12 @@ ENTRY_OFFSETS = frozenset({2, 3, 4, 5, 6})
 # Net vs maker join after taker-fee haircut. Do not retune from paper PnL.
 # Must match FifteenSettings.min_net_edge / FIFTEEN_MIN_NET_EDGE / MIN_NET_EDGE.
 MIN_EDGE = 0.10
-# After Pass: sit cheap Yes on any coin, and rich Yes on any coin.
+# After Pass: sit cheap Yes on any coin, rich Yes on any coin, and cheap No.
 BTC_YES_MIN = 0.45
 YES_MIN_ENTRY = BTC_YES_MIN
 YES_MAX_ENTRY = 0.55
+# Labeled No dollars (1 − Yes ask). Do not compare the Yes-book join to 0.55.
+NO_MIN_ENTRY = 0.55
 MIN_TIME_SECONDS = 8 * 60
 DECIDED_SIGMA = 2.0
 DECIDED_YES = 0.96
@@ -281,18 +283,28 @@ def _cents(value: float) -> str:
 
 
 def sit_yes_entry(*, asset: str, side: str, join_price: float) -> str | None:
-    """After Pass: sit Yes under 45¢ on any coin, or Yes above 55¢.
+    """After Pass: sit Yes under 45¢ / over 55¢, or No under 55¢ labeled.
+
+    ``join_price`` is the Yes-book join from ``pass_fail`` (Yes bid; No is the
+    Yes ask). Labeled No dollars are ``1 − Yes ask``, same as
+    ``labeled_join_price`` — do not compare the Yes ask to 0.55 directly.
 
     Live and paper share this via collect_ideas. Cheap Yes used to be BTC-only.
     """
-    if str(side or "").lower() not in {"yes", "y"}:
-        return None
-    price = float(join_price)
+    side_l = str(side or "").lower()
+    book = float(join_price)
     coin = str(asset or "").strip().upper() or "?"
-    if price < YES_MIN_ENTRY - 1e-12:
-        return f"{coin} Yes @{_cents(price)} under 45¢"
-    if price > YES_MAX_ENTRY + 1e-12:
-        return f"Yes @{_cents(price)} over 55¢ max"
+    if side_l in {"yes", "y"}:
+        if book < YES_MIN_ENTRY - 1e-12:
+            return f"{coin} Yes @{_cents(book)} under 45¢"
+        if book > YES_MAX_ENTRY + 1e-12:
+            return f"Yes @{_cents(book)} over 55¢ max"
+        return None
+    if side_l in {"no", "n"}:
+        labeled = 1.0 - book
+        if labeled < NO_MIN_ENTRY - 1e-12:
+            return f"{coin} No @{_cents(labeled)} under 55¢"
+        return None
     return None
 
 

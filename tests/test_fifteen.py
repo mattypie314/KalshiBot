@@ -17,6 +17,7 @@ from src.fifteen.edge import (
     BTC_YES_MIN,
     CPI_DATES,
     MIN_EDGE,
+    NO_MIN_ENTRY,
     YES_MAX_ENTRY,
     cap_one_fifteen_pass,
     enough_room,
@@ -1202,6 +1203,7 @@ def test_collect_ideas_btc_working_sits_eth_same_window(monkeypatch):
 def test_sit_yes_entry_any_coin_under_45_and_max_55():
     assert BTC_YES_MIN == pytest.approx(0.45)
     assert YES_MAX_ENTRY == pytest.approx(0.55)
+    assert NO_MIN_ENTRY == pytest.approx(0.55)
     assert sit_yes_entry(asset="BTC", side="yes", join_price=0.30) == "BTC Yes @30¢ under 45¢"
     assert sit_yes_entry(asset="BTC", side="Yes", join_price=0.44)
     assert sit_yes_entry(asset="BTC", side="yes", join_price=0.45) is None
@@ -1212,8 +1214,28 @@ def test_sit_yes_entry_any_coin_under_45_and_max_55():
     assert sit_yes_entry(asset="ETH", side="yes", join_price=0.45) is None
     assert sit_yes_entry(asset="ETH", side="yes", join_price=0.56) == "Yes @56¢ over 55¢ max"
     assert sit_yes_entry(asset="SOL", side="yes", join_price=0.22) == "SOL Yes @22¢ under 45¢"
+    # No join_price is the Yes ask. Labeled No = 1 − ask; 70¢ / 81¢ clear 55¢.
     assert sit_yes_entry(asset="BTC", side="no", join_price=0.30) is None
     assert sit_yes_entry(asset="ETH", side="no", join_price=0.19) is None
+
+
+def test_sit_yes_entry_eth_no_under_55_labeled_sits():
+    """ETH No sits on labeled dollars (1 − Yes ask), not the Yes-book ask."""
+    # Yes ask 50¢ → labeled No 50¢. Comparing the ask to 0.55 would miss this sit.
+    assert labeled_join_price("no", 0.48, 0.50) == pytest.approx(0.50)
+    assert sit_yes_entry(asset="ETH", side="no", join_price=0.50) == "ETH No @50¢ under 55¢"
+    # Yes ask 60¢ → labeled No 40¢. An ask>55¢ check would wrongly let this through.
+    assert sit_yes_entry(asset="ETH", side="No", join_price=0.60) == "ETH No @40¢ under 55¢"
+    assert sit_yes_entry(asset="BTC", side="no", join_price=0.46) == "BTC No @54¢ under 55¢"
+
+
+def test_sit_yes_entry_no_exactly_55_passes():
+    # Yes ask 45¢ → labeled No exactly 55¢. Floor is exclusive of 55¢.
+    assert labeled_join_price("no", 0.43, 0.45) == pytest.approx(0.55)
+    assert sit_yes_entry(asset="ETH", side="no", join_price=0.45) is None
+    assert sit_yes_entry(asset="BTC", side="no", join_price=0.45) is None
+    # Yes ask 40¢ → labeled No 60¢. An ask<55¢ check would wrongly sit this.
+    assert sit_yes_entry(asset="ETH", side="no", join_price=0.40) is None
 
 
 def test_cap_one_fifteen_pass_keeps_higher_abs_net_edge():
@@ -1316,6 +1338,65 @@ def test_collect_ideas_allows_btc_yes_in_45_to_55_band(monkeypatch):
     assert ideas[0].market.asset == "BTC"
     assert ideas[0].limit_price == pytest.approx(0.45)
     assert not any("under 45¢" in note or "over 55¢" in note for note in notes)
+
+
+def test_collect_ideas_sits_eth_no_under_55_cents(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    # Spot 2400 vs $2500 strike → No. Yes ask 50¢ → labeled No 50¢.
+    market = _pass_market(
+        now,
+        "KXETH15M-TEST-T2500",
+        asset="ETH",
+        threshold=2500.0,
+        yes_bid=0.48,
+        yes_ask=0.50,
+    )
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert ideas == []
+    assert any("ETH No @50¢ under 55¢" in note for note in notes)
+
+
+def test_collect_ideas_allows_no_at_exactly_55_cents(monkeypatch):
+    from tests.test_regime import trending_ohlc
+
+    now = _et(10, 3)
+    # Yes ask 45¢ → labeled No exactly 55¢. Floor lets 55¢ through.
+    market = _pass_market(
+        now,
+        "KXETH15M-TEST-T2500",
+        asset="ETH",
+        threshold=2500.0,
+        yes_bid=0.43,
+        yes_ask=0.45,
+    )
+    _patch_collect(monkeypatch, trending_ohlc(), market)
+    settings = FifteenSettings(_env_file=None, chop_veto=True, require_settlement_index=True)
+    ideas, notes, _spots = collect_ideas(
+        settings,
+        client=MagicMock(),
+        state={"tickets": [], "rests": []},
+        pot_room=5.0,
+        bankroll=5.0,
+        now=now,
+        apply_chop_veto=True,
+    )
+    assert len(ideas) == 1
+    assert ideas[0].side == "No"
+    assert ideas[0].market.asset == "ETH"
+    assert ideas[0].limit_price == pytest.approx(0.55)
+    assert not any("under 55¢" in note for note in notes)
 
 
 def test_run_scan_live_and_paper_share_chop_veto(monkeypatch, tmp_path):
