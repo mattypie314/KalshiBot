@@ -2,7 +2,7 @@
 
 These are the live rules of **hourly** KalshiBot: BTC and ETH “above/below this dollar line” contracts only (`KXBTCD`, `KXETHD`). Not sports.
 
-A separate 15-minute BTC/ETH bot (`KXBTC15M` / `KXETH15M`, own $5 pot, shard 2) is documented in `docs/15m.md`. Hourly must not load those books. Standing 15m one-liner: Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, **one Pass per 15m window** (higher |net_edge| if both coins would Pass), 10¢ net edge floor, sit any Yes under 45¢ and any Yes over 55¢, $0.10–$1.50 risk, own $5 pot (separate from hourly) — quit at $0, ask at $10, flat is fine.
+A separate 15-minute BTC/ETH bot (`KXBTC15M` / `KXETH15M`, own $5 pot, shard 2) is documented in `docs/15m.md`. Hourly must not load those books. Standing 15m one-liner: Trade only BTC/ETH 15m on shard 2, settlement-index fair value, maker limits, **one Pass per 15m window** (higher |net_edge| if both coins would Pass), 10¢ net edge floor, sit any Yes under 45¢ and any Yes over 55¢, sit No unless labeled join ≥ 55¢ (`1 − Yes ask`), $0.10–$1.50 risk, own $5 pot (separate from hourly) — quit at $0, ask at $10, flat is fine.
 
 This is **not financial advice**. A wrong contract can go to $0.
 
